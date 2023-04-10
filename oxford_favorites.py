@@ -103,15 +103,24 @@ class FavoritesState:
             )
             self.save_state()
 
+    def reset_operational_counters_only(self):
+        """Reset only operational counters, preserve known post IDs and favorites data"""
+        self.no_favorites_count = 0
+        self.save_state()
+        log_message(
+            "Operational counters reset (preserved known posts and favorites data)",
+            "INFO",
+        )
+
     def reset_state(self):
-        """Reset state for restart"""
+        """Reset state for restart - ONLY use this for complete fresh start"""
         self.current_start_id = STARTING_ID
         self.current_end_id = STARTING_ID + FAVORITES_WINDOW - 1
         self.known_post_ids = set()
         self.current_favorites = set()
         self.no_favorites_count = 0
         self.save_state()
-        log_message("State reset for restart", "INFO")
+        log_message("State completely reset for fresh start", "INFO")
 
 
 async def send_alert(msg: str):
@@ -618,17 +627,22 @@ async def run_favorites_manager() -> None:
         except Exception as e:
             log_message(f"Error in favorites manager, restarting: {e}", "ERROR")
             try:
-                # Reset state and send alert
                 state = FavoritesState()
-                state.reset_state()
-                session.close()
+                state.reset_operational_counters_only()
                 log_message(
-                    "Session closed and state reset, restarting in 10 seconds...",
+                    f"Preserved data on restart: {len(state.known_post_ids)} known posts, range {state.current_start_id}-{state.current_end_id}",
                     "INFO",
                 )
-            except:
+
+                session.close()
                 log_message(
-                    "Error during cleanup, continuing with restart...", "WARNING"
+                    "Session closed and operational counters reset, restarting in 10 seconds...",
+                    "INFO",
+                )
+            except Exception as cleanup_error:
+                log_message(
+                    f"Error during cleanup: {cleanup_error}, continuing with restart...",
+                    "WARNING",
                 )
 
             await asyncio.sleep(10)
