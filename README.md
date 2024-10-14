@@ -2,7 +2,18 @@
 
 Follow these steps to set up and run the TickerScraper project.
 
-## Step 1: Install Dependencies
+## Step 1: Setup the Virtual env
+
+Create the virtual env
+```bash
+python3 -m venv venv
+```
+
+Activate the virtual env
+```bash
+source venv/bin/activate
+```
+## Step 2: Install Dependencies
 
 Install the required Python packages using:
 
@@ -10,7 +21,7 @@ Install the required Python packages using:
 pip install -r requirements.txt
 ```
 
-## Step 2: Create a `.env` File
+## Step 3: Create a `.env` File
 
 Create a file named `.env` in the root directory and add the following details:
 
@@ -26,7 +37,7 @@ STOCKNEWS_TELEGRAM_GRP=
 
 Fill in the values for each variable as needed.
 
-## Step 3: Run the Scripts
+## Step 4: Run the Scripts
 
 You can run each of the scripts based on your needs:
 
