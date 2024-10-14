@@ -1,0 +1,6 @@
+aiohttp
+beautifulsoup4
+python-dotenv
+pytz
+requests
+python-telegram-bot
