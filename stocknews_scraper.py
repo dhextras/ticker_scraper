@@ -21,7 +21,6 @@ PROCESSED_JSON_FILE = "data/stocknews_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.environ.get("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.environ.get("STOCKNEWS_TELEGRAM_GRP")
 
-print(TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 # Color codes
 RED = "\033[91m"
 GREEN = "\033[92m"
