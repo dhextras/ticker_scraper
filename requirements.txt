@@ -12,3 +12,5 @@ google-api-python-client
 undetected_chromedriver
 schedule
 selenium
+requestium
+selenium-requests
