@@ -2,17 +2,35 @@
 
 Follow these steps to set up and run the TickerScraper project.
 
-## Step 1: Setup the Virtual env
+## Prerequisites
 
-Create the virtual env
+Make sure you have the following installed:
+
+- **Python** (preferably version 3.6 or higher)
+- **pip** (Python package installer)
+- **virtualenv** (to create isolated Python environments)
+
+If you don't have Python and pip installed, you can install them using the following command:
+
 ```bash
-python3 -m venv venv
+sudo apt update
+sudo apt install python3 python3-pip python3-venv
 ```
 
-Activate the virtual env
-```bash
-source venv/bin/activate
-```
+## Step 1: Setup the Virtual Environment
+
+1. **Create the virtual environment:**
+
+   ```bash
+   python3 -m venv venv
+   ```
+
+2. **Activate the virtual environment:**
+
+   ```bash
+   source venv/bin/activate
+   ```
+
 ## Step 2: Install Dependencies
 
 Install the required Python packages using:
@@ -23,32 +41,104 @@ pip install -r requirements.txt
 
 ## Step 3: Create a `.env` File
 
-Create a file named `.env` in the root directory and add the following details:
+1. **Create a file named `.env` or copy the `.env.example` in the root directory.**
+2. **Add the following details:**
 
-```plaintext
-OXFURDCLUB_TELEGRAM_BOT_TOKEN=
-OXFURDCLUB_TELEGRAM_GRP=
-OXFURDCLUB_USERNAME=
-OXFURDCLUB_PASSWORD=
+   ```plaintext
+   WS_SERVER_URL=  # WebSocket server URL
 
-STOCKNEWS_TELEGRAM_BOT_TOKEN=
-STOCKNEWS_TELEGRAM_GRP=
-```
+   # OxfurdClub scraper settings
+   OXFURDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfurdClub
+   OXFURDCLUB_TELEGRAM_GRP=  # Telegram group ID for OxfurdClub
+   OXFURDCLUB_USERNAME=  # Username for OxfurdClub login
+   OXFURDCLUB_PASSWORD=  # Password for OxfurdClub login
 
-Fill in the values for each variable as needed.
+   # StockNews scraper settings
+   STOCKNEWS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for StockNews
+   STOCKNEWS_TELEGRAM_GRP=  # Telegram group ID for StockNews
 
-## Step 4: Run the Scripts
+   # Gmail scraper settings
+   GMAIL_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Gmail scraper
+   GMAIL_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Gmail scraper
+
+   # CNBC scraper settings
+   CNBC_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for CNBC scraper
+   CNBC_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for CNBC scraper
+   CNBC_SCRAPER_GMAIL_USERNAME=  # Gmail username for CNBC scraper
+   CNBC_SCRAPER_GMAIL_PASSWORD=  # Gmail password for CNBC scraper
+   CNBC_SCRAPER_LATEST_ARTICLE_SHA=  # SHA for the latest article in CNBC scraper
+   CNBC_SCRAPER_ARTICLE_DATE_SHA=  # SHA for the article date in CNBC scraper
+   CNBC_SCRAPER_SESSION_TOKEN=  # Session token for CNBC scraper
+   ```
+
+**Note:** Fill in the values for each variable as needed.
+
+## Step 4: Set Up Credentials
+
+1. **Create a folder named `cred/` in the root directory.**
+2. **Place the following files in `cred/`:**
+
+   - `gmail_credentials.json`  # Credentials for Gmail API (download this from Google Cloud API)
+
+Ensure that these files are named exactly as specified.
+
+## Step 5: Run the Scripts
 
 You can run each of the scripts based on your needs:
 
 - To run the **OxfurdClub ticker scraper**, use:
+
   ```bash
-  python oxfurdclub_ticker_scraper.py
+  python oxfurdclub_scraper.py
   ```
 
 - To run the **StockNews ticker scraper**, use:
+
   ```bash
-  python stocknews_ticker_scraper.py
+  python stocknews_scraper.py
   ```
 
-Make sure your `.env` file is properly set up before running these scripts.
+- To run the **Gmail ticker scraper**, use:
+
+  ```bash
+  python gmail_scraper.py
+  ```
+
+- To run the **CNBC ticker scraper**, use:
+
+  ```bash
+  python cnbc_scraper.py
+  ```
+
+Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
+
+## File Structure Overview
+
+```plaintext
+your_project/
+├── cred/                    # Folder for credential files
+│   ├── gmail_credentials.json
+│   ├── gmail_token.json
+├── data/                    # Folder to save scraper data to access later
+├── log/                     # Folder for log files
+├── utils/                   # Utility functions
+│   ├── __init__.py
+│   ├── logger.py            # Logger utility
+│   ├── telegram_sender.py    # Telegram sending utility
+│   ├── time_utils.py        # Time utility functions
+│   ├── websocket_sender.py   # WebSocket sending utility
+├── .env                     # Environment variables
+├── .gitignore               # Git ignore file
+├── README.md                # Project documentation
+├── cnbc_scraper.py          # CNBC ticker scraper script
+├── gmail_scraper.py         # Gmail ticker scraper script
+├── oxfurdclub_scraper.py    # OxfurdClub ticker scraper script
+├── requirements.txt         # Project dependencies
+└── stocknews_scraper.py     # StockNews ticker scraper script
+```
+
+### Important Notes
+
+- Ensure to create and go into the virtual environment before installing dependencies.
+- Keep sensitive information secure and avoid sharing your `.env` and `cred/` files.
+- Log files will be generated in the `log/` folder with a `.log` extension.
