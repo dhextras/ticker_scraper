@@ -72,7 +72,8 @@ def analyze_email_from_oxfordclub(email_body):
     action_index = email_body.find(action_to_take)
     if action_index != -1:
         after_action_text = email_body[action_index + len(action_to_take) :]
-        buy_pattern = r"Buy\s+([A-Za-z\s]+)\s*(?:\(\s*[A-Za-z]+:\s*([A-Z]+)\s*\))?"
+        after_action_text = after_action_text.replace("*", "")
+        buy_pattern = r"Buy\s+([A-Za-z\s]+)\s*\(\s*(?:NYSE|NASDAQ):\s*([A-Z]+)\s*\)"
         match = re.search(buy_pattern, after_action_text)
         if match:
             return match.group(2) if match.group(2) else match.group(1).strip()
