@@ -13,6 +13,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from seleniumrequests import Chrome
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -147,6 +148,7 @@ async def monitor_feeds_async():
 
                 for i, (email, password) in enumerate(accounts):
                     driver = Chrome(options=options)
+                    driver.set_page_load_timeout(1200)
                     login(driver, email, password)
                     log_message(f"Logged in with account {i + 1}: {email}", "INFO")
                     session_to_share = Session(driver=driver)
