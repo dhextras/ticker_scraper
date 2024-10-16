@@ -82,7 +82,39 @@ pip install -r requirements.txt
 
 Ensure that these files are named exactly as specified.
 
-## Step 5: Run the Scripts
+## Step 5: Install Google Chrome and ChromeDriver (Optional)
+
+These steps are only needed if you are using the **Hedgeye** scraper.
+
+1. **Install Google Chrome:**
+
+   ```bash
+   cd /tmp/
+   wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+   sudo dpkg -i google-chrome-stable_current_amd64.deb
+   sudo apt-get install -f
+   ```
+
+2. **Install ChromeDriver:**
+
+   Replace `VERSION` with the version of Chrome you installed (e.g., `130.0.6723.58`):
+
+   ```bash
+   cd /tmp/
+   sudo wget https://chromedriver.storage.googleapis.com/VERSION/chromedriver_linux64.zip
+   sudo unzip chromedriver_linux64.zip
+   sudo mv chromedriver /usr/bin/chromedriver
+   ```
+
+   ### Verify Installation
+
+   Check that ChromeDriver is installed correctly by running:
+
+   ```bash
+   chromedriver --version
+   ```
+
+## Step 6: Run the Scripts
 
 You can run each of the scripts based on your needs:
 
