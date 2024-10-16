@@ -69,6 +69,10 @@ pip install -r requirements.txt
    CNBC_SCRAPER_LATEST_ARTICLE_SHA=  # SHA for the latest article in CNBC scraper
    CNBC_SCRAPER_ARTICLE_DATE_SHA=  # SHA for the article date in CNBC scraper
    CNBC_SCRAPER_SESSION_TOKEN=  # Session token for CNBC scraper
+
+   # Hedgeye scraper settings
+   HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hedgeye scraper
+   HEDGEYE_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Hedgeye scraper
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -82,7 +86,7 @@ pip install -r requirements.txt
 
 Ensure that these files are named exactly as specified.
 
-## Step 5: Install Google Chrome and ChromeDriver (Optional)
+## Step 5: Install Google Chrome and ChromeDriver (Optional - Needed for Hedgeye)
 
 These steps are only needed if you are using the **Hedgeye** scraper.
 
