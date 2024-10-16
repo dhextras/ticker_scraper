@@ -5,3 +5,7 @@ pytz
 requests
 python-telegram-bot
 websockets
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
