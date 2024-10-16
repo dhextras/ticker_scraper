@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import email
-import json
 import os
 import re
 from datetime import datetime
@@ -29,17 +28,17 @@ WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 def get_gmail_service():
     creds = None
-    if os.path.exists("cred/token.json"):
-        creds = Credentials.from_authorized_user_file("cred/token.json", SCOPES)
+    if os.path.exists("cred/gmail_token.json"):
+        creds = Credentials.from_authorized_user_file("cred/gmail_token.json", SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                "cred/credentials.json", SCOPES
+                "cred/gmail_credentials.json", SCOPES
             )
             creds = flow.run_local_server(port=0)
-        with open("cred/token.json", "w") as token:
+        with open("cred/gmail_token.json", "w") as token:
             token.write(creds.to_json())
     return build("gmail", "v1", credentials=creds)
 
