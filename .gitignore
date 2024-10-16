@@ -1,3 +1,7 @@
-__pycache__/
 .env
+cred/
+log/
+*.log
+
+**/__pycache__/
 venv/

@@ -4,3 +4,4 @@ python-dotenv
 pytz
 requests
 python-telegram-bot
+websockets
