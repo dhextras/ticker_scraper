@@ -1,9 +1,9 @@
-import requests
+import aiohttp
 
 
-def send_telegram_message(message, bot_token, chat_id):
+async def send_telegram_message(message, bot_token, chat_id):
     """
-    Sends a message to a Telegram chat.
+    Sends a message to a Telegram chat asynchronously.
 
     :param message: The message to send
     :param bot_token: The bot token for the specific Telegram bot
@@ -15,5 +15,15 @@ def send_telegram_message(message, bot_token, chat_id):
 
     telegram_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
-    response = requests.post(telegram_url, data=payload)
-    return response.json()
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(telegram_url, json=payload) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_message = await response.text()
+                    raise Exception(f"Failed to send message: {error_message}")
+    except Exception as e:
+        print(f"Error sending message: {e}")
+        return None
