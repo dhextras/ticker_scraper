@@ -8,11 +8,10 @@ import aiohttp
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.websocket_sender import send_ws_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -160,10 +159,10 @@ async def main():
         while True:
             await sleep_until_market_open()
             log_message("Market is open. Starting to check for new posts...")
+            _, _, market_close_time = get_next_market_times()
 
             while True:
                 current_time = datetime.now(pytz.timezone("America/New_York"))
-                _, _, market_close_time = get_next_market_times()
 
                 if current_time > market_close_time:
                     log_message("Market is closed. Waiting for next market open...")

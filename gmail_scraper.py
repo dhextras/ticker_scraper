@@ -152,10 +152,10 @@ async def main():
     while True:
         await sleep_until_market_open()
         log_message("Market is open. Starting to check for new emails...")
+        _, _, market_close_time = get_next_market_times()
 
         while True:
             current_time = datetime.now(pytz.timezone("America/New_York"))
-            _, _, market_close_time = get_next_market_times()
 
             if current_time > market_close_time:
                 log_message("Market is closed. Waiting for next market open...")
