@@ -1,6 +1,7 @@
 .env
 cred/
 log/
+data/
 *.log
 
 **/__pycache__/
