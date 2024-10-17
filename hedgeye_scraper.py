@@ -44,10 +44,14 @@ def random_scroll(driver, max_time=30):
     """Perform random scrolling on the page within a maximum time limit."""
     end_time = time.time() + max_time
     while time.time() < end_time:
+        time.sleep(random.uniform(1, 3))
         scroll_amount = random.randint(-600, 600)
         driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
-        time.sleep(random.uniform(0.5, 2))
-    driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(random.uniform(1, 3))
+        scroll_amount = random.randint(-300, -100)
+        driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
+        time.sleep(random.uniform(1, 3))
+        driver.execute_script("window.scrollTo(0, 0);")
 
 
 def login(driver, email, password):
@@ -56,14 +60,14 @@ def login(driver, email, password):
     time.sleep(random.uniform(1, 3))
 
     retry_count = 0
-    while driver.current_url == login_url and retry_count < 5:
+    while driver.current_url == login_url:
         if retry_count > 0:
             log_message(
                 f"Login failed for {email}. Retry attempt {retry_count}...",
                 "WARNING",
             )
 
-        random_scroll(driver, max_time=10 + retry_count * 5)
+        random_scroll(driver, max_time=30 + retry_count * 5)
 
         email_input = driver.find_element(By.ID, "user_email")
         email_input.clear()
@@ -80,9 +84,6 @@ def login(driver, email, password):
         time.sleep(random.uniform(3, 5))
         retry_count += 1
 
-    if driver.current_url == login_url:
-        log_message(f"Login failed after 5 attempts for {email}. Aborting.", "ERROR")
-        return False
     return True
 
 
