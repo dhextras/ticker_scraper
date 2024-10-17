@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import time
 from datetime import datetime
 
@@ -30,7 +31,7 @@ with open("cred/hedgeye_credentials.json", "r") as f:
     accounts = json.load(f)
 
 options = Options()
-options.add_argument("--headless")
+# options.add_argument("--headless")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--disable-extensions")
 options.add_argument("--disable-popup-blocking")
@@ -125,7 +126,6 @@ def fetch_alert_details(session):
 
 async def monitor_feeds_async():
     global last_alert_details
-
     market_is_open = False
     logged_in = False
     first_time_ever = True
@@ -187,11 +187,16 @@ async def monitor_feeds_async():
                                 else "None"
                             )
                         )
+                        ticker_match = re.search(
+                            r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+                        )
+                        ticker = ticker_match.group(0) if ticker_match else "-"
+
                         await send_ws_message(
                             {
                                 "name": "Hedgeye",
-                                "type": "Buy",
-                                "ticker": signal_type,
+                                "type": signal_type,
+                                "ticker": ticker,
                                 "sender": "hedgeye",
                             },
                             WS_SERVER_URL,
