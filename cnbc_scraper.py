@@ -231,7 +231,12 @@ async def check_for_new_alerts(prev_articles, current_articles, uid, session_tok
                         message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
                     )
                     await send_ws_message(
-                        {"sender": "CNBC", "type": "Alert", "content": message},
+                        {
+                            "name": "CNBC",
+                            "type": "Buy",
+                            "ticker": article["title"],
+                            "sender": "cnbc",
+                        },
                         WS_SERVER_URL,
                     )
             new_articles.append(article)

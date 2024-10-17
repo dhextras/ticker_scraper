@@ -111,7 +111,6 @@ async def process_email(service, message_id):
     headers = msg["payload"]["headers"]
     from_header = get_header(headers, "From")
     subject = get_header(headers, "Subject")
-    date_header = get_header(headers, "Date")
     from_email = email.utils.parseaddr(from_header)[1]
     email_body = get_email_body(msg)
 
@@ -120,19 +119,22 @@ async def process_email(service, message_id):
 
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
     stock_symbol = None
+    sender_type = None
 
     if from_email in ["oxford@mp.oxfordclub.com", "oxford@mb.oxfordclub.com"]:
+        sender_type = "oxfurdclub"
         stock_symbol = analyze_email_from_oxfordclub(email_body)
     elif from_email == "stewie@artoftrading.net":
+        sender_type = "stewie"
         stock_symbol = analyze_email_from_artoftrading(subject)
-    elif from_email == "do-not-reply@mail.investors.com":
-        stock_symbol = analyze_email_from_investors(subject)
+    # elif from_email == "do-not-reply@mail.investors.com":
+    #     stock_symbol = analyze_email_from_investors(subject)
 
-    if stock_symbol:
-        await send_stock_alert(timestamp, from_email, stock_symbol)
+    if stock_symbol and sender_type:
+        await send_stock_alert(timestamp, from_email, sender_type, stock_symbol)
 
 
-async def send_stock_alert(timestamp, sender, stock_symbol):
+async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
     message = f"<b>New Stock Alert</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>Sender:</b> {sender}\n"
@@ -140,7 +142,8 @@ async def send_stock_alert(timestamp, sender, stock_symbol):
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     await send_ws_message(
-        {"sender": "Gmail", "type": "Stock Alert", "content": message}, WS_SERVER_URL
+        {"name": "Gmail", "type": "Buy", "ticker": stock_symbol, "sender": sender_type},
+        WS_SERVER_URL,
     )
     log_message(f"Stock alert sent: {stock_symbol} from {sender}", "INFO")
 

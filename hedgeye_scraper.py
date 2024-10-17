@@ -13,7 +13,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from seleniumrequests import Chrome
-
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -178,8 +177,23 @@ async def monitor_feeds_async():
                             HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
                             HEDGEYE_SCRAPER_TELEGRAM_GRP,
                         )
+
+                        signal_type = (
+                            "Buy"
+                            if "buy" in alert_details["title"].lower()
+                            else (
+                                "Sell"
+                                if "sell" in alert_details["title"].lower()
+                                else "None"
+                            )
+                        )
                         await send_ws_message(
-                            {"sender": "Hedgeye", "type": "Alert", "content": message},
+                            {
+                                "name": "Hedgeye",
+                                "type": "Buy",
+                                "ticker": signal_type,
+                                "sender": "hedgeye",
+                            },
                             WS_SERVER_URL,
                         )
 

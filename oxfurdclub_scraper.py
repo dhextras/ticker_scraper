@@ -127,9 +127,6 @@ async def send_posts_to_telegram(urls, timestamp):
     message += f"<b>URLS:</b>\n  {joined_urls}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    await send_ws_message(
-        {"sender": "Oxfurdclub", "type": "New Posts", "content": message}, WS_SERVER_URL
-    )
     log_message(f"New Posts sent to Telegram and WebSocket: {urls}", "INFO")
 
 
@@ -141,7 +138,12 @@ async def send_match_to_telegram(url, ticker, exchange, timestamp):
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     await send_ws_message(
-        {"sender": "Oxfurdclub", "type": "Stock Match", "content": message},
+        {
+            "name": "Oxfurd Club",
+            "type": "Buy",
+            "ticker": ticker,
+            "sender": "oxfurdclub",
+        },
         WS_SERVER_URL,
     )
     log_message(
