@@ -8,6 +8,7 @@ import aiohttp
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -18,12 +19,12 @@ load_dotenv()
 # Constants
 JSON_URL = "https://oxfordclub.com/wp-json/wp/v2/posts"
 LOGIN_URL = "https://oxfordclub.com/wp-login.php"
-USERNAME = os.getenv("OXFURDCLUB_USERNAME")
-PASSWORD = os.getenv("OXFURDCLUB_PASSWORD")
+USERNAME = os.getenv("OXFORDCLUB_USERNAME")
+PASSWORD = os.getenv("OXFORDCLUB_PASSWORD")
 CHECK_INTERVAL = 5  # seconds
-PROCESSED_URLS_FILE = "data/oxfurdclub_processed_urls.json"
-TELEGRAM_BOT_TOKEN = os.getenv("OXFURDCLUB_TELEGRAM_BOT_TOKEN")
-TELEGRAM_GRP = os.getenv("OXFURDCLUB_TELEGRAM_GRP")
+PROCESSED_URLS_FILE = "data/oxfordclub_processed_urls.json"
+TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
+TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 
@@ -139,10 +140,10 @@ async def send_match_to_telegram(url, ticker, exchange, timestamp):
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     await send_ws_message(
         {
-            "name": "Oxfurd Club",
+            "name": "Oxford Club",
             "type": "Buy",
             "ticker": ticker,
-            "sender": "oxfurdclub",
+            "sender": "oxfordclub",
         },
         WS_SERVER_URL,
     )

@@ -12,6 +12,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -122,7 +123,7 @@ async def process_email(service, message_id):
     sender_type = None
 
     if from_email in ["oxford@mp.oxfordclub.com", "oxford@mb.oxfordclub.com"]:
-        sender_type = "oxfurdclub"
+        sender_type = "oxfordclub"
         stock_symbol = analyze_email_from_oxfordclub(email_body)
     elif from_email == "stewie@artoftrading.net":
         sender_type = "stewie"

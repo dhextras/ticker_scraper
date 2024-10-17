@@ -47,11 +47,11 @@ pip install -r requirements.txt
    ```plaintext
    WS_SERVER_URL=  # WebSocket server URL
 
-   # OxfurdClub scraper settings
-   OXFURDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfurdClub
-   OXFURDCLUB_TELEGRAM_GRP=  # Telegram group ID for OxfurdClub
-   OXFURDCLUB_USERNAME=  # Username for OxfurdClub login
-   OXFURDCLUB_PASSWORD=  # Password for OxfurdClub login
+   # OxfordClub scraper settings
+   OXFORDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfordClub
+   OXFORDCLUB_TELEGRAM_GRP=  # Telegram group ID for OxfordClub
+   OXFORDCLUB_USERNAME=  # Username for OxfordClub login
+   OXFORDCLUB_PASSWORD=  # Password for OxfordClub login
 
    # StockNews scraper settings
    STOCKNEWS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for StockNews
@@ -122,10 +122,10 @@ These steps are only needed if you are using the **Hedgeye** scraper.
 
 You can run each of the scripts based on your needs:
 
-- To run the **OxfurdClub ticker scraper**, use:
+- To run the **OxfordClub ticker scraper**, use:
 
   ```bash
-  python oxfurdclub_scraper.py
+  python oxfordclub_scraper.py
   ```
 
 - To run the **StockNews ticker scraper**, use:
@@ -168,7 +168,7 @@ your_project/
 ├── README.md                # Project documentation
 ├── cnbc_scraper.py          # CNBC ticker scraper script
 ├── gmail_scraper.py         # Gmail ticker scraper script
-├── oxfurdclub_scraper.py    # OxfurdClub ticker scraper script
+├── oxfordclub_scraper.py    # OxfordClub ticker scraper script
 ├── requirements.txt         # Project dependencies
 └── stocknews_scraper.py     # StockNews ticker scraper script
 ```
