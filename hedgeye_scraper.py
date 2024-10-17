@@ -10,6 +10,7 @@ import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from requestium import Keys, Session
+from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -31,7 +32,7 @@ with open("cred/hedgeye_credentials.json", "r") as f:
     accounts = json.load(f)
 
 options = Options()
-# options.add_argument("--headless")
+options.add_argument("--headless")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--disable-extensions")
 options.add_argument("--disable-popup-blocking")
@@ -39,48 +40,74 @@ options.add_argument("--disable-popup-blocking")
 last_alert_details = {}
 
 
-def random_scroll(driver):
-    """Perform random scrolling on the page."""
-    for _ in range(random.randint(2, 5)):
-        scroll_amount = random.randint(300, 600)
+def random_scroll(driver, max_time=30):
+    """Perform random scrolling on the page within a maximum time limit."""
+    end_time = time.time() + max_time
+    while time.time() < end_time:
+        scroll_amount = random.randint(-600, 600)
         driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
-        time.sleep(random.uniform(1, 3))
-        scroll_amount = random.randint(-300, -100)
-        driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
-        time.sleep(random.uniform(1, 3))
-        driver.execute_script(f"window.scrollTo(0, 0);")
+        time.sleep(random.uniform(0.5, 2))
+    driver.execute_script("window.scrollTo(0, 0);")
 
 
 def login(driver, email, password):
     login_url = "https://accounts.hedgeye.com/users/sign_in"
     driver.get(login_url)
-    time.sleep(2)
+    time.sleep(random.uniform(1, 3))
 
-    random_scroll(driver)
+    retry_count = 0
+    while driver.current_url == login_url and retry_count < 5:
+        if retry_count > 0:
+            log_message(
+                f"Login failed for {email}. Retry attempt {retry_count}...",
+                "WARNING",
+            )
 
-    email_input = driver.find_element(By.ID, "user_email")
-    email_input.send_keys(email)
-    password_input = driver.find_element(By.ID, "user_password")
-    password_input.send_keys(password)
-    password_input.send_keys(Keys.RETURN)
+        random_scroll(driver, max_time=10 + retry_count * 5)
 
-    time.sleep(5)
-
-    while driver.current_url == login_url:
-        driver.get(login_url)
-        log_message(
-            f"Login failed for {email}. Retrying with additional scrolling...",
-            "WARNING",
-        )
-        random_scroll(driver)
         email_input = driver.find_element(By.ID, "user_email")
         email_input.clear()
         email_input.send_keys(email)
+        time.sleep(random.uniform(0.5, 1.5))
+
         password_input = driver.find_element(By.ID, "user_password")
         password_input.clear()
         password_input.send_keys(password)
+        time.sleep(random.uniform(0.5, 1.5))
+
         password_input.send_keys(Keys.RETURN)
-        time.sleep(2)
+
+        time.sleep(random.uniform(3, 5))
+        retry_count += 1
+
+    if driver.current_url == login_url:
+        log_message(f"Login failed after 5 attempts for {email}. Aborting.", "ERROR")
+        return False
+    return True
+
+
+def add_random_delays():
+    """Add random delays between actions."""
+    time.sleep(random.uniform(0.5, 2))
+
+
+def randomize_user_agent(driver):
+    """Randomize the user agent string."""
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+    ]
+    driver.execute_cdp_cmd(
+        "Network.setUserAgentOverride", {"userAgent": random.choice(user_agents)}
+    )
+
+
+def add_noise_to_actions(driver):
+    """Add slight noise to mouse movements and keyboard input."""
+    action = ActionChains(driver)
+    action.move_by_offset(random.randint(-5, 5), random.randint(-5, 5))
+    action.perform()
 
 
 def fetch_alert_details(session):
@@ -148,6 +175,7 @@ async def monitor_feeds_async():
                 for i, (email, password) in enumerate(accounts):
                     driver = Chrome(options=options)
                     driver.set_page_load_timeout(1200)
+                    randomize_user_agent(driver)
                     login(driver, email, password)
                     log_message(f"Logged in with account {i + 1}: {email}", "INFO")
                     session_to_share = Session(driver=driver)
