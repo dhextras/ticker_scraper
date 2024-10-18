@@ -36,7 +36,7 @@ with open("cred/hedgeye_credentials.json", "r") as f:
     accounts = json.load(f)
 
 options = Options()
-# options.add_argument("--headless")
+options.add_argument("--headless") # Comment out if you running for the first time and trying to save the sessions
 options.add_argument("--maximize-window")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--disable-extensions")
