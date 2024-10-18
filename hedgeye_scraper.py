@@ -32,9 +32,12 @@ with open("cred/hedgeye_credentials.json", "r") as f:
 
 options = Options()
 options.add_argument("--headless")
+options.add_argument("--maximize-window")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--disable-extensions")
 options.add_argument("--disable-popup-blocking")
+options.add_argument("--disable-blink-features=AutomationControlled")
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
 last_alert_details = {}
 
