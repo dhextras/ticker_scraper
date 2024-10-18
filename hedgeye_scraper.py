@@ -247,12 +247,12 @@ async def monitor_feeds_async():
                                 sessions.append(session)
                                 save_session(session, session_filename)
                                 log_message(
-                                    f"Logged in and saved session for account {i + 1}: {email}",
+                                    f"Logged in and saved session for account {i}: {email}",
                                     "INFO",
                                 )
                             else:
                                 log_message(
-                                    f"Failed to login for account {i + 1}: {email}",
+                                    f"Failed to login for account {i}: {email}",
                                     "ERROR",
                                 )
                     else:
@@ -264,12 +264,12 @@ async def monitor_feeds_async():
                             sessions.append(session)
                             save_session(session, session_filename)
                             log_message(
-                                f"Logged in and saved session for account {i + 1}: {email}",
+                                f"Logged in and saved session for account {i}: {email}",
                                 "INFO",
                             )
                         else:
                             log_message(
-                                f"Failed to login for account {i + 1}: {email}", "ERROR"
+                                f"Failed to login for account {i}: {email}", "ERROR"
                             )
 
                     driver.quit()
