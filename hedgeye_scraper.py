@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import pickle
 import random
 import re
 import time
@@ -10,10 +11,14 @@ import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from requestium import Keys, Session
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -31,7 +36,7 @@ with open("cred/hedgeye_credentials.json", "r") as f:
     accounts = json.load(f)
 
 options = Options()
-options.add_argument("--headless")
+# options.add_argument("--headless")
 options.add_argument("--maximize-window")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--disable-extensions")
@@ -40,6 +45,24 @@ options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
 last_alert_details = {}
+
+# User agent list
+user_agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 OPR/78.0.4093.112",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/91.0.4472.80 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+]
+
+
+def get_random_user_agent():
+    return random.choice(user_agents)
 
 
 def random_scroll(driver):
@@ -57,33 +80,72 @@ def random_scroll(driver):
 def login(driver, email, password):
     login_url = "https://accounts.hedgeye.com/users/sign_in"
     driver.get(login_url)
-    time.sleep(2)
+
+    try:
+        WebDriverWait(driver, 60).until(
+            EC.presence_of_element_located((By.ID, "user_email"))
+        )
+    except TimeoutException:
+        log_message(f"Timeout while loading login page for {email}", "ERROR")
+        return False
 
     random_scroll(driver)
 
-    email_input = driver.find_element(By.ID, "user_email")
-    email_input.send_keys(email)
-    password_input = driver.find_element(By.ID, "user_password")
-    password_input.send_keys(password)
-    password_input.send_keys(Keys.RETURN)
-
-    time.sleep(5)
-
-    while driver.current_url == login_url:
-        driver.get(login_url)
-        log_message(
-            f"Login failed for {email}. Retrying with additional scrolling...",
-            "WARNING",
+    try:
+        email_input = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "user_email"))
         )
-        random_scroll(driver)
-        email_input = driver.find_element(By.ID, "user_email")
-        email_input.clear()
         email_input.send_keys(email)
-        password_input = driver.find_element(By.ID, "user_password")
-        password_input.clear()
+
+        password_input = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "user_password"))
+        )
         password_input.send_keys(password)
         password_input.send_keys(Keys.RETURN)
-        time.sleep(2)
+
+        WebDriverWait(driver, 60).until(EC.url_changes(login_url))
+
+        if driver.current_url == login_url:
+            retries = 30
+            while retries > 0 and driver.current_url == login_url:
+                log_message(
+                    f"Login failed for {email}. Retrying with additional scrolling... Attempts left: {retries}",
+                    "WARNING",
+                )
+                driver.get(login_url)
+                WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located((By.ID, "user_email"))
+                )
+                random_scroll(driver)
+
+                email_input = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, "user_email"))
+                )
+                email_input.clear()
+                email_input.send_keys(email)
+
+                password_input = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, "user_password"))
+                )
+                password_input.clear()
+                password_input.send_keys(password)
+                password_input.send_keys(Keys.RETURN)
+
+                try:
+                    WebDriverWait(driver, 60).until(EC.url_changes(login_url))
+                except TimeoutException:
+                    retries -= 1
+                    if retries == 0:
+                        log_message(
+                            f"Login failed for {email} after multiple attempts", "ERROR"
+                        )
+                        return False
+
+        return True
+
+    except Exception as e:
+        log_message(f"Error during login for {email}: {str(e)}", "ERROR")
+        return False
 
 
 def fetch_alert_details(session):
@@ -127,11 +189,22 @@ def fetch_alert_details(session):
     }
 
 
+def save_session(session, filename):
+    with open(filename, "wb") as f:
+        pickle.dump(session.cookies, f)
+
+
+def load_session(filename):
+    with open(filename, "rb") as f:
+        return pickle.load(f)
+
+
 async def monitor_feeds_async():
     global last_alert_details
     market_is_open = False
     logged_in = False
     first_time_ever = True
+    sessions = []
 
     while True:
         pre_market_login_time, market_open_time, market_close_time = (
@@ -145,20 +218,62 @@ async def monitor_feeds_async():
         ):
             first_time_ever = False
             if not logged_in:
-                log_message("Logging in...", "INFO")
-                sessions = []
+                log_message("Logging in or loading sessions...", "INFO")
 
                 for i, (email, password) in enumerate(accounts):
-                    driver = Chrome(options=options)
-                    driver.set_page_load_timeout(1200)
-                    login(driver, email, password)
-                    log_message(f"Logged in with account {i + 1}: {email}", "INFO")
-                    session_to_share = Session(driver=driver)
-                    session_to_share.transfer_driver_cookies_to_session()
-                    sessions.append(session_to_share)
+                    session_filename = f"data/hedgeye_session_{i}.pkl"
+
+                    if os.path.exists(session_filename):
+                        try:
+                            cookies = load_session(session_filename)
+                            driver = Chrome(options=options)
+                            driver.set_page_load_timeout(1200)
+                            session = Session(driver=driver)
+                            session.cookies.update(cookies)
+                            sessions.append(session)
+                            log_message(
+                                f"Loaded session for account {i + 1}: {email}", "INFO"
+                            )
+                        except Exception as e:
+                            log_message(
+                                f"Failed to load session for {email}: {str(e)}", "ERROR"
+                            )
+                            driver = Chrome(options=options)
+                            driver.set_page_load_timeout(1200)
+                            if login(driver, email, password):
+                                session = Session(driver=driver)
+                                session.transfer_driver_cookies_to_session()
+                                sessions.append(session)
+                                save_session(session, session_filename)
+                                log_message(
+                                    f"Logged in and saved session for account {i + 1}: {email}",
+                                    "INFO",
+                                )
+                            else:
+                                log_message(
+                                    f"Failed to login for account {i + 1}: {email}",
+                                    "ERROR",
+                                )
+                    else:
+                        driver = Chrome(options=options)
+                        driver.set_page_load_timeout(1200)
+                        if login(driver, email, password):
+                            session = Session(driver=driver)
+                            session.transfer_driver_cookies_to_session()
+                            sessions.append(session)
+                            save_session(session, session_filename)
+                            log_message(
+                                f"Logged in and saved session for account {i + 1}: {email}",
+                                "INFO",
+                            )
+                        else:
+                            log_message(
+                                f"Failed to login for account {i + 1}: {email}", "ERROR"
+                            )
+
                     driver.quit()
 
-                log_message("All accounts logged in. Starting monitoring...", "INFO")
+                log_message("All accounts processed. Starting monitoring...", "INFO")
                 logged_in = True
 
         elif market_open_time <= current_time_edt <= market_close_time:
@@ -167,6 +282,7 @@ async def monitor_feeds_async():
                 market_is_open = True
             try:
                 for session in sessions:
+                    session.headers.update({"User-Agent": get_random_user_agent()})
                     alert_details = fetch_alert_details(session)
                     if alert_details is None:
                         log_message("Current alert not interesting to us...", "INFO")
@@ -213,7 +329,7 @@ async def monitor_feeds_async():
                     await asyncio.sleep(0.6)
 
             except Exception as e:
-                log_message(f"Error: {e}", "ERROR")
+                log_message(f"Error during monitoring: {str(e)}", "ERROR")
                 await asyncio.sleep(0.7)
         else:
             logged_in = False
