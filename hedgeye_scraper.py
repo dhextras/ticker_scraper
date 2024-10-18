@@ -40,18 +40,16 @@ options.add_argument("--disable-popup-blocking")
 last_alert_details = {}
 
 
-def random_scroll(driver, max_time=30):
-    """Perform random scrolling on the page within a maximum time limit."""
-    end_time = time.time() + max_time
-    while time.time() < end_time:
-        time.sleep(random.uniform(1, 3))
-        scroll_amount = random.randint(-600, 600)
+def random_scroll(driver, max_time=8):
+    """Perform random scrolling on the page."""
+    for _ in range(random.randint(2, max_time)):
+        scroll_amount = random.randint(300, 600)
         driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
-        time.sleep(random.uniform(1, 3))
+        time.sleep(random.uniform(1, 5))
         scroll_amount = random.randint(-300, -100)
         driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
-        time.sleep(random.uniform(1, 3))
-        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(random.uniform(1, 5))
+        driver.execute_script(f"window.scrollTo(0, 0);")
 
 
 def login(driver, email, password):
@@ -67,13 +65,14 @@ def login(driver, email, password):
                 "WARNING",
             )
 
-        random_scroll(driver, max_time=30 + retry_count * 5)
+        random_scroll(driver, max_time=8 + retry_count * 3)
 
         email_input = driver.find_element(By.ID, "user_email")
         email_input.clear()
         email_input.send_keys(email)
         time.sleep(random.uniform(0.5, 1.5))
 
+        random_scroll(driver, max_time=4)
         password_input = driver.find_element(By.ID, "user_password")
         password_input.clear()
         password_input.send_keys(password)
