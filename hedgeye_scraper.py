@@ -33,6 +33,7 @@ with open("cred/hedgeye_credentials.json", "r") as f:
 
 options = Options()
 options.add_argument("--headless")
+options.add_argument("--maximize-window")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--disable-extensions")
 options.add_argument("--disable-popup-blocking")
@@ -40,7 +41,7 @@ options.add_argument("--disable-popup-blocking")
 last_alert_details = {}
 
 
-def random_scroll(driver, max_time=8):
+def random_scroll(driver, max_time=5):
     """Perform random scrolling on the page."""
     for _ in range(random.randint(2, max_time)):
         scroll_amount = random.randint(300, 600)
@@ -65,14 +66,14 @@ def login(driver, email, password):
                 "WARNING",
             )
 
-        random_scroll(driver, max_time=8 + retry_count * 3)
+        random_scroll(driver, max_time=4 + retry_count * 2)
 
         email_input = driver.find_element(By.ID, "user_email")
         email_input.clear()
         email_input.send_keys(email)
         time.sleep(random.uniform(0.5, 1.5))
 
-        random_scroll(driver, max_time=4)
+        random_scroll(driver)
         password_input = driver.find_element(By.ID, "user_password")
         password_input.clear()
         password_input.send_keys(password)
@@ -80,7 +81,7 @@ def login(driver, email, password):
 
         password_input.send_keys(Keys.RETURN)
 
-        time.sleep(random.uniform(3, 5))
+        time.sleep(10)
         retry_count += 1
 
     return True
