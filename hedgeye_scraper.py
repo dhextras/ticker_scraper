@@ -7,6 +7,7 @@ import re
 import time
 from datetime import datetime
 
+import aiohttp
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -149,9 +150,16 @@ def login(driver, email, password):
         return False
 
 
-def fetch_alert_details(session):
-    response = session.get("https://app.hedgeye.com/feed_items/all")
-    soup = BeautifulSoup(response.text, "html.parser")
+async def fetch_alert_details(session):
+    async with aiohttp.ClientSession() as aio_session:
+        async with aio_session.get(
+            "https://app.hedgeye.com/feed_items/all",
+            headers=session.headers,
+            cookies=session.cookies,
+        ) as response:
+            html = await response.text()
+
+    soup = BeautifulSoup(html, "html.parser")
     try:
         alert_title = soup.select_one(".article__header")
         if alert_title:
@@ -177,6 +185,7 @@ def fetch_alert_details(session):
     except Exception as e:
         log_message(f"Failed to fetch or parse created_at_utc: {e}", "ERROR")
         return None
+
     created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
     edt = pytz.timezone("America/New_York")
     created_at_edt = created_at.astimezone(edt)
@@ -206,6 +215,63 @@ async def monitor_feeds_async():
     logged_in = False
     first_time_ever = True
     sessions = []
+
+    async def check_session(session, offset):
+        global last_alert_details
+        await asyncio.sleep(offset)
+        start_time = time.time()
+
+        while time.time() - start_time < 600:
+            try:
+                session.headers.update({"User-Agent": get_random_user_agent()})
+                alert_details = await fetch_alert_details(session)
+                if alert_details is None:
+                    log_message("Current alert not interesting to us...", "INFO")
+                    await asyncio.sleep(0.7)
+                    continue
+
+                if alert_details["title"] != last_alert_details.get("title"):
+                    message = f"Title: {alert_details['title']}\nPrice: {alert_details['price']}\nCreated At: {alert_details['created_at']}\nCurrent Time: {alert_details['current_time']}"
+                    await send_telegram_message(
+                        message,
+                        HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                        HEDGEYE_SCRAPER_TELEGRAM_GRP,
+                    )
+
+                    signal_type = (
+                        "Buy"
+                        if "buy" in alert_details["title"].lower()
+                        else (
+                            "Sell"
+                            if "sell" in alert_details["title"].lower()
+                            else "None"
+                        )
+                    )
+                    ticker_match = re.search(
+                        r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+                    )
+                    ticker = ticker_match.group(0) if ticker_match else "-"
+
+                    await send_ws_message(
+                        {
+                            "name": "Hedgeye",
+                            "type": signal_type,
+                            "ticker": ticker,
+                            "sender": "hedgeye",
+                        },
+                        WS_SERVER_URL,
+                    )
+
+                    message += f"\nTicker: {ticker}"
+                    log_message(f"New alert sent: {message}", "INFO")
+                    last_alert_details = {
+                        "title": alert_details["title"],
+                        "created_at": alert_details["created_at"],
+                    }
+                await asyncio.sleep(0.6)
+            except Exception as e:
+                log_message(f"Error during monitoring: {str(e)}", "ERROR")
+                await asyncio.sleep(0.7)
 
     while True:
         pre_market_login_time, market_open_time, market_close_time = (
@@ -281,57 +347,21 @@ async def monitor_feeds_async():
             if not market_is_open:
                 log_message("Market is open, starting monitoring...", "INFO")
                 market_is_open = True
-            try:
-                for session in sessions:
-                    session.headers.update({"User-Agent": get_random_user_agent()})
-                    alert_details = fetch_alert_details(session)
-                    if alert_details is None:
-                        log_message("Current alert not interesting to us...", "INFO")
-                        await asyncio.sleep(0.7)
-                        continue
 
-                    if alert_details["title"] != last_alert_details.get("title"):
-                        message = f"Title: {alert_details['title']}\nPrice: {alert_details['price']}\nCreated At: {alert_details['created_at']}\nCurrent Time: {alert_details['current_time']}"
-                        await send_telegram_message(
-                            message,
-                            HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
-                            HEDGEYE_SCRAPER_TELEGRAM_GRP,
-                        )
+            tasks = []
+            selected_sessions = random.sample(sessions, min(3, len(sessions)))
 
-                        signal_type = (
-                            "Buy"
-                            if "buy" in alert_details["title"].lower()
-                            else (
-                                "Sell"
-                                if "sell" in alert_details["title"].lower()
-                                else "None"
-                            )
-                        )
-                        ticker_match = re.search(
-                            r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
-                        )
-                        ticker = ticker_match.group(0) if ticker_match else "-"
+            for i, session in enumerate(selected_sessions):
+                tasks.append(check_session(session, i * 0.2))
+            await asyncio.gather(*tasks)
 
-                        await send_ws_message(
-                            {
-                                "name": "Hedgeye",
-                                "type": signal_type,
-                                "ticker": ticker,
-                                "sender": "hedgeye",
-                            },
-                            WS_SERVER_URL,
-                        )
+            selected_indices = [
+                sessions.index(session) for session in selected_sessions
+            ]
 
-                        log_message(f"New alert sent: {message}", "INFO")
-                        last_alert_details = {
-                            "title": alert_details["title"],
-                            "created_at": alert_details["created_at"],
-                        }
-                    await asyncio.sleep(0.6)
+            log_message(f"Checked sessions with indices: {selected_indices}\n", "INFO")
+            await asyncio.sleep(0.6)
 
-            except Exception as e:
-                log_message(f"Error during monitoring: {str(e)}", "ERROR")
-                await asyncio.sleep(0.7)
         else:
             logged_in = False
             market_is_open = False
