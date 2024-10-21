@@ -12,7 +12,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -73,7 +72,9 @@ def analyze_email_from_oxfordclub(email_body):
     action_index = email_body.find(action_to_take)
     if action_index != -1:
         after_action_text = email_body[action_index + len(action_to_take) :]
-        after_action_text = after_action_text.replace("*", "")
+        after_action_text = re.sub(
+            r"[.,/|~`'!@#$%^&*?+_=<>\-\"\[\]\{\}]", "", after_action_text
+        )  # Clean out unnecessary characters
         buy_pattern = r"Buy\s+([A-Za-z\s]+)\s*\(\s*(?:NYSE|NASDAQ):\s*([A-Z]+)\s*\)"
         match = re.search(buy_pattern, after_action_text)
         if match:
