@@ -165,6 +165,7 @@ async def fetch_alert_details(session):
         if alert_title:
             alert_title = alert_title.get_text(strip=True)
         else:
+            log_message("No article__header found", "ERROR")
             return None
     except Exception as e:
         log_message(f"Failed to fetch alert title: {e}", "ERROR")
@@ -175,6 +176,7 @@ async def fetch_alert_details(session):
         if alert_price:
             alert_price = alert_price.get_text(strip=True)
         else:
+            log_message("No alert_price found", "ERROR")
             return None
     except Exception as e:
         log_message(f"Failed to fetch alert price: {e}", "ERROR")
