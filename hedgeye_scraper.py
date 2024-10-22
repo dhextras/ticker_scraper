@@ -5,13 +5,14 @@ import pickle
 import random
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Dict, List, Set, Tuple
 
 import aiohttp
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from requestium import Keys, Session
+from requestium import Session
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -30,10 +31,12 @@ load_dotenv()
 HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN")
 HEDGEYE_SCRAPER_TELEGRAM_GRP = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
+DATA_DIR = "data"
+RATE_LIMIT_FILE = os.path.join(DATA_DIR, "rate_limited.json")
+LAST_ALERT_FILE = os.path.join(DATA_DIR, "last_alert.json")
 
-# Load accounts from credentials file
-with open("cred/hedgeye_credentials.json", "r") as f:
-    accounts = json.load(f)
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
 
 options = Options()
 options.add_argument(
@@ -46,7 +49,6 @@ options.add_argument("--disable-popup-blocking")
 options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
-last_alert_details = {}
 
 # User agent list
 user_agents = [
@@ -61,6 +63,86 @@ user_agents = [
     "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/91.0.4472.80 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
 ]
+
+
+class ProxyManager:
+    def __init__(self, proxies: List[str]):
+        self.proxies = proxies
+        self.current_index = 0
+        self.rate_limited: Dict[str, datetime] = self._load_rate_limited()
+
+    def _load_rate_limited(self) -> Dict[str, datetime]:
+        if os.path.exists(RATE_LIMIT_FILE):
+            with open(RATE_LIMIT_FILE, "r") as f:
+                rate_limited = json.load(f)
+                return {k: datetime.fromisoformat(v) for k, v in rate_limited.items()}
+        return {}
+
+    def _save_rate_limited(self):
+        with open(RATE_LIMIT_FILE, "w") as f:
+            rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
+            json.dump(rate_limited, f)
+
+    def get_next_proxy(self) -> str:
+        current_time = datetime.now()
+        available_proxies = [
+            proxy
+            for proxy in self.proxies
+            if proxy not in self.rate_limited or current_time > self.rate_limited[proxy]
+        ]
+
+        if not available_proxies:
+            raise Exception("No available proxies")
+
+        proxy = random.choice(available_proxies)
+        return proxy
+
+    def mark_rate_limited(self, proxy: str):
+        self.rate_limited[proxy] = datetime.now() + timedelta(hours=24)
+        self._save_rate_limited()
+
+    def clear_rate_limits(self):
+        self.rate_limited.clear()
+        if os.path.exists(RATE_LIMIT_FILE):
+            os.remove(RATE_LIMIT_FILE)
+
+
+class AccountManager:
+    def __init__(self, accounts: List[Tuple[str, str]]):
+        self.accounts = accounts
+        self.rate_limited: Set[str] = self._load_rate_limited()
+
+    def _load_rate_limited(self) -> Set[str]:
+        rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
+        if os.path.exists(rate_limit_file):
+            with open(rate_limit_file, "r") as f:
+                return set(json.load(f))
+        return set()
+
+    def _save_rate_limited(self):
+        rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
+        with open(rate_limit_file, "w") as f:
+            json.dump(list(self.rate_limited), f)
+
+    def get_available_accounts(self, count: int) -> List[Tuple[str, str]]:
+        available = [acc for acc in self.accounts if acc[0] not in self.rate_limited]
+        return random.sample(available, min(count, len(available)))
+
+    def mark_rate_limited(self, email: str):
+        self.rate_limited.add(email)
+        self._save_rate_limited()
+
+    def clear_rate_limits(self):
+        self.rate_limited.clear()
+        rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
+        if os.path.exists(rate_limit_file):
+            os.remove(rate_limit_file)
+
+
+class SessionInfo:
+    def __init__(self, session, email):
+        self.session = session
+        self.email = email
 
 
 def get_random_user_agent():
@@ -150,55 +232,72 @@ def login(driver, email, password):
         return False
 
 
-async def fetch_alert_details(session):
-    async with aiohttp.ClientSession() as aio_session:
-        async with aio_session.get(
-            "https://app.hedgeye.com/feed_items/all",
-            headers=session.headers,
-            cookies=session.cookies,
-        ) as response:
-            html = await response.text()
+def load_credentials() -> Tuple[List[Tuple[str, str]], List[str]]:
+    with open("cred/hedgeye_credentials.json", "r") as f:
+        data = json.load(f)
+        accounts = [(acc["email"], acc["password"]) for acc in data["accounts"]]
+        proxies = data["proxies"]
+        return accounts, proxies
 
-    soup = BeautifulSoup(html, "html.parser")
+
+async def fetch_alert_details(session, proxy_raw):
     try:
+        ip, port = proxy_raw.split(":")
+        proxy = f"http://{ip}:{port}"
+
+        async with aiohttp.ClientSession() as aio_session:
+            async with aio_session.get(
+                "https://app.hedgeye.com/feed_items/all",
+                headers=session.headers,
+                cookies=session.cookies,
+                proxy=proxy,
+            ) as response:
+                if response.status == 429:
+                    raise Exception("Rate limited")
+                html = await response.text()
+
+        soup = BeautifulSoup(html, "html.parser")
         alert_title = soup.select_one(".article__header")
-        if alert_title:
-            alert_title = alert_title.get_text(strip=True)
-        else:
-            log_message("No article__header found", "ERROR")
+        if not alert_title:
             return None
-    except Exception as e:
-        log_message(f"Failed to fetch alert title: {e}", "ERROR")
-        return None
+        alert_title = alert_title.get_text(strip=True)
 
-    try:
         alert_price = soup.select_one(".currency.se-live-or-close-price")
-        if alert_price:
-            alert_price = alert_price.get_text(strip=True)
-        else:
-            log_message("No alert_price found", "ERROR")
+        if not alert_price:
             return None
-    except Exception as e:
-        log_message(f"Failed to fetch alert price: {e}", "ERROR")
-        return None
+        alert_price = alert_price.get_text(strip=True)
 
-    try:
         created_at_utc = soup.select_one("time[datetime]")["datetime"]
+        created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
+        edt = pytz.timezone("America/New_York")
+        created_at_edt = created_at.astimezone(edt)
+        current_time_edt = datetime.now(pytz.utc).astimezone(edt)
+
+        alert_details = {
+            "title": alert_title,
+            "price": alert_price,
+            "created_at": created_at_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
+            "current_time": current_time_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
+        }
+
+        # Save last alert details
+        with open(LAST_ALERT_FILE, "w") as f:
+            json.dump(alert_details, f)
+
+        return alert_details
+
     except Exception as e:
-        log_message(f"Failed to fetch or parse created_at_utc: {e}", "ERROR")
+        if "Rate limited" in str(e):
+            raise
+        log_message(f"Error fetching alert details: {str(e)}", "ERROR")
         return None
 
-    created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-    edt = pytz.timezone("America/New_York")
-    created_at_edt = created_at.astimezone(edt)
-    current_time_edt = datetime.now(pytz.utc).astimezone(edt)
 
-    return {
-        "title": alert_title,
-        "price": alert_price,
-        "created_at": created_at_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
-        "current_time": current_time_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
-    }
+def load_last_alert():
+    if os.path.exists(LAST_ALERT_FILE):
+        with open(LAST_ALERT_FILE, "r") as f:
+            return json.load(f)
+    return {}
 
 
 def save_session(session, filename):
@@ -212,74 +311,71 @@ def load_session(filename):
 
 
 async def monitor_feeds_async():
-    global last_alert_details
+    accounts, proxies = load_credentials()
+    account_manager = AccountManager(accounts)
+    proxy_manager = ProxyManager(proxies)
+    last_alert_details = load_last_alert()
     market_is_open = False
     logged_in = False
     first_time_ever = True
     sessions = []
 
-    async def check_session(session, offset):
-        global last_alert_details
-        await asyncio.sleep(offset)
-        start_time = time.time()
+    async def check_session(session, email, proxy):
+        nonlocal last_alert_details
+        try:
+            alert_details = await fetch_alert_details(session, proxy)
+            if alert_details is None:
+                return
 
-        while time.time() - start_time < 600:
-            try:
-                session.headers.update({"User-Agent": get_random_user_agent()})
-                alert_details = await fetch_alert_details(session)
-                if alert_details is None:
-                    log_message("Current alert not interesting to us...", "INFO")
-                    await asyncio.sleep(0.7)
-                    continue
+            if alert_details["title"] != last_alert_details.get("title"):
+                message = f"Title: {alert_details['title']}\nPrice: {alert_details['price']}\nCreated At: {alert_details['created_at']}\nCurrent Time: {alert_details['current_time']}"
+                await send_telegram_message(
+                    message,
+                    HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                    HEDGEYE_SCRAPER_TELEGRAM_GRP,
+                )
 
-                if alert_details["title"] != last_alert_details.get("title"):
-                    message = f"Title: {alert_details['title']}\nPrice: {alert_details['price']}\nCreated At: {alert_details['created_at']}\nCurrent Time: {alert_details['current_time']}"
-                    await send_telegram_message(
-                        message,
-                        HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
-                        HEDGEYE_SCRAPER_TELEGRAM_GRP,
-                    )
+                signal_type = (
+                    "Buy"
+                    if "buy" in alert_details["title"].lower()
+                    else "Sell" if "sell" in alert_details["title"].lower() else "None"
+                )
+                ticker_match = re.search(
+                    r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+                )
+                ticker = ticker_match.group(0) if ticker_match else "-"
 
-                    signal_type = (
-                        "Buy"
-                        if "buy" in alert_details["title"].lower()
-                        else (
-                            "Sell"
-                            if "sell" in alert_details["title"].lower()
-                            else "None"
-                        )
-                    )
-                    ticker_match = re.search(
-                        r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
-                    )
-                    ticker = ticker_match.group(0) if ticker_match else "-"
+                await send_ws_message(
+                    {
+                        "name": "Hedgeye",
+                        "type": signal_type,
+                        "ticker": ticker,
+                        "sender": "hedgeye",
+                    },
+                    WS_SERVER_URL,
+                )
 
-                    await send_ws_message(
-                        {
-                            "name": "Hedgeye",
-                            "type": signal_type,
-                            "ticker": ticker,
-                            "sender": "hedgeye",
-                        },
-                        WS_SERVER_URL,
-                    )
+                message += f"\nTicker: {ticker}"
+                log_message(f"New alert sent: {message}", "INFO")
+                last_alert_details = alert_details
 
-                    message += f"\nTicker: {ticker}"
-                    log_message(f"New alert sent: {message}", "INFO")
-                    last_alert_details = {
-                        "title": alert_details["title"],
-                        "created_at": alert_details["created_at"],
-                    }
-                await asyncio.sleep(0.6)
-            except Exception as e:
+        except Exception as e:
+            if "Rate limited" in str(e):
+                proxy_manager.mark_rate_limited(proxy)
+                account_manager.mark_rate_limited(email)
+                log_message(f"Rate limited: Proxy {proxy}, Account {email}", "WARNING")
+            else:
                 log_message(f"Error during monitoring: {str(e)}", "ERROR")
-                await asyncio.sleep(0.7)
 
     while True:
         pre_market_login_time, market_open_time, market_close_time = (
             get_next_market_times()
         )
         current_time_edt = datetime.now(pytz.timezone("America/New_York"))
+
+        if current_time_edt.time() >= market_open_time.time():
+            proxy_manager.clear_rate_limits()
+            account_manager.clear_rate_limits()
 
         if (
             pre_market_login_time <= current_time_edt < market_open_time
@@ -299,7 +395,7 @@ async def monitor_feeds_async():
                             driver.set_page_load_timeout(1200)
                             session = Session(driver=driver)
                             session.cookies.update(cookies)
-                            sessions.append(session)
+                            sessions.append(SessionInfo(session, email))
                             log_message(
                                 f"Loaded session for account {i}: {email}", "INFO"
                             )
@@ -312,7 +408,7 @@ async def monitor_feeds_async():
                             if login(driver, email, password):
                                 session = Session(driver=driver)
                                 session.transfer_driver_cookies_to_session()
-                                sessions.append(session)
+                                sessions.append(SessionInfo(session, email))
                                 save_session(session, session_filename)
                                 log_message(
                                     f"Logged in and saved session for account {i}: {email}",
@@ -329,7 +425,7 @@ async def monitor_feeds_async():
                         if login(driver, email, password):
                             session = Session(driver=driver)
                             session.transfer_driver_cookies_to_session()
-                            sessions.append(session)
+                            sessions.append(SessionInfo(session, email))
                             save_session(session, session_filename)
                             log_message(
                                 f"Logged in and saved session for account {i}: {email}",
@@ -350,19 +446,23 @@ async def monitor_feeds_async():
                 log_message("Market is open, starting monitoring...", "INFO")
                 market_is_open = True
 
-            tasks = []
-            selected_sessions = random.sample(sessions, min(3, len(sessions)))
+            try:
+                selected_accounts = account_manager.get_available_accounts(3)
+                tasks = []
 
-            for i, session in enumerate(selected_sessions):
-                tasks.append(check_session(session, i * 0.2))
-            await asyncio.gather(*tasks)
+                for email, _ in selected_accounts:
+                    session_info = next((s for s in sessions if s.email == email), None)
+                    if session_info:
+                        proxy = proxy_manager.get_next_proxy()
+                        tasks.append(check_session(session_info.session, email, proxy))
 
-            selected_indices = [
-                sessions.index(session) for session in selected_sessions
-            ]
+                if tasks:
+                    await asyncio.gather(*tasks)
+                await asyncio.sleep(0.6)
 
-            log_message(f"Checked sessions with indices: {selected_indices}\n", "INFO")
-            await asyncio.sleep(0.6)
+            except Exception as e:
+                log_message(f"Error during monitoring cycle: {str(e)}", "ERROR")
+                await asyncio.sleep(1)
 
         else:
             logged_in = False
