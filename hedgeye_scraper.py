@@ -5,7 +5,7 @@ import pickle
 import random
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Set, Tuple
 
 import aiohttp
@@ -85,10 +85,24 @@ class ProxyManager:
 
     def get_next_proxy(self) -> str:
         current_time = datetime.now()
-        available_proxies = [
+
+        expired_proxies = [
             proxy
-            for proxy in self.proxies
-            if proxy not in self.rate_limited or current_time > self.rate_limited[proxy]
+            for proxy, limit_time in self.rate_limited.items()
+            if (current_time - limit_time).total_seconds() >= 900  # 15 minutes
+        ]
+
+        for proxy in expired_proxies:
+            del self.rate_limited[proxy]
+            log_message(
+                f"Proxy {proxy} removed from rate limits (15-minute expired)", "INFO"
+            )
+
+        if expired_proxies:
+            self._save_rate_limited()
+
+        available_proxies = [
+            proxy for proxy in self.proxies if proxy not in self.rate_limited
         ]
 
         if not available_proxies:
@@ -98,13 +112,24 @@ class ProxyManager:
         return proxy
 
     def mark_rate_limited(self, proxy: str):
-        self.rate_limited[proxy] = datetime.now() + timedelta(hours=24)
+        # Store the current time when the proxy is rate limited
+        self.rate_limited[proxy] = datetime.now()
         self._save_rate_limited()
+        log_message(f"Proxy {proxy} marked as rate limited", "INFO")
 
     def clear_rate_limits(self):
         self.rate_limited.clear()
         if os.path.exists(RATE_LIMIT_FILE):
             os.remove(RATE_LIMIT_FILE)
+        log_message("All proxy rate limits cleared", "INFO")
+
+    def get_rate_limited_count(self) -> int:
+        """Return the number of currently rate-limited proxies"""
+        return len(self.rate_limited)
+
+    def get_available_count(self) -> int:
+        """Return the number of currently available proxies"""
+        return len(self.proxies) - len(self.rate_limited)
 
 
 class AccountManager:
@@ -137,6 +162,7 @@ class AccountManager:
         rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
         if os.path.exists(rate_limit_file):
             os.remove(rate_limit_file)
+        log_message("All account rate limits cleared", "INFO")
 
 
 class SessionInfo:
@@ -324,6 +350,7 @@ async def monitor_feeds_async():
         nonlocal last_alert_details
         try:
             alert_details = await fetch_alert_details(session, proxy)
+
             if alert_details is None:
                 return
 
@@ -372,10 +399,6 @@ async def monitor_feeds_async():
             get_next_market_times()
         )
         current_time_edt = datetime.now(pytz.timezone("America/New_York"))
-
-        if current_time_edt.time() >= market_open_time.time():
-            proxy_manager.clear_rate_limits()
-            account_manager.clear_rate_limits()
 
         if (
             pre_market_login_time <= current_time_edt < market_open_time
@@ -443,6 +466,8 @@ async def monitor_feeds_async():
 
         elif market_open_time <= current_time_edt <= market_close_time:
             if not market_is_open:
+                proxy_manager.clear_rate_limits()
+                account_manager.clear_rate_limits()
                 log_message("Market is open, starting monitoring...", "INFO")
                 market_is_open = True
 
