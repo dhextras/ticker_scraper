@@ -144,7 +144,12 @@ async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     await send_ws_message(
-        {"name": "Gmail", "type": "Buy", "ticker": stock_symbol, "sender": sender_type},
+        {
+            "name": f"{sender_type.capitalize()} G",
+            "type": "Buy",
+            "ticker": stock_symbol,
+            "sender": sender_type,
+        },
         WS_SERVER_URL,
     )
     log_message(f"Stock alert sent: {stock_symbol} from {sender}", "INFO")

@@ -115,7 +115,6 @@ class ProxyManager:
         # Store the current time when the proxy is rate limited
         self.rate_limited[proxy] = datetime.now()
         self._save_rate_limited()
-        log_message(f"Proxy {proxy} marked as rate limited", "INFO")
 
     def clear_rate_limits(self):
         self.rate_limited.clear()
@@ -389,10 +388,11 @@ async def monitor_feeds_async():
         except Exception as e:
             if "Rate limited" in str(e):
                 proxy_manager.mark_rate_limited(proxy)
-                account_manager.mark_rate_limited(email)
-                log_message(f"Rate limited: Proxy {proxy}, Account {email}", "WARNING")
+                log_message(f"Rate limited: Proxy {proxy}", "WARNING")
             else:
                 log_message(f"Error during monitoring: {str(e)}", "ERROR")
+        finally:
+            await asyncio.sleep(0.7)
 
     while True:
         pre_market_login_time, market_open_time, market_close_time = (
@@ -473,6 +473,10 @@ async def monitor_feeds_async():
 
             try:
                 selected_accounts = account_manager.get_available_accounts(3)
+
+                if not selected_accounts or len(selected_accounts) == 0:
+                    raise Exception("No available Accounts")
+
                 tasks = []
 
                 for email, _ in selected_accounts:
@@ -480,10 +484,11 @@ async def monitor_feeds_async():
                     if session_info:
                         proxy = proxy_manager.get_next_proxy()
                         tasks.append(check_session(session_info.session, email, proxy))
+                        await asyncio.sleep(0.2)
 
                 if tasks:
                     await asyncio.gather(*tasks)
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(0.7)
 
             except Exception as e:
                 log_message(f"Error during monitoring cycle: {str(e)}", "ERROR")
