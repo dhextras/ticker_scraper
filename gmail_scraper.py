@@ -186,7 +186,7 @@ async def main():
                 else:
                     log_message("No new emails found.", "INFO")
 
-                await asyncio.sleep(5)  # Check every 5 seconds
+                await asyncio.sleep(1)
 
             except HttpError as error:
                 if error.resp.status == 429:
