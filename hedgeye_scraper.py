@@ -35,8 +35,9 @@ HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_BOT_TOK
 HEDGEYE_SCRAPER_TELEGRAM_GRP = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 DATA_DIR = "data"
-RATE_LIMIT_FILE = os.path.join(DATA_DIR, "rate_limited.json")
-LAST_ALERT_FILE = os.path.join(DATA_DIR, "last_alert.json")
+RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_proxy.json")
+RATE_LIMIT_ACCOUNTS_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_accounts.json")
+LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -128,14 +129,14 @@ class ProxyManager:
         self.rate_limited: Dict[str, datetime] = self._load_rate_limited()
 
     def _load_rate_limited(self) -> Dict[str, datetime]:
-        if os.path.exists(RATE_LIMIT_FILE):
-            with open(RATE_LIMIT_FILE, "r") as f:
+        if os.path.exists(RATE_LIMIT_PROXY_FILE):
+            with open(RATE_LIMIT_PROXY_FILE, "r") as f:
                 rate_limited = json.load(f)
                 return {k: datetime.fromisoformat(v) for k, v in rate_limited.items()}
         return {}
 
     def _save_rate_limited(self):
-        with open(RATE_LIMIT_FILE, "w") as f:
+        with open(RATE_LIMIT_PROXY_FILE, "w") as f:
             rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
             json.dump(rate_limited, f)
 
@@ -173,8 +174,8 @@ class ProxyManager:
 
     def clear_rate_limits(self):
         self.rate_limited.clear()
-        if os.path.exists(RATE_LIMIT_FILE):
-            os.remove(RATE_LIMIT_FILE)
+        if os.path.exists(RATE_LIMIT_PROXY_FILE):
+            os.remove(RATE_LIMIT_PROXY_FILE)
         log_message("All proxy rate limits cleared", "INFO")
 
 
@@ -186,15 +187,13 @@ class AccountManager:
         self.lock = asyncio.Lock()
 
     def _load_rate_limited(self) -> Set[str]:
-        rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
-        if os.path.exists(rate_limit_file):
-            with open(rate_limit_file, "r") as f:
+        if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
+            with open(RATE_LIMIT_ACCOUNTS_FILE, "r") as f:
                 return set(json.load(f))
         return set()
 
     def _save_rate_limited(self):
-        rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
-        with open(rate_limit_file, "w") as f:
+        with open(RATE_LIMIT_ACCOUNTS_FILE, "w") as f:
             json.dump(list(self.rate_limited), f)
 
     async def get_available_accounts(self, count: int) -> List[Tuple[str, str]]:
@@ -221,9 +220,8 @@ class AccountManager:
     def clear_rate_limits(self):
         self.rate_limited.clear()
         self.currently_running.clear()
-        rate_limit_file = os.path.join(DATA_DIR, "rate_limited_accounts.json")
-        if os.path.exists(rate_limit_file):
-            os.remove(rate_limit_file)
+        if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
+            os.remove(RATE_LIMIT_ACCOUNTS_FILE)
         log_message("All account rate limits cleared", "INFO")
 
 

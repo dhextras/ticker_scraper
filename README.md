@@ -73,6 +73,14 @@ pip install -r requirements.txt
    # Hedgeye scraper settings
    HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hedgeye scraper
    HEDGEYE_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Hedgeye scraper
+
+   # Motley fool scraper settings
+   FOOL_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Motley fool scraper
+   FOOL_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Motley fool scraper
+   FOOL_USERNAME= # Username for Motley fool
+   FOOL_PASSWORD= # password for Motley fool
+   FOOL_API_KEY= # API key for the grphql request
+   FOOL_GRAPHQL_HASH= # Article latestt sha
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -146,6 +154,13 @@ You can run each of the scripts based on your needs:
   python cnbc_scraper.py
   ```
 
+- To run the **CNBC ticker scraper**, use:
+
+  ```bash
+  python motley_fool_scraper.py
+  ```
+
+
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
 ## File Structure Overview
@@ -155,22 +170,27 @@ your_project/
 ├── cred/                    # Folder for credential files
 │   ├── gmail_credentials.json
 │   ├── gmail_token.json
+│   ├── fool_session.json    # will be created upon first login
+│   ├── hedgeye_credentials.json
 ├── data/                    # Folder to save scraper data to access later
 ├── log/                     # Folder for log files
 ├── utils/                   # Utility functions
 │   ├── __init__.py
 │   ├── logger.py            # Logger utility
-│   ├── telegram_sender.py    # Telegram sending utility
+│   ├── telegram_sender.py   # Telegram sending utility
 │   ├── time_utils.py        # Time utility functions
-│   ├── websocket_sender.py   # WebSocket sending utility
+│   ├── websocket_sender.py  # WebSocket sending utility
 ├── .env                     # Environment variables
+├── .env.example             # Environment variables
 ├── .gitignore               # Git ignore file
 ├── README.md                # Project documentation
-├── cnbc_scraper.py          # CNBC ticker scraper script
-├── gmail_scraper.py         # Gmail ticker scraper script
-├── oxfordclub_scraper.py    # OxfordClub ticker scraper script
+├── cnbc_scraper.py          # CNBC ticker scraper
+├── gmail_scraper.py         # Gmail ticker scraper
+├── oxfordclub_scraper.py    # OxfordClub ticker scraper
 ├── requirements.txt         # Project dependencies
-└── stocknews_scraper.py     # StockNews ticker scraper script
+├── stocknews_scraper.py     # StockNews ticker scraper
+├── hedgeye_scraper.py       # Hedgeye article scraper
+└── motley_fool_scraper.py   # Motley ticker scraper
 ```
 
 ### Important Notes
