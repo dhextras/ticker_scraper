@@ -21,6 +21,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -266,6 +267,20 @@ def load_credentials() -> Tuple[List[Tuple[str, str]], List[str]]:
         return accounts, proxies
 
 
+async def get_public_ip(proxy):
+    """Fetches public IP through the proxy if request time exceeds threshold."""
+    ip_check_url = "https://api.ipify.org?format=text"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(ip_check_url, proxy=proxy) as response:
+                if response.status == 200:
+                    ip = await response.text()
+                    return ip.strip()
+                return f"Code: {response.status}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
 async def fetch_alert_details(session, proxy_raw):
     try:
         ip, port = proxy_raw.split(":")
@@ -346,10 +361,26 @@ async def monitor_feeds_async():
     first_time_ever = True
     sessions = []
 
-    async def check_session(session, email, proxy):
+    async def check_session(session, email, proxy, offset=0.0):
         nonlocal last_alert_details
+        await asyncio.sleep(offset)
+
         try:
+            start_time = time.time()
             alert_details = await fetch_alert_details(session, proxy)
+
+            duration = time.time() - start_time
+            log_message(
+                f"fetch_alert_details took {duration:.2f} seconds. for {email}, {proxy}",
+                "ERROR",
+            )
+
+            if duration > 2:
+                public_ip = await get_public_ip(f"http://{proxy}")
+                log_message(
+                    f"Long request duration. Public IP: {public_ip}",
+                    "ERROR",
+                )
 
             if alert_details is None:
                 return
@@ -473,19 +504,21 @@ async def monitor_feeds_async():
                 market_is_open = True
 
             try:
-                selected_accounts = account_manager.get_available_accounts(3)
+                selected_accounts = account_manager.get_available_accounts(2)
 
                 if not selected_accounts or len(selected_accounts) == 0:
                     raise Exception("No available Accounts")
 
                 tasks = []
 
-                for email, _ in selected_accounts:
+                for index, (email, _) in enumerate(selected_accounts):
                     session_info = next((s for s in sessions if s.email == email), None)
                     if session_info:
                         proxy = proxy_manager.get_next_proxy()
-                        tasks.append(check_session(session_info.session, email, proxy))
-                        await asyncio.sleep(0.2)
+                        offset = 0.6 * index
+                        tasks.append(
+                            check_session(session_info.session, email, proxy, offset)
+                        )
 
                 if tasks:
                     await asyncio.gather(*tasks)
