@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -120,7 +121,7 @@ async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
     log_message(f"Match sent to Telegram and WebSocket: {stock_symbol} - {url}", "INFO")
 
 
-async def main():
+async def run_scraper():
     processed_urls = load_processed_urls()
 
     async with aiohttp.ClientSession() as session:
@@ -158,5 +159,19 @@ async def main():
                 await asyncio.sleep(CHECK_INTERVAL)
 
 
+def main():
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+        log_message("Missing required environment variables", "CRITICAL")
+        sys.exit(1)
+
+    try:
+        asyncio.run(run_scraper())
+    except KeyboardInterrupt:
+        log_message("Shutting down gracefully...", "INFO")
+    except Exception as e:
+        log_message(f"Critical error in main: {e}", "CRITICAL")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

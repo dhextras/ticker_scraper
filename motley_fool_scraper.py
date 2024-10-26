@@ -357,7 +357,18 @@ async def run_alert_monitor():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FOOL_USERNAME, FOOL_PASSWORD]):
+    if not all(
+        [
+            TELEGRAM_BOT_TOKEN,
+            TELEGRAM_CHAT_ID,
+            WS_SERVER_URL,
+            FOOL_USERNAME,
+            FOOL_PASSWORD,
+            FOOL_API_KEY,
+            FOOL_GRAPHQL_HASH,
+            CREDS_PATH,
+        ]
+    ):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

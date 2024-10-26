@@ -4,6 +4,7 @@ import os
 import pickle
 import random
 import re
+import sys
 import time
 from datetime import datetime
 from typing import Dict, List, Set, Tuple
@@ -500,5 +501,25 @@ async def monitor_feeds_async():
             await sleep_until_market_open()
 
 
+def main():
+    if not all(
+        [
+            HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+            HEDGEYE_SCRAPER_TELEGRAM_GRP,
+            WS_SERVER_URL,
+        ]
+    ):
+        log_message("Missing required environment variables", "CRITICAL")
+        sys.exit(1)
+
+    try:
+        asyncio.run(monitor_feeds_async())
+    except KeyboardInterrupt:
+        log_message("Shutting down gracefully...", "INFO")
+    except Exception as e:
+        log_message(f"Critical error in main: {e}", "CRITICAL")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    asyncio.run(monitor_feeds_async())
+    main()

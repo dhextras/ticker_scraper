@@ -3,6 +3,7 @@ import base64
 import email
 import os
 import re
+import sys
 from datetime import datetime
 
 import pytz
@@ -155,7 +156,7 @@ async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
     log_message(f"Stock alert sent: {stock_symbol} from {sender}", "INFO")
 
 
-async def main():
+async def run_gmail_scraper():
     service = get_gmail_service()
     last_seen_id = None
 
@@ -196,5 +197,19 @@ async def main():
                     log_message(f"An error occurred: {error}", "ERROR")
 
 
+def main():
+    if not all([SCOPES, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, WS_SERVER_URL]):
+        log_message("Missing required environment variables", "CRITICAL")
+        sys.exit(1)
+
+    try:
+        asyncio.run(run_gmail_scraper())
+    except KeyboardInterrupt:
+        log_message("Shutting down gracefully...", "INFO")
+    except Exception as e:
+        log_message(f"Critical error in main: {e}", "CRITICAL")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
