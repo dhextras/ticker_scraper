@@ -94,7 +94,7 @@ pip install -r requirements.txt
 
 Ensure that these files are named exactly as specified.
 
-## Step 5: Install Google Chrome and ChromeDriver (Optional - Needed for Hedgeye)
+## Step 5: Install Google Chrome and ChromeDriver (Optional - Needed for Hedgeye, Motley)
 
 These steps are only needed if you are using the **Hedgeye** scraper.
 
@@ -154,7 +154,7 @@ You can run each of the scripts based on your needs:
   python cnbc_scraper.py
   ```
 
-- To run the **CNBC ticker scraper**, use:
+- To run the **Motley scraper**, use:
 
   ```bash
   python motley_fool_scraper.py
