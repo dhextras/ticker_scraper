@@ -26,7 +26,8 @@ def setup_logger(log_file=None):
     script_name = os.path.splitext(os.path.basename(caller_script))[0]
 
     logger_name = script_name
-    log_file = log_file or os.path.join("log", f"{script_name}_log.log")
+    date = datetime.now().strftime("%m_%d")
+    log_file = log_file or os.path.join("log", f"{script_name}_{date}.log")
 
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
@@ -61,6 +62,8 @@ def setup_logger(log_file=None):
 
 
 def log_message(message, level="INFO"):
-    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
+        "%Y-%m-%d %H:%M:%S.%f"
+    )[:-3]
     logger = setup_logger()
     getattr(logger, level.lower())(f"[{timestamp}] {message}")
