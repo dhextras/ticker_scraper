@@ -84,7 +84,9 @@ async def extract_ticker_from_pdf(session, url):
         return None
 
 
-async def send_to_telegram(url, ticker, timestamp):
+async def send_to_telegram(url, ticker):
+    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
+
     message = f"<b>New Hindenburg Research Report</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
@@ -132,14 +134,11 @@ async def run_scraper():
 
                 if new_urls:
                     log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
-                    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
 
                     for url in new_urls:
                         ticker = await extract_ticker_from_pdf(session, url)
                         if ticker:
-                            await send_to_telegram(url, ticker, timestamp)
+                            await send_to_telegram(url, ticker)
                         processed_urls.add(url)
                     save_processed_urls(processed_urls)
                 else:
