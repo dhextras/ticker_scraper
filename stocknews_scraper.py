@@ -96,7 +96,7 @@ async def send_posts_to_telegram(urls, timestamp):
     message += f"<b>URLS:</b>\n  {joined_urls}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"New Posts sent to Telegram and WebSocket: {urls}", "INFO")
+    log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
 async def send_match_to_telegram(url, stock_symbol, post_title, post_date):

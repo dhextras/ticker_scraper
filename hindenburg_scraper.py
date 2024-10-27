@@ -84,10 +84,22 @@ async def extract_ticker_from_pdf(session, url):
         return None
 
 
+async def send_posts_to_telegram(urls):
+    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
+    joined_urls = "\n  ".join(urls)
+
+    message = f"<b>New Hindenburg medias found</b>\n\n"
+    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Media URLS:</b>\n  {joined_urls}"
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    log_message(f"New Posts sent to Telegram: {urls}", "INFO")
+
+
 async def send_to_telegram(url, ticker):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
 
-    message = f"<b>New Hindenburg Research Report</b>\n\n"
+    message = f"<b>New Hindenburg Ticker found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
     message += f"<b>Ticker:</b> {ticker}\n"
@@ -128,17 +140,18 @@ async def run_scraper():
                     post["source_url"]
                     for post in posts
                     if post.get("source_url")
-                    and post["source_url"].lower().endswith(".pdf")
                     and post["source_url"] not in processed_urls
                 ]
 
                 if new_urls:
                     log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
+                    await send_posts_to_telegram(new_urls)
 
                     for url in new_urls:
-                        ticker = await extract_ticker_from_pdf(session, url)
-                        if ticker:
-                            await send_to_telegram(url, ticker)
+                        if url.lower().endswith(".pdf"):
+                            ticker = await extract_ticker_from_pdf(session, url)
+                            if ticker:
+                                await send_to_telegram(url, ticker)
                         processed_urls.add(url)
                     save_processed_urls(processed_urls)
                 else:

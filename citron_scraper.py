@@ -1,4 +1,3 @@
-# just work on it and fix the issue with 403 also confirm do we need to only fetch jpg here and pdf there
 import asyncio
 import json
 import os
