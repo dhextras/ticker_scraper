@@ -81,6 +81,18 @@ pip install -r requirements.txt
    FOOL_PASSWORD= # password for Motley fool
    FOOL_API_KEY= # API key for the grphql request
    FOOL_GRAPHQL_HASH= # Article latestt sha
+
+   # Citron Research scraper settings
+   CITRON_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Citron
+   CITRON_TELEGRAM_GRP=  # Telegram group ID for Citron
+
+   # Kerrisdale Capital scraper settings
+   KERRISDALE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Kerrisdale
+   KERRISDALE_TELEGRAM_GRP=  # Telegram group ID for Kerrisdale
+
+   # Hindenburg Research scraper settings
+   HINDENBURG_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hindenburg
+   HINDENBURG_TELEGRAM_GRP=  # Telegram group ID for Hindenburg
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -160,6 +172,23 @@ You can run each of the scripts based on your needs:
   python motley_fool_scraper.py
   ```
 
+- To run the **Kerrisdale Capital scraper**, use:
+
+  ```bash
+  python kerrisdale_scraper.py
+  ```
+
+- To run the **Hindenburg Research scraper**, use:
+
+  ```bash
+  python hindenburg_scraper.py
+  ```
+
+- To run the **Citron Research scraper**, use:
+
+  ```bash
+  python citron_scraper.py
+  ```
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
@@ -184,8 +213,11 @@ your_project/
 ├── .env.example             # Environment variables
 ├── .gitignore               # Git ignore file
 ├── README.md                # Project documentation
+├── citron_scraper.py        # Citron media scraper
 ├── cnbc_scraper.py          # CNBC ticker scraper
 ├── gmail_scraper.py         # Gmail ticker scraper
+├── hindenburg_scraper.py    # Hindenburg pdf ticker scraper
+├── kerrisdale_scraper.py    # Kerrisdale pdf ticker scraper
 ├── oxfordclub_scraper.py    # OxfordClub ticker scraper
 ├── requirements.txt         # Project dependencies
 ├── stocknews_scraper.py     # StockNews ticker scraper
