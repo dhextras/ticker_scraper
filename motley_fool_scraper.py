@@ -290,8 +290,14 @@ async def process_article(article, session_data):
 
 async def check_for_new_alerts(prev_articles, session_data):
     try:
+        start_time = time.time()
         current_articles = await fetch_latest_articles(session_data)
 
+        duration = time.time() - start_time
+        log_message(
+            f"fetch_alert_details took {duration:.2f} seconds. Total Articles: {len(prev_articles)}",
+            "ERROR",
+        )
         if not current_articles:
             return prev_articles, []
 
