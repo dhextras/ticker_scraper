@@ -27,6 +27,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
+os.makedirs("data", exist_ok=True)
+
 
 def load_processed_urls():
     try:

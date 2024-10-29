@@ -26,6 +26,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
+os.makedirs("data", exist_ok=True)
+
 
 async def fetch_sitemap(session):
     try:

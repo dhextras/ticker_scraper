@@ -32,6 +32,8 @@ FOOL_API_KEY = os.getenv("FOOL_API_KEY")
 FOOL_GRAPHQL_HASH = os.getenv("FOOL_GRAPHQL_HASH")
 CREDS_PATH = "cred/fool_session.json"
 
+os.makedirs("cred", exist_ok=True)
+
 # Global variables
 previous_articles = []
 last_request_time = 0

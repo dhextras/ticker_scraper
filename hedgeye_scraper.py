@@ -38,8 +38,9 @@ RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_proxy.json"
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_accounts.json")
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
 
-# Ensure data directory exists
+# Ensure data, cred directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs("cred", exist_ok=True)
 
 options = Options()
 options.add_argument(

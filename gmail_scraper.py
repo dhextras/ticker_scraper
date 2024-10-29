@@ -26,6 +26,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("GMAIL_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("GMAIL_SCRAPER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
+os.makedirs("cred", exist_ok=True)
+
 
 def get_gmail_service():
     creds = None
