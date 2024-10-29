@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import re
@@ -6,6 +5,7 @@ import sys
 from datetime import datetime
 
 import aiohttp
+import asynci/
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -86,6 +86,9 @@ async def process_page(session, url):
                     r"Action to Take", all_text, flags=re.IGNORECASE
                 )
 
+                if len(action_sections) < 2:
+                    log_message(f"'Action to Take' not found: {url}", "WARNING")
+
                 for section in action_sections[1:]:
                     buy_match = re.search(r"Buy", section, re.IGNORECASE)
                     ticker_match = re.search(
@@ -102,6 +105,7 @@ async def process_page(session, url):
                             "%Y-%m-%d %H:%M:%S"
                         )
                         await send_match_to_telegram(url, ticker, exchange, timestamp)
+                        break
                     elif not ticker_match:
                         log_message(f"No ticker found in section: {url}", "WARNING")
                     elif not buy_match or (
@@ -114,8 +118,6 @@ async def process_page(session, url):
                             "WARNING",
                         )
 
-                if len(action_sections) < 2:
-                    log_message(f"'Action to Take' not found: {url}", "WARNING")
             else:
                 log_message(f"Failed to fetch page: HTTP {response.status}", "ERROR")
     except Exception as e:
