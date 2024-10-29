@@ -22,7 +22,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
-
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -498,7 +497,7 @@ async def task_scheduler(
                             last_alert_details,
                         )
                     )
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
         except Exception as e:
             log_message(f"Error in task scheduler: {str(e)}", "ERROR")
             await asyncio.sleep(1)
@@ -620,7 +619,9 @@ async def monitor_feeds_async():
                 except Exception as e:
                     log_message(f"Error during monitoring cycle: {str(e)}", "ERROR")
                 finally:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(
+                        1
+                    )  # 1 Sec sleep before adding next set of tasks
 
             else:
                 logged_in = False
