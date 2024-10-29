@@ -10,6 +10,7 @@ import aiohttp
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -19,7 +20,7 @@ load_dotenv()
 
 # Constants
 SITEMAP_URL = "https://app.stocks.news/blog-sitemap.xml?page=1"
-CHECK_INTERVAL = 5
+CHECK_INTERVAL = 1
 SEARCH_WORD = "NASDAQ"
 PROCESSED_JSON_FILE = "data/stocknews_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")

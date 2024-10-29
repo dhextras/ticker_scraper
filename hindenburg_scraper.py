@@ -10,6 +10,7 @@ import aiohttp
 import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -19,7 +20,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://hindenburgresearch.com/wp-json/wp/v2/media"
-CHECK_INTERVAL = 5  # seconds
+CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/hindenburg_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("HINDENBURG_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("HINDENBURG_TELEGRAM_GRP")

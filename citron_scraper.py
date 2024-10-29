@@ -7,6 +7,7 @@ from datetime import datetime
 import aiohttp
 import pytz
 from dotenv import load_dotenv
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -16,7 +17,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://citronresearch.com/wp-json/wp/v2/media"
-CHECK_INTERVAL = 5  # seconds
+CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/citron_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("CITRON_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("CITRON_TELEGRAM_GRP")
