@@ -93,6 +93,10 @@ pip install -r requirements.txt
    # Hindenburg Research scraper settings
    HINDENBURG_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hindenburg
    HINDENBURG_TELEGRAM_GRP=  # Telegram group ID for Hindenburg
+
+   # Bearcave ticker scraper settings
+   BEARCAVE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hindenburg
+   BEARCAVE_TELEGRAM_GRP=  # Telegram group ID for Hindenburg
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -190,6 +194,12 @@ You can run each of the scripts based on your needs:
   python citron_scraper.py
   ```
 
+- To run the **Bearcave Ticker scraper**, use:
+
+  ```bash
+  python bearcave_scraper.py
+  ```
+
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
 ## File Structure Overview
@@ -213,6 +223,8 @@ your_project/
 ├── .env.example             # Environment variables
 ├── .gitignore               # Git ignore file
 ├── README.md                # Project documentation
+
+├── bearcave_scraper.py      # Bearcave ticker scraper
 ├── citron_scraper.py        # Citron media scraper
 ├── cnbc_scraper.py          # CNBC ticker scraper
 ├── gmail_scraper.py         # Gmail ticker scraper
