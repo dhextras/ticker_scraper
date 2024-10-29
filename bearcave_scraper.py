@@ -8,6 +8,7 @@ from datetime import datetime
 import aiohttp
 import pytz
 from dotenv import load_dotenv
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -86,7 +87,7 @@ async def send_to_telegram(post_data, ticker=None):
         await send_ws_message(
             {
                 "name": "The Bear Cave",
-                "type": "Research",
+                "type": "Sell",
                 "ticker": ticker,
                 "sender": "bearcave",
             },

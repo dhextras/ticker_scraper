@@ -111,7 +111,7 @@ async def send_to_telegram(url, ticker):
     await send_ws_message(
         {
             "name": "Hindenburg Research",
-            "type": "Research",
+            "type": "Sell",
             "ticker": ticker,
             "sender": "hindenburg",
         },
