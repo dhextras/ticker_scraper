@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import re
@@ -5,7 +6,6 @@ import sys
 from datetime import datetime
 
 import aiohttp
-import asynci/
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
