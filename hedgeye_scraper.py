@@ -22,6 +22,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -419,6 +420,7 @@ async def process_task(
         start_time = time.time()
         alert_details = await fetch_alert_details(task.session, task.proxy)
 
+        last_alert_details = load_last_alert()
         duration = time.time() - start_time
         log_message(
             f"fetch_alert_details took {duration:.2f} seconds. for {task.email}, {task.proxy}",
