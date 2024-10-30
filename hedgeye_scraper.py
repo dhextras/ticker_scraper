@@ -379,10 +379,6 @@ async def fetch_alert_details(session, proxy_raw):
             "current_time": current_time_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
         }
 
-        # Save last alert details
-        with open(LAST_ALERT_FILE, "w") as f:
-            json.dump(alert_details, f)
-
         return alert_details
 
     except Exception as e:
@@ -421,6 +417,11 @@ async def process_task(
         alert_details = await fetch_alert_details(task.session, task.proxy)
 
         last_alert_details = load_last_alert()
+
+        # Save last alert details
+        with open(LAST_ALERT_FILE, "w") as f:
+            json.dump(alert_details, f)
+
         duration = time.time() - start_time
         log_message(
             f"fetch_alert_details took {duration:.2f} seconds. for {task.email}, {task.proxy}",
