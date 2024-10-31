@@ -419,8 +419,9 @@ async def process_task(
         last_alert_details = load_last_alert()
 
         # Save last alert details
-        with open(LAST_ALERT_FILE, "w") as f:
-            json.dump(alert_details, f)
+        if alert_details:
+            with open(LAST_ALERT_FILE, "w") as f:
+                json.dump(alert_details, f)
 
         duration = time.time() - start_time
         log_message(
