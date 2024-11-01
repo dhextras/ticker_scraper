@@ -66,8 +66,7 @@ pip install -r requirements.txt
    CNBC_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for CNBC scraper
    CNBC_SCRAPER_GMAIL_USERNAME=  # Gmail username for CNBC scraper
    CNBC_SCRAPER_GMAIL_PASSWORD=  # Gmail password for CNBC scraper
-   CNBC_SCRAPER_LATEST_ARTICLE_SHA=  # SHA for the latest article in CNBC scraper
-   CNBC_SCRAPER_ARTICLE_DATE_SHA=  # SHA for the article date in CNBC scraper
+   CNBC_SCRAPER_ARTICLE_DATA_SHA=  # SHA for the article data in CNBC scraper
    CNBC_SCRAPER_SESSION_TOKEN=  # Session token for CNBC scraper
 
    # Hedgeye scraper settings
@@ -107,6 +106,9 @@ pip install -r requirements.txt
 2. **Place the following files in `cred/`:**
 
    - `gmail_credentials.json`  # Credentials for Gmail API (download this from Google Cloud API)
+   - `cnbc_latest_article_id.json` # Contains {"article_id": xxxxxxxxx}
+   - `fool_session.json` # Contains Session data from where you manually logged in with out a headless mode
+   - `hedgeye_credentials.json` # Contains login accounts and proxies for hedgeye
 
 Ensure that these files are named exactly as specified.
 
