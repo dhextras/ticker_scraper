@@ -112,6 +112,10 @@ async def get_article_data(article_id, uid, session_token):
                         )
                         return None, "wrong_type"
 
+                    log_message(
+                        f"Processing cnbcnewsstory article {article_id}", "INFO"
+                    )
+
                     # Process article body for cnbcnewsstory type
                     article_body = article_data.get("body", {}).get("content", [])
 
