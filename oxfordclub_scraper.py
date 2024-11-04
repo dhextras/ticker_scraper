@@ -45,16 +45,16 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-async def fetch_json(session):
+def fetch_json(session):
     try:
-        async with session.get(JSON_URL) as response:
-            if response.status == 200:
-                data = await response.json()
-                log_message(f"Fetched {len(data)} posts from JSON", "INFO")
-                return data
-            else:
-                log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return []
+        response = session.get(JSON_URL)
+        if response.status_code == 200:
+            data = response.json()
+            log_message(f"Fetched {len(data)} posts from JSON", "INFO")
+            return data
+        else:
+            log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
+            return []
     except Exception as e:
         log_message(f"Error fetching JSON: {e}", "ERROR")
         return []
@@ -75,7 +75,7 @@ def login_sync(session):
         return False
 
 
-def process_page(session, url):
+async def process_page(session, url):
     try:
         headers = {
             "Connection": "keep-alive",
@@ -107,7 +107,7 @@ def process_page(session, url):
                     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
                         "%Y-%m-%d %H:%M:%S"
                     )
-                    send_match_to_telegram(url, ticker, exchange, timestamp)
+                    await send_match_to_telegram(url, ticker, exchange, timestamp)
                     break
                 elif not ticker_match:
                     log_message(f"No ticker found in section: {url}", "WARNING")
@@ -177,7 +177,7 @@ async def run_scraper():
                 break
 
             log_message("Checking for new posts...")
-            posts = await fetch_json(session)
+            posts = fetch_json(session)
 
             new_urls = [
                 post["link"]
@@ -190,11 +190,12 @@ async def run_scraper():
                 timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
                     "%Y-%m-%d %H:%M:%S"
                 )
-                await send_posts_to_telegram(new_urls, timestamp)
 
                 for url in new_urls:
-                    process_page(session, url)
+                    await process_page(session, url)
                     processed_urls.add(url)
+
+                await send_posts_to_telegram(new_urls, timestamp)
                 save_processed_urls(processed_urls)
             else:
                 log_message("No new posts found.", "INFO")
