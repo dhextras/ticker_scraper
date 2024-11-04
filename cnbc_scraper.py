@@ -36,7 +36,6 @@ def load_article_id():
                 return data.get("article_id", None)
         else:
             # Ensure directory exists
-            print("hello")
             os.makedirs(os.path.dirname(ARTICLE_ID_FILE), exist_ok=True)
             return None
     except Exception as e:
@@ -101,7 +100,6 @@ async def get_article_data(article_id, uid, session_token):
                     response_json = await response.json()
                     article_data = response_json.get("data", {}).get("article")
 
-                    print(response_json)
                     if article_data is None:
                         log_message(f"Article {article_id} is null", "INFO")
                         return None, None
