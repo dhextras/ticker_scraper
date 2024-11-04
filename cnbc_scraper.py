@@ -248,10 +248,6 @@ async def run_article_monitor(uid, session_token):
                         )
                         current_article_id = next_valid_id
                         save_article_id(current_article_id)
-                    else:
-                        # If no valid articles found in window, increment by 1 and continue
-                        current_article_id += 1
-                        save_article_id(current_article_id)
                 else:  # Success
                     await process_article(content, current_article_id)
                     current_article_id += 1
