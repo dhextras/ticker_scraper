@@ -191,9 +191,9 @@ async def check_next_window(current_id, uid, session_token, window_size=5):
     """
     for offset in range(1, window_size + 1):
         next_id = current_id + offset
-        content, status = await get_article_data(next_id, uid, session_token)
+        _, status = await get_article_data(next_id, uid, session_token)
 
-        if status == "success":
+        if status:
             log_message(f"Found valid article at ID: {next_id}", "INFO")
             return next_id
     return None
