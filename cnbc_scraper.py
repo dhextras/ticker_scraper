@@ -189,14 +189,13 @@ async def check_next_window(current_id, uid, session_token, window_size=5):
     Check the next window_size IDs for valid articles.
     Returns the next valid ID found, or None if none found.
     """
-    for offset in range(1, window_size + 1):
+    for offset in range(0, window_size + 1):
         next_id = current_id + offset
-        _, status = await get_article_data(next_id, uid, session_token)
+        content, status = await get_article_data(next_id, uid, session_token)
 
         if status:
-            log_message(f"Found valid article at ID: {next_id}", "INFO")
-            return next_id
-    return None
+            return content, status, next_id
+    return None, None, None
 
 
 async def run_article_monitor(uid, session_token):
@@ -206,6 +205,53 @@ async def run_article_monitor(uid, session_token):
         sys.exit(1)
 
     log_message(f"Starting with article ID: {current_article_id}", "INFO")
+
+    async def process_article_data(status, content, current_article_id):
+        if status == "error":
+            await asyncio.sleep(4)  # Extra sleep on error
+        elif status == "wrong_type":
+            current_article_id += 1
+            save_article_id(current_article_id)
+        elif status == "no_content":
+            current_article_id += 1
+            save_article_id(current_article_id)
+        elif status is None:
+            # Check next window of IDs
+            log_message(
+                f"Looping between ID's `{current_article_id}` - `{current_article_id + 5}`",
+                "INFO",
+            )
+            _, _, valid_id_found = await check_next_window(
+                current_article_id, uid, session_token
+            )
+
+            if valid_id_found:
+                log_message(
+                    f"Found valid article at ID: {valid_id_found}, rerunning to make sure nothing left out",
+                    "INFO",
+                )
+
+                # Rerunning the window to make sure nothing left behind
+                content, status, valid_id = await check_next_window(
+                    current_article_id, uid, session_token
+                )
+
+                if valid_id:
+                    log_message(
+                        f"Skipped to {valid_id}",
+                        "INFO",
+                    )
+                    current_article_id = await process_article_data(
+                        status, content, current_article_id
+                    )
+            return current_article_id
+        else:  # Success
+            await process_article(content, current_article_id)
+            current_article_id += 1
+            save_article_id(current_article_id)
+
+        await asyncio.sleep(1)
+        return current_article_id
 
     while True:
         try:
@@ -227,33 +273,9 @@ async def run_article_monitor(uid, session_token):
                     current_article_id, uid, session_token
                 )
 
-                if status == "error":
-                    await asyncio.sleep(5)  # Longer sleep on error
-                    continue
-                elif status == "wrong_type":
-                    current_article_id += 1
-                    save_article_id(current_article_id)
-                elif status == "no_content":
-                    current_article_id += 1
-                    save_article_id(current_article_id)
-                elif status is None:
-                    # Check next window of IDs
-                    next_valid_id = await check_next_window(
-                        current_article_id, uid, session_token
-                    )
-                    if next_valid_id:
-                        log_message(
-                            f"Skipping from {current_article_id} to {next_valid_id}",
-                            "INFO",
-                        )
-                        current_article_id = next_valid_id
-                        save_article_id(current_article_id)
-                else:  # Success
-                    await process_article(content, current_article_id)
-                    current_article_id += 1
-                    save_article_id(current_article_id)
-
-                await asyncio.sleep(1)
+                current_article_id = await process_article_data(
+                    status, content, current_article_id
+                )
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
