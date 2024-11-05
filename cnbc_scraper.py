@@ -1,13 +1,21 @@
 import asyncio
 import json
 import os
+import random
 import sys
 import time
 from datetime import datetime
+from functools import wraps
 
 import aiohttp
 import pytz
+import undetected_chromedriver as uc
 from dotenv import load_dotenv
+from selenium.webdriver import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -21,35 +29,21 @@ TELEGRAM_BOT_TOKEN = os.getenv("CNBC_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("CNBC_SCRAPER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 GMAIL_USERNAME = os.getenv("CNBC_SCRAPER_GMAIL_USERNAME")
-ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
+GMAIL_PASSWORD = os.getenv("CNBC_SCRAPER_GMAIL_PASSWORD")
+LATEST_ARTICLE_SHA = os.getenv("CNBC_SCRAPER_LATEST_ARTICLE_SHA")
+ARTICLE_DATE_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATE_SHA")
 SESSION_TOKEN = os.getenv("CNBC_SCRAPER_SESSION_TOKEN")
 
-# Article ID file path
-ARTICLE_ID_FILE = "cred/cnbc_latest_article_id.json"
+# Global variables
+previous_articles = []
+last_request_time = 0
+MIN_REQUEST_INTERVAL = 1  # Minimum time between requests in seconds
 
-
-def load_article_id():
-    try:
-        if os.path.exists(ARTICLE_ID_FILE):
-            with open(ARTICLE_ID_FILE, "r") as f:
-                data = json.load(f)
-                return data.get("article_id", None)
-        else:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(ARTICLE_ID_FILE), exist_ok=True)
-            return None
-    except Exception as e:
-        log_message(f"Error loading article ID: {e}", "ERROR")
-        return None
-
-
-def save_article_id(article_id):
-    try:
-        os.makedirs(os.path.dirname(ARTICLE_ID_FILE), exist_ok=True)
-        with open(ARTICLE_ID_FILE, "w") as f:
-            json.dump({"article_id": article_id}, f)
-    except Exception as e:
-        log_message(f"Error saving article ID: {e}", "ERROR")
+# Set up Chrome options
+options = uc.ChromeOptions()
+options.add_argument("--maximize-window")
+options.add_argument("--disable-search-engine-choice-screen")
+options.add_argument("--blink-settings=imagesEnabled=false")
 
 
 class RateLimiter:
@@ -70,6 +64,82 @@ class RateLimiter:
 rate_limiter = RateLimiter()
 
 
+def timing_decorator(func):
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = await func(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        if elapsed_time > 1:
+            log_message(
+                f"{func.__name__} took {elapsed_time:.2f} seconds to execute", "ERROR"
+            )
+        return result
+
+    @wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        if elapsed_time > 1:
+            log_message(
+                f"{func.__name__} took {elapsed_time:.2f} seconds to execute", "ERROR"
+            )
+        return result
+
+    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+
+
+async def capture_login_response(message):
+    global SESSION_TOKEN
+    try:
+        # Check if the URL matches the login endpoint
+        response_url = message.get("params", {}).get("response", {}).get("url", "")
+
+        if "https://register.cnbc.com/auth/api/v3/signin" not in response_url:
+            return
+
+        request_id = message.get("params", {}).get("requestId")
+        if not request_id:
+            return
+
+        # Wait for response to be fully processed
+        await asyncio.sleep(2)
+
+        try:
+            # Get response body using CDP command
+            response_body = driver.execute_cdp_cmd(
+                "Network.getResponseBody", {"requestId": request_id}
+            )
+            response_data = response_body.get("body", "")
+
+            # Parse JSON response
+            try:
+                response_json = json.loads(response_data)
+            except json.JSONDecodeError:
+                log_message("Failed to parse response JSON", "WARNING")
+                response_json = {}
+
+            # Extract and update session token
+            session_token = response_json.get("session_token", SESSION_TOKEN)
+            log_message(f"Intercepted Session Token: {session_token}", "INFO")
+            SESSION_TOKEN = session_token
+
+        except Exception as e:
+            if "No resource with given identifier found" in str(e):
+                log_message(
+                    "Resource not found or cleared, unable to fetch the response body.",
+                    "WARNING",
+                )
+            else:
+                raise e
+
+    except Exception as e:
+        log_message(f"Error in capture_login_response: {e}", "ERROR")
+
+
 async def get_article_data(article_id, uid, session_token):
     await rate_limiter.acquire()
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
@@ -84,7 +154,7 @@ async def get_article_data(article_id, uid, session_token):
     extensions = {
         "persistedQuery": {
             "version": 1,
-            "sha256Hash": ARTICLE_DATA_SHA,
+            "sha256Hash": ARTICLE_DATE_SHA,
         }
     }
     params = {
@@ -98,25 +168,29 @@ async def get_article_data(article_id, uid, session_token):
             async with session.get(base_url, params=params) as response:
                 if response.status == 200:
                     response_json = await response.json()
-                    article_data = response_json.get("data", {}).get("article")
 
-                    if article_data is None:
-                        log_message(f"Article {article_id} is null", "INFO")
-                        return None, None
-
-                    article_type = article_data.get("type")
-                    if article_type != "cnbcnewsstory":
-                        log_message(
-                            f"Article {article_id} is type: {article_type}", "INFO"
-                        )
-                        return None, "wrong_type"
-
-                    log_message(
-                        f"Processing cnbcnewsstory article {article_id}", "INFO"
+                    # Check authentication
+                    is_authenticated = (
+                        response_json.get("data", {})
+                        .get("article", {})
+                        .get("body", {})
+                        .get("isAuthenticated", False)
                     )
 
-                    # Process article body for cnbcnewsstory type
-                    article_body = article_data.get("body", {}).get("content", [])
+                    if not is_authenticated:
+                        log_message(
+                            "Authentication required. Please provide a valid session token.",
+                            "WARNING",
+                        )
+                        return None
+
+                    # Process article body
+                    article_body = (
+                        response_json.get("data", {})
+                        .get("article", {})
+                        .get("body", {})
+                        .get("content", [])
+                    )
 
                     if article_body:
                         for content_block in article_body:
@@ -137,33 +211,118 @@ async def get_article_data(article_id, uid, session_token):
                                                     )
                                                 ]
                                             )
-                                            return text, "success"
-                    return None, "no_content"
+                                            return text
+                    return None
                 else:
                     log_message(
-                        f"Error fetching article {article_id}: {response.status}",
-                        "ERROR",
+                        f"Error fetching article data: {response.status}", "ERROR"
                     )
-                    return None, "error"
+                    return None
         except Exception as e:
-            log_message(
-                f"Exception in get_article_data for article {article_id}: {e}", "ERROR"
-            )
-            return None, "error"
+            log_message(f"Exception in get_article_data: {e}", "ERROR")
+            return None
 
 
-async def process_article(article_content, article_id):
+async def fetch_latest_articles(uid, session_token):
+    await rate_limiter.acquire()
+
+    base_url = "https://webql-redesign.cnbcfm.com/graphql"
+    variables = {"hasICAccess": True, "uid": uid, "sessionToken": session_token}
+    extensions = {
+        "persistedQuery": {
+            "version": 1,
+            "sha256Hash": LATEST_ARTICLE_SHA,
+        }
+    }
+    params = {
+        "operationName": "notifications",
+        "variables": json.dumps(variables),
+        "extensions": json.dumps(extensions),
+    }
+
+    # TODO: Make more then atleast 5 different way to fetch so that we can compare if any of em returns it properly fast
+    # no cache and some headers async and sync and lastly for both make sure to add 
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(base_url, params=params) as response:
+                if response.status != 200:
+                    log_message(f"Error fetching articles: {response.status}", "ERROR")
+                    return []
+
+                response_json = await response.json()
+                trade_alerts = []
+                alert_ids = set()
+
+                dtc_notifications = response_json.get("data", {}).get(
+                    "dtcNotifications", {}
+                )
+                if dtc_notifications:
+                    trade_alerts_raw = dtc_notifications.get("tradeAlerts", [])
+                    if trade_alerts_raw:
+                        for alert in trade_alerts_raw:
+                            if alert.get("id") not in alert_ids:
+                                trade_alerts.append(alert)
+                                alert_ids.add(alert.get("id"))
+
+                assets = []
+                news_items = dtc_notifications.get("news", [])
+                if news_items:
+                    for item in news_items:
+                        asset = item.get("asset")
+                        if asset and asset.get("section", {}).get("id") == 106983829:
+                            asset_id = asset.get("id")
+                            if asset_id not in alert_ids:
+                                assets.append(
+                                    {
+                                        "id": asset_id,
+                                        "title": asset.get("title"),
+                                        "type": asset.get("type"),
+                                        "tickerSymbols": asset.get("tickerSymbols"),
+                                        "dateLastPublished": asset.get(
+                                            "dateLastPublished"
+                                        ),
+                                        "url": asset.get("url"),
+                                        "contentClassification": asset.get(
+                                            "contentClassification"
+                                        ),
+                                        "section": asset.get("section", {}).get(
+                                            "title"
+                                        ),
+                                    }
+                                )
+                                alert_ids.add(asset_id)
+
+                combined_alerts = trade_alerts + assets
+                log_message(
+                    f"Parsed combined alerts length: {len(combined_alerts)}", "INFO"
+                )
+                return combined_alerts
+
+        except Exception as e:
+            log_message(f"Error in fetch_latest_articles: {e}", "ERROR")
+            return []
+
+
+async def process_article(article, uid, session_token):
     try:
-        if article_content:
-            published_date = datetime.now(pytz.utc)
-            current_time = datetime.now(pytz.utc)
-
+        article_data = await get_article_data(article.get("id"), uid, session_token)
+        if article_data:
+            article["article_data"] = article_data
+            published_date = datetime.strptime(
+                article["dateLastPublished"], "%Y-%m-%dT%H:%M:%S%z"
+            )
+            article_timezone = published_date.tzinfo
+            current_time = datetime.now(pytz.utc).astimezone(article_timezone)
+            log_message(
+                f"Time difference: {(current_time - published_date).total_seconds():.2f} seconds",
+                "ERROR",
+            )
             message = (
                 f"<b>New Article Alert!</b>\n"
-                f"<b>Article ID:</b> {article_id}\n"
                 f"<b>Published Date:</b> {published_date.strftime('%Y-%m-%d %H:%M:%S.%f %Z')}\n"
                 f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S.%f %Z')}\n"
-                f"<b>Content:</b> {article_content}\n"
+                f"<b>Title:</b> {article['title']}\n"
+                f"<b>Content:</b> {article['article_data']}\n"
             )
 
             await asyncio.gather(
@@ -172,7 +331,7 @@ async def process_article(article_content, article_id):
                     {
                         "name": "CNBC",
                         "type": "Buy",
-                        "ticker": str(article_id),
+                        "ticker": article["title"],
                         "sender": "cnbc",
                     },
                     WS_SERVER_URL,
@@ -180,84 +339,47 @@ async def process_article(article_content, article_id):
             )
             return True
     except Exception as e:
-        log_message(f"Error processing article {article_id}: {e}", "ERROR")
+        log_message(f"Error processing article {article.get('id')}: {e}", "ERROR")
     return False
 
 
-async def check_next_window(current_id, uid, session_token, window_size=5):
-    """
-    Check the next window_size IDs for valid articles.
-    Returns the next valid ID found, or None if none found.
-    """
-    for offset in range(0, window_size + 1):
-        next_id = current_id + offset
-        content, status = await get_article_data(next_id, uid, session_token)
+@timing_decorator
+async def check_for_new_alerts(prev_articles, uid, session_token):
+    try:
+        current_articles = await fetch_latest_articles(uid, session_token)
 
-        if status:
-            return content, status, next_id
-    return None, None, None
+        if not current_articles:
+            return prev_articles, []
+
+        new_articles = []
+        known_ids = {article.get("id") for article in prev_articles}
+
+        for article in current_articles:
+            article_id = article.get("id")
+            if article_id and article_id not in known_ids:
+                new_articles.append(article)
+
+        if new_articles:
+            processing_tasks = [
+                process_article(article, uid, session_token) for article in new_articles
+            ]
+            await asyncio.gather(*processing_tasks)
+
+        return current_articles, new_articles
+
+    except Exception as e:
+        log_message(f"Error in check_for_new_alerts: {e}", "ERROR")
+        return prev_articles, []
 
 
-async def run_article_monitor(uid, session_token):
-    current_article_id = load_article_id()
-    if not current_article_id:
-        log_message("Starting article id point couldn't be found", "CRITICAL")
-        sys.exit(1)
-
-    log_message(f"Starting with article ID: {current_article_id}", "INFO")
-
-    async def process_article_data(status, content, current_article_id):
-        if status == "error":
-            await asyncio.sleep(4)  # Extra sleep on error
-        elif status == "wrong_type":
-            current_article_id += 1
-            save_article_id(current_article_id)
-        elif status == "no_content":
-            current_article_id += 1
-            save_article_id(current_article_id)
-        elif status is None:
-            # Check next window of IDs
-            log_message(
-                f"Looping between ID's `{current_article_id}` - `{current_article_id + 5}`",
-                "INFO",
-            )
-            _, _, valid_id_found = await check_next_window(
-                current_article_id, uid, session_token
-            )
-
-            if valid_id_found:
-                log_message(
-                    f"Found valid article at ID: {valid_id_found}, rerunning to make sure nothing left out",
-                    "INFO",
-                )
-
-                # Rerunning the window to make sure nothing left behind
-                content, status, valid_id = await check_next_window(
-                    current_article_id, uid, session_token
-                )
-
-                if valid_id:
-                    log_message(
-                        f"Skipped to {valid_id}",
-                        "INFO",
-                    )
-                    current_article_id = await process_article_data(
-                        status, content, current_article_id
-                    )
-            return current_article_id
-        else:  # Success
-            await process_article(content, current_article_id)
-            current_article_id += 1
-            save_article_id(current_article_id)
-
-        await asyncio.sleep(1)
-        return current_article_id
+async def run_alert_monitor(uid, session_token):
+    prev_articles = []
 
     while True:
         try:
             # Wait until market open
             await sleep_until_market_open()
-            log_message("Market is open. Starting to check articles...")
+            log_message("Market is open. Starting to check for new blog posts...")
 
             # Get market close time
             _, _, market_close_time = get_next_market_times()
@@ -269,17 +391,85 @@ async def run_article_monitor(uid, session_token):
                     log_message("Market is closed. Waiting for next market open...")
                     break
 
-                content, status = await get_article_data(
-                    current_article_id, uid, session_token
-                )
+                start_time = time.time()
 
-                current_article_id = await process_article_data(
-                    status, content, current_article_id
-                )
+                try:
+                    prev_articles, new_articles = await check_for_new_alerts(
+                        prev_articles, uid, session_token
+                    )
+
+                    if new_articles:
+                        log_message(f"Found {len(new_articles)} new articles", "INFO")
+
+                    execution_time = time.time() - start_time
+                    log_message(
+                        f"Total iteration time: {execution_time:.2f} seconds", "INFO"
+                    )
+
+                    # Adaptive sleep based on execution time
+                    await asyncio.sleep(max(2, 2 - execution_time))
+
+                except Exception as e:
+                    log_message(f"Error checking alerts: {e}", "ERROR")
+                    await asyncio.sleep(5)
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
             await asyncio.sleep(5)
+
+
+def get_new_session_token():
+    global SESSION_TOKEN
+    global driver
+
+    try:
+        driver = uc.Chrome(enable_cdp_events=True, options=options)
+        driver.add_cdp_listener("Network.requestWillBeSent", lambda x: None)
+        driver.add_cdp_listener("Network.responseReceived", capture_login_response)
+
+        driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
+        time.sleep(random.uniform(2, 5))
+
+        scroll_pause_time = random.uniform(1, 3)
+        for _ in range(3):
+            driver.execute_script(f"window.scrollBy(0, {random.uniform(300, 500)});")
+            time.sleep(scroll_pause_time)
+
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(scroll_pause_time)
+
+        action = ActionChains(driver)
+        sign_in_button = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "SignInMenu-signInMenu"))
+        )
+        action.move_to_element(sign_in_button).perform()
+        time.sleep(random.uniform(1, 2))
+        sign_in_button.click()
+
+        email_input = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.NAME, "email"))
+        )
+
+        if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
+            log_message(f"GMAIL_USERNAME isn't availble in the env", "CRITICAL")
+            sys.exit(1)
+
+        email_input.send_keys(GMAIL_USERNAME)
+        time.sleep(2)
+        password_input = driver.find_element(By.NAME, "password")
+        password_input.send_keys(GMAIL_PASSWORD)
+        time.sleep(5)
+
+        password_input.send_keys(Keys.ENTER)
+        time.sleep(10)
+
+        driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
+
+    except Exception as e:
+        log_message(f"Failed to get a new session token: {e}", "ERROR")
+        log_message(f"Using existing session token: {SESSION_TOKEN}", "INFO")
+    finally:
+        driver.quit()
 
 
 def main():
@@ -292,14 +482,22 @@ def main():
             WS_SERVER_URL,
             SESSION_TOKEN,
             GMAIL_USERNAME,
-            ARTICLE_DATA_SHA,
+            GMAIL_PASSWORD,
+            LATEST_ARTICLE_SHA,
+            ARTICLE_DATE_SHA,
         ]
     ):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
     try:
-        asyncio.run(run_article_monitor(uid, SESSION_TOKEN))
+        # Get initial session token if needed
+        if not SESSION_TOKEN:
+            get_new_session_token()
+
+        # Start the async event loop
+        asyncio.run(run_alert_monitor(uid, SESSION_TOKEN))
+
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
     except Exception as e:
