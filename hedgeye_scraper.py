@@ -429,7 +429,7 @@ async def process_task(
             "ERROR",
         )
 
-        if duration > 2:
+        if duration > 1.5:
             public_ip = await get_public_ip(f"http://{task.proxy}")
             log_message(
                 f"Long request duration. Public IP: {public_ip}",
@@ -468,7 +468,11 @@ async def process_task(
             )
 
             message += f"\nTicker: {ticker}"
-            log_message(f"New alert sent: {message}", "INFO")
+            fetch_sent_duration = time.time() - start_time
+            log_message(
+                f"New alert sent: {message}\nAccount: {task.email}, Proxy: {task.proxy}\nTime to fetch & send: {fetch_sent_duration:.2f}",
+                "INFO",
+            )
             last_alert_details.update(alert_details)
 
     except Exception as e:
