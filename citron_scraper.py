@@ -70,7 +70,6 @@ async def send_to_telegram(url):
     message += f"<b>URL:</b> {url}\n"
     # message += f"<b>Identifier:</b> {ticker}\n"
 
-    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     # await send_ws_message(
     #     {
     #         "name": "Citron Research",
@@ -81,6 +80,7 @@ async def send_to_telegram(url):
     #     WS_SERVER_URL,
     # )
     # log_message(f"Report sent to Telegram and WebSocket: {ticker} - {url}", "INFO")
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Report sent to Telegram - {url}", "INFO")
 
 

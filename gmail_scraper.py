@@ -13,6 +13,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -145,7 +146,6 @@ async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
     message += f"<b>Sender:</b> {sender}\n"
     message += f"<b>Stock Symbol:</b> {stock_symbol}\n"
 
-    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     await send_ws_message(
         {
             "name": f"{sender_type.capitalize()} G",
@@ -155,6 +155,7 @@ async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
         },
         WS_SERVER_URL,
     )
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     log_message(f"Stock alert sent: {stock_symbol} from {sender}", "INFO")
 
 

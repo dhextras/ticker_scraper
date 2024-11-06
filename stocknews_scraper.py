@@ -111,7 +111,6 @@ async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
     message += f"<b>Post Title:</b> {post_title}\n"
     message += f"<b>Post Date:</b> {post_date}\n"
 
-    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     await send_ws_message(
         {
             "name": "Stock News",
@@ -121,6 +120,7 @@ async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
         },
         WS_SERVER_URL,
     )
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Match sent to Telegram and WebSocket: {stock_symbol} - {url}", "INFO")
 
 

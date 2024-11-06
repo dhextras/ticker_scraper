@@ -241,7 +241,7 @@ async def fetch_latest_articles(uid, session_token):
     }
 
     # TODO: Make more then atleast 5 different way to fetch so that we can compare if any of em returns it properly fast
-    # no cache and some headers async and sync and lastly for both make sure to add 
+    # no cache and some headers async and sync and lastly for both make sure to add
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(base_url, params=params) as response:

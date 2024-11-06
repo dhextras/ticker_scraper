@@ -441,11 +441,6 @@ async def process_task(
 
         if alert_details["title"] != last_alert_details.get("title"):
             message = f"Title: {alert_details['title']}\nPrice: {alert_details['price']}\nCreated At: {alert_details['created_at']}\nCurrent Time: {alert_details['current_time']}"
-            await send_telegram_message(
-                message,
-                HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
-                HEDGEYE_SCRAPER_TELEGRAM_GRP,
-            )
 
             signal_type = (
                 "Buy"
@@ -465,6 +460,12 @@ async def process_task(
                     "sender": "hedgeye",
                 },
                 WS_SERVER_URL,
+            )
+
+            await send_telegram_message(
+                message,
+                HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                HEDGEYE_SCRAPER_TELEGRAM_GRP,
             )
 
             message += f"\nTicker: {ticker}"
