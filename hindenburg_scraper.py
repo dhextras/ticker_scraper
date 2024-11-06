@@ -19,7 +19,7 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-JSON_URL = "https://hindenburgresearch.com/wp-json/wp/v2/media"
+JSON_URL = "https://hindenburgresearch.com/wp-json/wp/v2/media?page=1"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/hindenburg_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("HINDENBURG_TELEGRAM_BOT_TOKEN")
