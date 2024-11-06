@@ -2,6 +2,8 @@ import json
 
 import websockets
 
+from utils.logger import log_message
+
 
 async def send_ws_message(message, ws_server_url):
     """
@@ -13,5 +15,9 @@ async def send_ws_message(message, ws_server_url):
     if not ws_server_url:
         raise ValueError("WebSocket server URL must be provided.")
 
-    async with websockets.connect(ws_server_url) as websocket:
-        await websocket.send(json.dumps(message))
+    try:
+        async with websockets.connect(ws_server_url) as websocket:
+            await websocket.send(json.dumps(message))
+    except Exception as e:
+        log_message(f"Error sending message to websocket: {e}", "ERROR")
+        return None

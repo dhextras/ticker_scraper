@@ -27,5 +27,5 @@ async def send_telegram_message(message, bot_token, chat_id):
                     error_message = await response.text()
                     raise Exception(f"Failed to send message: {error_message}")
     except Exception as e:
-        log_message(f"Error sending message: {e}", "ERROR")
+        log_message(f"Error sending message to telegram: {e}", "ERROR")
         return None
