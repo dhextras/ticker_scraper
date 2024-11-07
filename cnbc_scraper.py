@@ -276,7 +276,6 @@ async def process_response(response_json: Dict, method_name: str) -> Tuple[List,
 async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
     """Fetch articles using multiple methods and compare results."""
     await rate_limiter.acquire()
-    print()  # To make the logging easier
     log_message("Starting article fetch with multiple methods", "INFO")
 
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
@@ -294,42 +293,17 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
     }
 
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept": "application/json",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "max-age=0",
     }
 
     # Create encoded URL
     encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
     all_alerts = []
 
-    # Method 1: aiohttp with params
-    log_message("Trying aiohttp with params", "INFO")
-    async with aiohttp.ClientSession() as session:
-        try:
-            start_time = time.time()
-            async with session.get(base_url, params=params) as response:
-                if response.status == 200:
-                    response_json = await response.json()
-                    alerts, count = await process_response(
-                        response_json, "aiohttp_params"
-                    )
-                    elapsed = time.time() - start_time
-                    log_message(
-                        f"aiohttp_params completed in {elapsed:.2f}s with {count} alerts",
-                        "ERROR",
-                    )
-                    all_alerts.extend(alerts)
-                else:
-                    log_message(
-                        f"aiohttp_params failed with status {response.status}", "ERROR"
-                    )
-        except Exception as e:
-            log_message(f"Error in aiohttp_params: {str(e)}", "ERROR")
-
-    await asyncio.sleep(1)
     # Method 2: aiohttp with headers
-    log_message("Trying aiohttp with headers", "INFO")
+    log_message("Trying aiohttp params with headers", "INFO")
     async with aiohttp.ClientSession() as session:
         try:
             start_time = time.time()
@@ -360,7 +334,7 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
     async with aiohttp.ClientSession() as session:
         try:
             start_time = time.time()
-            async with session.get(encoded_url) as response:
+            async with session.get(encoded_url, headers=headers) as response:
                 if response.status == 200:
                     response_json = await response.json()
                     alerts, count = await process_response(
@@ -380,30 +354,8 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
             log_message(f"Error in aiohttp_direct: {str(e)}", "ERROR")
 
     await asyncio.sleep(1)
-    # Method 4: requests with params
-    log_message("Trying requests with params", "INFO")
-    try:
-        start_time = time.time()
-        response = requests.get(base_url, params=params)
-        if response.status_code == 200:
-            response_json = response.json()
-            alerts, count = await process_response(response_json, "requests_params")
-            elapsed = time.time() - start_time
-            log_message(
-                f"requests_params completed in {elapsed:.2f}s with {count} alerts",
-                "ERROR",
-            )
-            all_alerts.extend(alerts)
-        else:
-            log_message(
-                f"requests_params failed with status {response.status_code}", "ERROR"
-            )
-    except Exception as e:
-        log_message(f"Error in requests_params: {str(e)}", "ERROR")
-
-    await asyncio.sleep(1)
     # Method 5: requests with headers
-    log_message("Trying requests with headers", "INFO")
+    log_message("Trying requests params with headers", "INFO")
     try:
         start_time = time.time()
         response = requests.get(base_url, params=params, headers=headers)
@@ -428,7 +380,7 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
     log_message("Trying requests with direct URL", "INFO")
     try:
         start_time = time.time()
-        response = requests.get(encoded_url)
+        response = requests.get(encoded_url, headers=headers)
         if response.status_code == 200:
             response_json = response.json()
             alerts, count = await process_response(response_json, "requests_direct")
@@ -457,7 +409,6 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
         f"Fetch complete. Found {len(unique_alerts)} unique alerts from all methods",
         "INFO",
     )
-    print()  # To make the logging easier
     return unique_alerts
 
 
@@ -561,7 +512,7 @@ async def run_alert_monitor(uid, session_token):
 
                     execution_time = time.time() - start_time
                     log_message(
-                        f"Total iteration time: {execution_time:.2f} seconds", "INFO"
+                        f"Total iteration time: {execution_time:.2f} seconds\n", "INFO"
                     )
 
                     # Adaptive sleep based on execution time
