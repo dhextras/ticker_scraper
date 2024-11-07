@@ -181,6 +181,7 @@ async def run_scraper():
                 buy_recs = await process_articles(articles)
                 await send_matches_to_telegram(buy_recs)
 
+                processed_urls.update(new_urls)
                 save_processed_urls(new_urls)
             else:
                 log_message("No new articles found.", "INFO")
