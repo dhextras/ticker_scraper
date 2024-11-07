@@ -63,7 +63,14 @@ async def fetch_latest_alerts() -> List[Dict]:
     """Fetch latest alerts from CNBC Investing Club"""
     try:
         url = "https://www.cnbc.com/investingclub/trade-alerts/"
-        response = requests.get(url)
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Cache-Control": "max-age=0",
+        }
+
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
 
         # Find the data in the page content
