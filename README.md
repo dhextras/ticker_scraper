@@ -96,6 +96,22 @@ pip install -r requirements.txt
    # Bearcave ticker scraper settings
    BEARCAVE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hindenburg
    BEARCAVE_TELEGRAM_GRP=  # Telegram group ID for Hindenburg
+
+   # Grizzly Media scraper settings
+   GRIZZLY_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Grizzly
+   GRIZZLY_TELEGRAM_GRP=  # Telegram group ID for Grizzly
+   
+   # Muddy Waters Media scraper settings
+   MUDDY_WATERS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Muddy Waters
+   MUDDY_WATERS_TELEGRAM_GRP=  # Telegram group ID for Muddy Waters
+   
+   # Altucher ticker scraper settings
+   ALTUCHER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Altucher
+   ALTUCHER_TELEGRAM_GRP=  # Telegram group ID for Altucher
+   ALTUCHER_USERNAME= # Username for Altucher
+   ALTUCHER_PASSWORD= # Username for Altucher
+   ALTUCHER_COOKIE_TID= # Cokies TID grabbed from requests for Altucher
+   ALTUCHER_COOKIE_ID= # Cokies ID grabbed from requests for Altucher
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -202,41 +218,62 @@ You can run each of the scripts based on your needs:
   python bearcave_scraper.py
   ```
 
+- To run the **Altucher Ticker scraper**, use:
+
+  ```bash
+  python altucher_scraper.py
+  ```
+
+- To run the **Muddy Waters Media scraper**, use:
+
+  ```bash
+  python mudddy_waters_scraper.py
+  ```
+
+- To run the **Grizzly Media  scraper**, use:
+
+  ```bash
+  python grizzly_scraper.py
+  ```
+
+
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
 ## File Structure Overview
 
 ```plaintext
 your_project/
-├── cred/                    # Folder for credential files
+├── cred/                       # Folder for credential files
 │   ├── gmail_credentials.json
 │   ├── gmail_token.json
-│   ├── fool_session.json    # will be created upon first login
+│   ├── fool_session.json       # will be created upon first login
 │   ├── hedgeye_credentials.json
-├── data/                    # Folder to save scraper data to access later
-├── log/                     # Folder for log files
-├── utils/                   # Utility functions
+├── data/                       # Folder to save scraper data to access later
+├── log/                        # Folder for log files
+├── utils/                      # Utility functions
 │   ├── __init__.py
-│   ├── logger.py            # Logger utility
-│   ├── telegram_sender.py   # Telegram sending utility
-│   ├── time_utils.py        # Time utility functions
-│   ├── websocket_sender.py  # WebSocket sending utility
-├── .env                     # Environment variables
-├── .env.example             # Environment variables
-├── .gitignore               # Git ignore file
-├── README.md                # Project documentation
-
-├── bearcave_scraper.py      # Bearcave ticker scraper
-├── citron_scraper.py        # Citron media scraper
-├── cnbc_scraper.py          # CNBC ticker scraper
-├── gmail_scraper.py         # Gmail ticker scraper
-├── hindenburg_scraper.py    # Hindenburg pdf ticker scraper
-├── kerrisdale_scraper.py    # Kerrisdale pdf ticker scraper
-├── oxfordclub_scraper.py    # OxfordClub ticker scraper
-├── requirements.txt         # Project dependencies
-├── stocknews_scraper.py     # StockNews ticker scraper
-├── hedgeye_scraper.py       # Hedgeye article scraper
-└── motley_fool_scraper.py   # Motley ticker scraper
+│   ├── logger.py               # Logger utility
+│   ├── telegram_sender.py      # Telegram sending utility
+│   ├── time_utils.py           # Time utility functions
+│   ├── websocket_sender.py     # WebSocket sending utility
+├── .env                        # Environment variables
+├── .env.example                # Environment variables
+├── .gitignore                  # Git ignore file
+├── README.md                   # Project documentation
+├── altucher_scraper.py         # Altucher ticker scraper
+├── bearcave_scraper.py         # Bearcave ticker scraper
+├── citron_scraper.py           # Citron media scraper
+├── cnbc_scraper.py             # CNBC ticker scraper
+├── gmail_scraper.py            # Gmail ticker scraper
+├── grizzly_scraper.py          # Grizzly Media scraper
+├── hedgeye_scraper.py          # Hedgeye article scraper
+├── hindenburg_scraper.py       # Hindenburg pdf ticker scraper
+├── kerrisdale_scraper.py       # Kerrisdale pdf ticker scraper
+├── motley_fool_scraper.py      # Motley ticker scraper
+├── mudddy_waters_scraper.py    # Muddy Waters Media scraper
+├── oxfordclub_scraper.py       # OxfordClub ticker scraper
+├── requirements.txt            # Project dependencies
+└── stocknews_scraper.py        # StockNews ticker scraper
 ```
 
 ### Important Notes
