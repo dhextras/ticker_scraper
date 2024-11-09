@@ -6,6 +6,7 @@ import random
 import re
 import sys
 import time
+from asyncio import Queue as AsyncQueue
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
@@ -121,6 +122,40 @@ class TaskQueue:
 
     def get_queue_size(self) -> int:
         return self.queue.qsize()
+
+
+class TelegramQueue:
+    def __init__(self):
+        self.queue = AsyncQueue()
+        self._task = None
+
+    async def start(self):
+        self._task = asyncio.create_task(self._process_queue())
+
+    async def stop(self):
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+    async def _process_queue(self):
+        while True:
+            message = await self.queue.get()
+            try:
+                await send_telegram_message(
+                    message["text"],
+                    HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                    HEDGEYE_SCRAPER_TELEGRAM_GRP,
+                )
+            except Exception as e:
+                log_message(f"Error sending Telegram message: {str(e)}", "ERROR")
+            finally:
+                self.queue.task_done()
+
+    async def send_message(self, message):
+        await self.queue.put(message)
 
 
 class ProxyManager:
@@ -326,30 +361,19 @@ def load_credentials() -> Tuple[List[Tuple[str, str]], List[str]]:
         return accounts, proxies
 
 
-async def get_public_ip(proxy):
-    ip_check_url = "https://api.ipify.org?format=text"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(ip_check_url, proxy=proxy) as response:
-                if response.status == 200:
-                    ip = await response.text()
-                    return ip.strip()
-                return f"Code: {response.status}"
-    except Exception as e:
-        return f"Error: {e}"
-
-
 async def fetch_alert_details(session, proxy_raw):
     try:
         ip, port = proxy_raw.split(":")
         proxy = f"http://{ip}:{port}"
 
+        start_time = time.time()
         async with aiohttp.ClientSession() as aio_session:
             async with aio_session.get(
                 "https://app.hedgeye.com/feed_items/all",
                 headers=session.headers,
                 cookies=session.cookies,
                 proxy=proxy,
+                timeout=aiohttp.ClientTimeout(total=2),
             ) as response:
                 if response.status == 429:
                     raise Exception("Rate limited")
@@ -366,20 +390,26 @@ async def fetch_alert_details(session, proxy_raw):
             return None
         alert_price = alert_price.get_text(strip=True)
 
+        # Get current time first for more accurate timing
+        current_time_edt = datetime.now(pytz.utc).astimezone(
+            pytz.timezone("America/New_York")
+        )
+
         created_at_utc = soup.select_one("time[datetime]")["datetime"]
         created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        edt = pytz.timezone("America/New_York")
-        created_at_edt = created_at.astimezone(edt)
-        current_time_edt = datetime.now(pytz.utc).astimezone(edt)
+        created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
 
-        alert_details = {
+        fetch_time = time.time() - start_time
+        if fetch_time > 1.5:
+            log_message(f"Slow fetch detected: {fetch_time:.2f} seconds", "WARNING")
+
+        return {
             "title": alert_title,
             "price": alert_price,
-            "created_at": created_at_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
-            "current_time": current_time_edt.strftime("%Y-%m-%d %H:%M:%S %Z%z"),
+            "created_at": created_at_edt,
+            "current_time": current_time_edt,
+            "fetch_time": fetch_time,
         }
-
-        return alert_details
 
     except Exception as e:
         if "Rate limited" in str(e):
@@ -410,71 +440,78 @@ async def process_task(
     task_queue: TaskQueue,
     account_manager: AccountManager,
     proxy_manager: ProxyManager,
-    last_alert_details: dict,
-) -> None:
+    telegram_queue: TelegramQueue,
+    last_alert_lock: asyncio.Lock,
+):
     try:
         start_time = time.time()
         alert_details = await fetch_alert_details(task.session, task.proxy)
 
-        last_alert_details = load_last_alert()
-
-        # Save last alert details
-        if alert_details:
-            with open(LAST_ALERT_FILE, "w") as f:
-                json.dump(alert_details, f)
-
-        duration = time.time() - start_time
-        log_message(
-            f"fetch_alert_details took {duration:.2f} seconds. for {task.email}, {task.proxy}",
-            "ERROR",
-        )
-
-        if duration > 1.5:
-            public_ip = await get_public_ip(f"http://{task.proxy}")
-            log_message(
-                f"Long request duration. Public IP: {public_ip}",
-                "ERROR",
-            )
-
         if alert_details is None:
             return
 
-        if alert_details["title"] != last_alert_details.get("title"):
-            message = f"Title: {alert_details['title']}\nPrice: {alert_details['price']}\nCreated At: {alert_details['created_at']}\nCurrent Time: {alert_details['current_time']}"
-
-            signal_type = (
-                "Buy"
-                if "buy" in alert_details["title"].lower()
-                else "Sell" if "sell" in alert_details["title"].lower() else "None"
-            )
-            ticker_match = re.search(
-                r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
-            )
-            ticker = ticker_match.group(0) if ticker_match else "-"
-
-            await send_ws_message(
-                {
-                    "name": "Hedgeye",
-                    "type": signal_type,
-                    "ticker": ticker,
-                    "sender": "hedgeye",
-                },
-                WS_SERVER_URL,
+        # Use lock for thread-safe comparison
+        async with last_alert_lock:
+            last_alert = load_last_alert()
+            is_new_alert = (
+                not last_alert
+                or alert_details["title"] != last_alert.get("title")
+                or (
+                    alert_details["created_at"]
+                    - last_alert.get("created_at", alert_details["created_at"])
+                ).total_seconds()
+                > 0
             )
 
-            await send_telegram_message(
-                message,
-                HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
-                HEDGEYE_SCRAPER_TELEGRAM_GRP,
-            )
+            if is_new_alert:
+                # Save new alert immediately
+                with open(LAST_ALERT_FILE, "w") as f:
+                    json.dump(
+                        {
+                            "title": alert_details["title"],
+                            "price": alert_details["price"],
+                            "created_at": alert_details["created_at"].isoformat(),
+                        },
+                        f,
+                    )
 
-            message += f"\nTicker: {ticker}"
-            fetch_sent_duration = time.time() - start_time
-            log_message(
-                f"New alert sent: {message}\nAccount: {task.email}, Proxy: {task.proxy}\nTime to fetch & send: {fetch_sent_duration:.2f}",
-                "INFO",
-            )
-            last_alert_details.update(alert_details)
+                # Process new alert
+                signal_type = (
+                    "Buy"
+                    if "buy" in alert_details["title"].lower()
+                    else "Sell" if "sell" in alert_details["title"].lower() else "None"
+                )
+                ticker_match = re.search(
+                    r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+                )
+                ticker = ticker_match.group(0) if ticker_match else "-"
+
+                # Send WebSocket message immediately
+                await send_ws_message(
+                    {
+                        "name": "Hedgeye",
+                        "type": signal_type,
+                        "ticker": ticker,
+                        "sender": "hedgeye",
+                    },
+                    WS_SERVER_URL,
+                )
+
+                # Queue Telegram message separately
+                message = (
+                    f"Title: {alert_details['title']}\n"
+                    f"Price: {alert_details['price']}\n"
+                    f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Fetch Time: {alert_details['fetch_time']:.2f}s"
+                )
+                await telegram_queue.send_message({"text": message})
+
+                total_time = time.time() - start_time
+                log_message(
+                    f"New alert processed in {total_time:.2f}s - {alert_details['title']} - Account: {task.email}",
+                    "INFO",
+                )
 
     except Exception as e:
         if "Rate limited" in str(e):
@@ -491,7 +528,8 @@ async def task_scheduler(
     task_queue: TaskQueue,
     account_manager: AccountManager,
     proxy_manager: ProxyManager,
-    last_alert_details: dict,
+    telegram_queue: TelegramQueue,
+    last_alert_lock: asyncio.Lock,
 ):
     while True:
         try:
@@ -504,7 +542,8 @@ async def task_scheduler(
                             task_queue,
                             account_manager,
                             proxy_manager,
-                            last_alert_details,
+                            telegram_queue,
+                            last_alert_lock,
                         )
                     )
             await asyncio.sleep(0.2)
@@ -518,15 +557,21 @@ async def monitor_feeds_async():
     account_manager = AccountManager(accounts)
     proxy_manager = ProxyManager(proxies)
     task_queue = TaskQueue(max_concurrent=3)
-    last_alert_details = load_last_alert()
+    telegram_queue = TelegramQueue()
+    last_alert_lock = asyncio.Lock()
     market_is_open = False
     logged_in = False
     first_time_ever = True
     sessions = []
 
+    # Start the Telegram queue processor
+    await telegram_queue.start()
+
     # Start the task scheduler
     scheduler_task = asyncio.create_task(
-        task_scheduler(task_queue, account_manager, proxy_manager, last_alert_details)
+        task_scheduler(
+            task_queue, account_manager, proxy_manager, telegram_queue, last_alert_lock
+        )
     )
 
     try:
@@ -540,47 +585,35 @@ async def monitor_feeds_async():
                 pre_market_login_time <= current_time_edt < market_open_time
                 or first_time_ever
             ):
-
                 first_time_ever = False
                 if not logged_in:
                     log_message("Logging in or loading sessions...", "INFO")
 
-                    for i, (email, password) in enumerate(accounts):
-                        session_filename = f"data/hedgeye_session_{i}.pkl"
+                    # Process accounts in parallel
+                    async def process_account(email, password, index):
+                        session_filename = f"data/hedgeye_session_{index}.pkl"
 
-                        if os.path.exists(session_filename):
-                            try:
-                                cookies = load_session(session_filename)
-                                driver = Chrome(options=options)
-                                driver.set_page_load_timeout(1200)
-                                session = Session(driver=driver)
-                                session.cookies.update(cookies)
-                                sessions.append(SessionInfo(session, email))
-                                log_message(
-                                    f"Loaded session for account {i}: {email}", "INFO"
-                                )
-                            except Exception as e:
-                                log_message(
-                                    f"Failed to load session for {email}: {str(e)}",
-                                    "ERROR",
-                                )
-                                driver = Chrome(options=options)
-                                driver.set_page_load_timeout(1200)
-                                if login(driver, email, password):
+                        try:
+                            if os.path.exists(session_filename):
+                                try:
+                                    cookies = load_session(session_filename)
+                                    driver = Chrome(options=options)
+                                    driver.set_page_load_timeout(1200)
                                     session = Session(driver=driver)
-                                    session.transfer_driver_cookies_to_session()
+                                    session.cookies.update(cookies)
                                     sessions.append(SessionInfo(session, email))
-                                    save_session(session, session_filename)
                                     log_message(
-                                        f"Logged in and saved session for account {i}: {email}",
+                                        f"Loaded session for account {index}: {email}",
                                         "INFO",
                                     )
-                                else:
+                                    return True
+                                except Exception as e:
                                     log_message(
-                                        f"Failed to login for account {i}: {email}",
+                                        f"Failed to load session for {email}: {str(e)}",
                                         "ERROR",
                                     )
-                        else:
+
+                            # If loading failed or file doesn't exist, try fresh login
                             driver = Chrome(options=options)
                             driver.set_page_load_timeout(1200)
                             if login(driver, email, password):
@@ -589,16 +622,29 @@ async def monitor_feeds_async():
                                 sessions.append(SessionInfo(session, email))
                                 save_session(session, session_filename)
                                 log_message(
-                                    f"Logged in and saved session for account {i}: {email}",
+                                    f"Logged in and saved session for account {index}: {email}",
                                     "INFO",
                                 )
+                                return True
                             else:
                                 log_message(
-                                    f"Failed to login for account {i}: {email}", "ERROR"
+                                    f"Failed to login for account {index}: {email}",
+                                    "ERROR",
                                 )
+                                return False
+                        finally:
+                            if "driver" in locals():
+                                driver.quit()
 
-                        driver.quit()
+                    # Process accounts concurrently with rate limiting
+                    tasks = []
+                    for i, (email, password) in enumerate(accounts):
+                        if i > 0:
+                            await asyncio.sleep(2)  # Rate limit account processing
+                        task = asyncio.create_task(process_account(email, password, i))
+                        tasks.append(task)
 
+                    await asyncio.gather(*tasks)
                     log_message(
                         "All accounts processed. Starting monitoring...", "INFO"
                     )
@@ -629,9 +675,7 @@ async def monitor_feeds_async():
                 except Exception as e:
                     log_message(f"Error during monitoring cycle: {str(e)}", "ERROR")
                 finally:
-                    await asyncio.sleep(
-                        1
-                    )  # 1 Sec sleep before adding next set of tasks
+                    await asyncio.sleep(0.7)
 
             else:
                 logged_in = False
@@ -641,8 +685,9 @@ async def monitor_feeds_async():
     except Exception as e:
         log_message(f"Critical error in monitor_feeds_async: {e}", "CRITICAL")
     finally:
-        # Cancel the scheduler task when the monitor loop ends
+        # Cleanup
         scheduler_task.cancel()
+        await telegram_queue.stop()
         try:
             await scheduler_task
         except asyncio.CancelledError:
