@@ -390,7 +390,6 @@ async def fetch_alert_details(session, proxy_raw):
             return None
         alert_price = alert_price.get_text(strip=True)
 
-        # Get current time first for more accurate timing
         current_time_edt = datetime.now(pytz.utc).astimezone(
             pytz.timezone("America/New_York")
         )
@@ -400,8 +399,6 @@ async def fetch_alert_details(session, proxy_raw):
         created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
 
         fetch_time = time.time() - start_time
-        if fetch_time > 1.5:
-            log_message(f"Slow fetch detected: {fetch_time:.2f} seconds", "WARNING")
 
         return {
             "title": alert_title,
@@ -423,6 +420,19 @@ def load_last_alert():
         with open(LAST_ALERT_FILE, "r") as f:
             return json.load(f)
     return {}
+
+
+async def get_public_ip(proxy):
+    ip_check_url = "https://api.ipify.org?format=text"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(ip_check_url, proxy=proxy) as response:
+                if response.status == 200:
+                    ip = await response.text()
+                    return ip.strip()
+                return f"Code: {response.status}"
+    except Exception as e:
+        return f"Error: {e}"
 
 
 def save_session(session, filename):
@@ -447,24 +457,22 @@ async def process_task(
         start_time = time.time()
         alert_details = await fetch_alert_details(task.session, task.proxy)
 
+        log_message(
+            f"fetch_alert_details took {alert_details["fetch_time"]:.2f} seconds. for {task.email}, {task.proxy}",
+            "INFO",
+        )
+
         if alert_details is None:
             return
 
         # Use lock for thread-safe comparison
         async with last_alert_lock:
             last_alert = load_last_alert()
-            is_new_alert = (
-                not last_alert
-                or alert_details["title"] != last_alert.get("title")
-                or (
-                    alert_details["created_at"]
-                    - last_alert.get("created_at", alert_details["created_at"])
-                ).total_seconds()
-                > 0
+            is_new_alert = not last_alert or alert_details["title"] != last_alert.get(
+                "title"
             )
 
             if is_new_alert:
-                # Save new alert immediately
                 with open(LAST_ALERT_FILE, "w") as f:
                     json.dump(
                         {
@@ -475,7 +483,6 @@ async def process_task(
                         f,
                     )
 
-                # Process new alert
                 signal_type = (
                     "Buy"
                     if "buy" in alert_details["title"].lower()
@@ -486,6 +493,10 @@ async def process_task(
                 )
                 ticker = ticker_match.group(0) if ticker_match else "-"
 
+                log_message(
+                    f"Trying to send new alert, Title - {alert_details['title']}",
+                    "INFO",
+                )
                 # Send WebSocket message immediately
                 await send_ws_message(
                     {
@@ -509,9 +520,15 @@ async def process_task(
 
                 total_time = time.time() - start_time
                 log_message(
-                    f"New alert processed in {total_time:.2f}s - {alert_details['title']} - Account: {task.email}",
+                    f"New alert processed in {total_time:.2f}s - {alert_details['title']}",
                     "INFO",
                 )
+
+                if alert_details["fetch_time"] > 1.5:
+                    public_ip = await get_public_ip(f"http://{task.proxy}")
+                    log_message(
+                        f"Slow fetch detected Publid IP: {public_ip} seconds", "WARNING"
+                    )
 
     except Exception as e:
         if "Rate limited" in str(e):
@@ -564,10 +581,8 @@ async def monitor_feeds_async():
     first_time_ever = True
     sessions = []
 
-    # Start the Telegram queue processor
+    # Start the Telegram queue processor and the task scheduler
     await telegram_queue.start()
-
-    # Start the task scheduler
     scheduler_task = asyncio.create_task(
         task_scheduler(
             task_queue, account_manager, proxy_manager, telegram_queue, last_alert_lock
@@ -589,7 +604,6 @@ async def monitor_feeds_async():
                 if not logged_in:
                     log_message("Logging in or loading sessions...", "INFO")
 
-                    # Process accounts in parallel
                     async def process_account(email, password, index):
                         session_filename = f"data/hedgeye_session_{index}.pkl"
 
@@ -640,7 +654,7 @@ async def monitor_feeds_async():
                     tasks = []
                     for i, (email, password) in enumerate(accounts):
                         if i > 0:
-                            await asyncio.sleep(2)  # Rate limit account processing
+                            await asyncio.sleep(1)
                         task = asyncio.create_task(process_account(email, password, i))
                         tasks.append(task)
 
