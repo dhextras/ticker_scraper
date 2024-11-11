@@ -458,7 +458,7 @@ async def process_task(
         alert_details = await fetch_alert_details(task.session, task.proxy)
 
         log_message(
-            f"fetch_alert_details took {alert_details["fetch_time"]:.2f} seconds. for {task.email}, {task.proxy}",
+            f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
             "INFO",
         )
 
