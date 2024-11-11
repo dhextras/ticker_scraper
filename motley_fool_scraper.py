@@ -156,6 +156,7 @@ async def fetch_latest_articles(session_data):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {session_data['accessToken']}",
         "Apikey": FOOL_API_KEY,
+        "Cache-Control": "max-age=0",
     }
 
     variables = {
