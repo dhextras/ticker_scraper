@@ -494,7 +494,7 @@ async def process_task(
                 ticker = ticker_match.group(0) if ticker_match else "-"
 
                 log_message(
-                    f"Trying to send new alert, Title - {alert_details['title']}",
+                    f"Trying to send new alert, Title - {alert_details['title']}, Proxy - {task.proxy}",
                     "INFO",
                 )
                 # Send WebSocket message immediately
@@ -524,11 +524,11 @@ async def process_task(
                     "INFO",
                 )
 
-                if alert_details["fetch_time"] > 1.5:
-                    public_ip = await get_public_ip(f"http://{task.proxy}")
-                    log_message(
-                        f"Slow fetch detected Publid IP: {public_ip} seconds", "WARNING"
-                    )
+            if alert_details["fetch_time"] > 1.5:
+                public_ip = await get_public_ip(f"http://{task.proxy}")
+                log_message(
+                    f"Slow fetch detected Publid IP: {public_ip} seconds", "WARNING"
+                )
 
     except Exception as e:
         if "Rate limited" in str(e):
