@@ -39,7 +39,7 @@ previous_alerts = set()
 def setup_driver():
     """Setup and return a headless Chrome driver"""
     chrome_options = Options()
-    # chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--maximize-window")
     chrome_options.add_argument("--disable-dev-shm-usage")
