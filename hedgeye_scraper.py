@@ -689,7 +689,7 @@ async def monitor_feeds_async():
                 except Exception as e:
                     log_message(f"Error during monitoring cycle: {str(e)}", "ERROR")
                 finally:
-                    await asyncio.sleep(0.7)
+                    await asyncio.sleep(0.9)
 
             else:
                 logged_in = False
