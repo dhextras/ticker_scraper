@@ -154,8 +154,9 @@ async def run_scraper():
                     await send_posts_to_telegram(new_urls, timestamp)
 
                     await process_new_urls(session, new_urls)
-                    processed_urls.extend(new_urls)
-                    save_processed_urls(processed_urls)
+
+                    # Only keep the list of current urls avaible in the sitemap
+                    save_processed_urls(current_urls)
                 else:
                     log_message("No new blog posts found.", "INFO")
 
