@@ -156,7 +156,9 @@ async def run_scraper():
                     await process_new_urls(session, new_urls)
 
                     # Only keep the list of current urls avaible in the sitemap
+                    processed_urls = current_urls
                     save_processed_urls(current_urls)
+
                 else:
                     log_message("No new blog posts found.", "INFO")
 
