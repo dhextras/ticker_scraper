@@ -68,7 +68,7 @@ async def fetch_articles(session):
             "fields.articleCategory.sys.id": "630ga2Gfm1hh4L2mHMkBHS",
             "fields.subscription.sys.id": "2rcJUw40n0QEtHPmYrdeeT",
             "fields.postDate[gte]": "1999-12-31T18:00:00.000Z",
-            "fields.postDate[lte]": "2024-11-08T10:22:51.880Z",
+            "fields.postDate[lte]": "2030-12-31T10:22:51.880Z",
             "skip": 0,
             "limit": 10,
         }
