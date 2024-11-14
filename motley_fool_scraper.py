@@ -32,8 +32,10 @@ FOOL_PASSWORD = os.getenv("FOOL_PASSWORD")
 FOOL_API_KEY = os.getenv("FOOL_API_KEY")
 FOOL_GRAPHQL_HASH = os.getenv("FOOL_GRAPHQL_HASH")
 CREDS_PATH = "cred/fool_session.json"
+PROCESSED_URLS_FILE = "data/motley_processed_urls.json"
 
 os.makedirs("cred", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 
 # Global variables
 previous_articles = []
@@ -57,6 +59,20 @@ class RateLimiter:
 
 
 rate_limiter = RateLimiter()
+
+
+def load_processed_urls():
+    try:
+        with open(PROCESSED_URLS_FILE, "r") as f:
+            return set(json.load(f))
+    except FileNotFoundError:
+        return set()
+
+
+def save_processed_urls(urls):
+    with open(PROCESSED_URLS_FILE, "w") as f:
+        json.dump(list(urls), f)
+    log_message("Processed URLs saved.", "INFO")
 
 
 async def get_api_session(driver):
@@ -171,7 +187,12 @@ async def fetch_latest_articles(session_data):
         "tagsExcluded": [],
         "authorIds": [],
         "myStocks": False,
-        "productIds": [1081, 1069],  # Stock Advisor and Rule Breakers
+        "productIds": [
+            1081,  # Stock Advisor
+            1069,  # Rule Breakers
+            4198,  # Hidden gems
+            4488,  # Dividend Investor
+        ],
         "orderBy": "",
         "authorIdsExcluded": [],
     }
@@ -306,11 +327,13 @@ async def check_for_new_alerts(prev_articles, session_data):
             return prev_articles, []
 
         new_articles = []
-        known_paths = {article["path"] for article in prev_articles}
+        known_urls = load_processed_urls()
 
         for article in current_articles:
-            if article["path"] not in known_paths:
+            article_url = article["path"]
+            if article_url not in known_urls:
                 new_articles.append(article)
+                known_urls.add(article_url)
 
         if new_articles:
             log_message(f"Found {len(new_articles)} new articles", "INFO")
@@ -318,6 +341,8 @@ async def check_for_new_alerts(prev_articles, session_data):
                 process_article(article, session_data) for article in new_articles
             ]
             await asyncio.gather(*processing_tasks)
+
+            save_processed_urls(known_urls)
 
         return current_articles, new_articles
 
