@@ -133,15 +133,17 @@ async def fetch_latest_alerts(driver) -> List[Dict]:
         if news:
             for item in news:
                 asset = item.get("asset", {})
-                all_alerts.append(
-                    {
-                        "id": asset.get("id"),
-                        "title": asset.get("title"),
-                        "url": asset.get("url"),
-                        "type": "news",
-                        "datePublished": asset.get("dateLastPublished"),
-                    }
-                )
+                if asset and asset.get("section", {}).get("id") == 106983829:
+                    all_alerts.append(
+                        {
+                            "id": asset.get("id"),
+                            "title": asset.get("title"),
+                            "url": asset.get("url"),
+                            "type": "news",
+                            "tickerSymbols": asset.get("tickerSymbols"),
+                            "datePublished": asset.get("dateLastPublished"),
+                        }
+                    )
 
         log_message(f"Found {len(all_alerts)} total alerts")
         return all_alerts
@@ -182,6 +184,10 @@ async def check_for_new_alerts(driver):
                     f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S.%f %Z')}\n"
                     f"<b>Time difference:</b> {(current_time - published_date).total_seconds():.2f} seconds\n"
                 )
+
+                tickerSymbols = alert.get("tickerSymbols", None)
+                if tickerSymbols:
+                    message += f"<b>Ticker Symbols:</b> {', '.join(tickerSymbols)}\n"
 
                 await send_telegram_message(
                     message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
