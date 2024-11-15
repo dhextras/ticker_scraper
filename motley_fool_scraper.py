@@ -41,6 +41,12 @@ os.makedirs("data", exist_ok=True)
 previous_articles = []
 last_request_time = 0
 MIN_REQUEST_INTERVAL = 1
+PRODUCT_NAMES = {
+    1081: "Stock Advisor",
+    1069: "Rule Breakers",
+    4198: "Hidden Gems",
+    4488: "Dividend Investor",
+}
 
 
 class RateLimiter:
@@ -276,9 +282,7 @@ async def process_article(article, session_data):
         if (
             current_time - published_date
         ).total_seconds() < 86400:  # Within last 24 hours
-            product_name = (
-                "Stock Advisor" if article["productId"] == 1081 else "Rule Breakers"
-            )
+            product_name = PRODUCT_NAMES.get(article["productId"], "Unknown Product")
             article_url = f"https://www.fool.com{article['path']}"
 
             ticker = await extract_ticker(article_url, session_data)
@@ -300,7 +304,11 @@ async def process_article(article, session_data):
                     {
                         "name": product_name,
                         "type": "Buy",
-                        "ticker": ticker if ticker else article["headline"],
+                        "ticker": (
+                            ticker
+                            if ticker
+                            else f"NO_TICKER_IGNORE - Title: {article['headline']}"
+                        ),
                         "sender": "motley_fool",
                     },
                     WS_SERVER_URL,
