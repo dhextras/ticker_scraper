@@ -426,7 +426,7 @@ async def process_article(article, uid, session_token):
                 {
                     "name": "CNBC",
                     "type": "Buy",
-                    "ticker": article["title"],
+                    "ticker": f"NO_TICKER_IGNORE - Title: {article['title']}",
                     "sender": "cnbc",
                 },
                 WS_SERVER_URL,
