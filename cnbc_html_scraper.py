@@ -19,6 +19,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
+from utils.time_utils import get_next_market_times, sleep_until_market_open
 
 load_dotenv()
 
@@ -217,7 +218,6 @@ async def main():
         sys.exit(1)
 
     previous_alerts = load_saved_alerts()
-
     log_message("Starting CNBC alert monitor...")
 
     driver = setup_driver()
@@ -225,8 +225,26 @@ async def main():
     try:
         while True:
             try:
-                await check_for_new_alerts(driver)
-                await asyncio.sleep(1)
+                # Wait until market open
+                await sleep_until_market_open()
+                log_message("Market is open. Starting to check for new alerts...")
+
+                _, _, market_close_time = get_next_market_times()
+
+                while True:
+                    current_time = datetime.now(pytz.timezone("America/New_York"))
+                    if current_time > market_close_time:
+                        log_message("Market is closed. Waiting for next market open...")
+                        break
+
+                    start_time = time()
+                    await check_for_new_alerts(driver)
+
+                    execution_time = time() - start_time
+                    log_message(f"Total iteration time: {execution_time:.2f} seconds")
+
+                    # Adaptive sleep based on execution time
+                    await asyncio.sleep(min(1, 1 - execution_time))
 
             except Exception as e:
                 log_message(f"Error in main loop: {e}", "ERROR")

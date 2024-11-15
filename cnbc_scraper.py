@@ -516,7 +516,7 @@ async def run_alert_monitor(uid, session_token):
                     )
 
                     # Adaptive sleep based on execution time
-                    await asyncio.sleep(max(2, 2 - execution_time))
+                    await asyncio.sleep(min(2, 2 - execution_time))
 
                 except Exception as e:
                     log_message(f"Error checking alerts: {e}", "ERROR")
