@@ -473,16 +473,6 @@ async def process_task(
             )
 
             if is_new_alert:
-                with open(LAST_ALERT_FILE, "w") as f:
-                    json.dump(
-                        {
-                            "title": alert_details["title"],
-                            "price": alert_details["price"],
-                            "created_at": alert_details["created_at"].isoformat(),
-                        },
-                        f,
-                    )
-
                 signal_type = (
                     "Buy"
                     if "buy" in alert_details["title"].lower()
@@ -517,6 +507,16 @@ async def process_task(
                     f"Fetch Time: {alert_details['fetch_time']:.2f}s"
                 )
                 await telegram_queue.send_message({"text": message})
+
+                with open(LAST_ALERT_FILE, "w") as f:
+                    json.dump(
+                        {
+                            "title": alert_details["title"],
+                            "price": alert_details["price"],
+                            "created_at": alert_details["created_at"].isoformat(),
+                        },
+                        f,
+                    )
 
                 total_time = time.time() - start_time
                 log_message(

@@ -176,6 +176,10 @@ You can run each of the scripts based on your needs:
   python stocknews_scraper.py
   ```
 
+  ```bash
+  python stocknews_html_scraper.py
+  ```
+
 - To run the **Gmail ticker scraper**, use:
 
   ```bash
@@ -186,6 +190,10 @@ You can run each of the scripts based on your needs:
 
   ```bash
   python cnbc_scraper.py
+  ```
+
+  ```bash
+  python cnbc_html_scraper.py
   ```
 
 - To run the **Motley scraper**, use:
@@ -242,7 +250,7 @@ Make sure your `.env` file and `cred/` folder are properly set up before running
 ## File Structure Overview
 
 ```plaintext
-your_project/
+ticker_scraper/
 ├── cred/                       # Folder for credential files
 │   ├── gmail_credentials.json
 │   ├── gmail_token.json
@@ -263,6 +271,7 @@ your_project/
 ├── altucher_scraper.py         # Altucher ticker scraper
 ├── bearcave_scraper.py         # Bearcave ticker scraper
 ├── citron_scraper.py           # Citron media scraper
+├── cnbc_html_scraper.py        # CNBC ticker scraper html implelementation
 ├── cnbc_scraper.py             # CNBC ticker scraper
 ├── gmail_scraper.py            # Gmail ticker scraper
 ├── grizzly_scraper.py          # Grizzly Media scraper
@@ -273,6 +282,7 @@ your_project/
 ├── mudddy_waters_scraper.py    # Muddy Waters Media scraper
 ├── oxfordclub_scraper.py       # OxfordClub ticker scraper
 ├── requirements.txt            # Project dependencies
+├── stocknews_html_scraper.py   # StockNews ticker scraper html implelementation
 └── stocknews_scraper.py        # StockNews ticker scraper
 ```
 
