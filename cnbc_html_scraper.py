@@ -121,13 +121,11 @@ async def fetch_latest_alerts(driver) -> List[Dict]:
             for alert in trade_alerts:
                 all_alerts.append(
                     {
-                        "id": alert.get("asset", {}).get("id"),
-                        "title": alert.get("asset", {}).get("title"),
-                        "url": alert.get("asset", {}).get("url"),
+                        "id": alert.get("id"),
+                        "title": alert.get("title"),
+                        "url": alert.get("url"),
                         "type": "trade_alert",
-                        "datePublished": alert.get("asset", {}).get(
-                            "dateLastPublished"
-                        ),
+                        "datePublished": alert.get("dateLastPublished"),
                     }
                 )
 
