@@ -209,7 +209,7 @@ async def run_scraper():
             else:
                 log_message("No new posts found.", "INFO")
 
-            await asyncio.sleep(CHECK_INTERVAL)
+            # await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
