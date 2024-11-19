@@ -6,7 +6,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import pytz
 from bs4 import BeautifulSoup
@@ -38,6 +38,21 @@ LAST_ALERT_FILE = DATA_DIR / "hedgeye_last_alert.json"
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
 Path("cred").mkdir(exist_ok=True)
+
+
+class AccountManager:
+    def __init__(self, accounts: list[dict], session_files: list[Path]):
+        self.accounts = accounts
+        self.session_files = session_files
+        self.current_account_index = 0
+
+    def get_next_account(self) -> Tuple[dict, Path]:
+        account = self.accounts[self.current_account_index % len(self.accounts)]
+        session_file = self.session_files[
+            self.current_account_index % len(self.session_files)
+        ]
+        self.current_account_index += 1
+        return account, session_file
 
 
 class ProxyManager:
@@ -119,9 +134,11 @@ def setup_driver(proxy: Optional[str] = None) -> webdriver.Chrome:
 def load_credentials():
     with open("cred/hedgeye_credentials.json", "r") as f:
         data = json.load(f)
-        # Only take the first account since we're not rotating
-        account = data["accounts"][0]
-        return account["email"], account["password"], data["proxies"]
+        return data["accounts"], data["proxies"]
+
+
+def get_session_files() -> list[Path]:
+    return sorted(DATA_DIR.glob("hedgeye_session_*.pkl"))
 
 
 def save_session(driver, filename):
@@ -129,7 +146,7 @@ def save_session(driver, filename):
         pickle.dump(driver.get_cookies(), f)
 
 
-def load_session(driver, filename):
+def load_session(driver, filename) -> bool:
     try:
         with open(filename, "rb") as f:
             cookies = pickle.load(f)
@@ -226,12 +243,17 @@ def fetch_alert_details(driver):
 
 
 async def monitor_feeds():
-    email, password, proxies = load_credentials()
+    accounts, proxies = load_credentials()
+    session_files = get_session_files()
+
     proxy_manager = ProxyManager(proxies)
-    session_filename = "data/hedgeye_session.pkl"
+    account_manager = AccountManager(accounts, session_files)
+
     market_is_open = False
     current_driver = None
     current_proxy = None
+    current_account = None
+    current_session_file = None
 
     try:
         while True:
@@ -250,15 +272,25 @@ async def monitor_feeds():
                         continue
 
                     current_driver = setup_driver(current_proxy)
+                    current_account, current_session_file = (
+                        account_manager.get_next_account()
+                    )
 
                     # Try to load saved session first
                     if not (
-                        os.path.exists(session_filename)
-                        and load_session(current_driver, session_filename)
+                        current_session_file.exists()
+                        and load_session(current_driver, current_session_file)
                     ):
-                        if login(current_driver, email, password):
-                            save_session(current_driver, session_filename)
-                            log_message("Login successful", "INFO")
+                        if login(
+                            current_driver,
+                            current_account["email"],
+                            current_account["password"],
+                        ):
+                            save_session(current_driver, current_session_file)
+                            log_message(
+                                f"Login successful for account {current_account['email']}",
+                                "INFO",
+                            )
                         else:
                             current_driver.quit()
                             current_driver = None
@@ -279,13 +311,21 @@ async def monitor_feeds():
                             continue
 
                         current_driver = setup_driver(current_proxy)
-                        if not load_session(current_driver, session_filename):
-                            if not login(current_driver, email, password):
+                        current_account, current_session_file = (
+                            account_manager.get_next_account()
+                        )
+
+                        if not load_session(current_driver, current_session_file):
+                            if not login(
+                                current_driver,
+                                current_account["email"],
+                                current_account["password"],
+                            ):
                                 current_driver.quit()
                                 current_driver = None
                                 await asyncio.sleep(60)
                                 continue
-                            save_session(current_driver, session_filename)
+                            save_session(current_driver, current_session_file)
 
                     alert_details = fetch_alert_details(current_driver)
 
@@ -294,7 +334,6 @@ async def monitor_feeds():
                         if not last_alert or alert_details["title"] != last_alert.get(
                             "title"
                         ):
-
                             signal_type = (
                                 "Buy"
                                 if "buy" in alert_details["title"].lower()
@@ -351,6 +390,10 @@ async def monitor_feeds():
                         if current_driver:
                             current_driver.quit()
                         current_driver = None
+                        log_message(
+                            "Switching to next account and proxy due to rate limit",
+                            "INFO",
+                        )
                     else:
                         log_message(f"Error during monitoring: {str(e)}", "ERROR")
 
