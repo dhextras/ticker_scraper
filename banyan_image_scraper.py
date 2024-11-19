@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import sys
 from datetime import datetime
 from typing import List, NamedTuple
 
@@ -40,7 +39,12 @@ IMAGE_SOURCES = [
     ImageSource(
         name="Strategic Fortunes",
         base_url="https://banyanhill.s3.us-east-1.amazonaws.com/StrategicFortunes/Images",
-        image_suffix="IKA_SS1.PNG",
+        image_suffix="IKAA_SS1.png",
+    ),
+    ImageSource(
+        name="Extreme Fortunes",
+        base_url="https://banyanhill.s3.us-east-1.amazonaws.com/Extreme_Fortunes/images",
+        image_suffix="EXF_SS1.png",
     ),
     ImageSource(
         name="8 Figure Fortunes",
