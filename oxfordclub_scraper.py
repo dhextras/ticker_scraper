@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 
 import pytz
@@ -81,7 +82,10 @@ async def process_page(session, url):
             "Connection": "keep-alive",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
         }
+        start_time = time.time()
         response = session.get(url, headers=headers)
+        total_seconds = time.time() - start_time
+
         if response.status_code == 200:
             content = response.text
             soup = BeautifulSoup(content, "html.parser")
@@ -105,9 +109,11 @@ async def process_page(session, url):
                 ):
                     exchange, ticker = ticker_match.groups()
                     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
-                        "%Y-%m-%d %H:%M:%S"
+                        "%Y-%m-%d %H:%M:%S.%f"
                     )
-                    await send_match_to_telegram(url, ticker, exchange, timestamp)
+                    await send_match_to_telegram(
+                        url, ticker, exchange, timestamp, total_seconds
+                    )
                     break
                 elif not ticker_match:
                     log_message(f"No ticker found in section: {url}", "WARNING")
@@ -119,6 +125,8 @@ async def process_page(session, url):
                     log_message(
                         f"'Buy' not found before ticker in section: {url}", "WARNING"
                     )
+
+            log_message(f"Took {total_seconds:.2f} to fetch url: {url}", "ERROR")
         else:
             log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
     except Exception as e:
@@ -136,11 +144,12 @@ async def send_posts_to_telegram(urls, timestamp):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_match_to_telegram(url, ticker, exchange, timestamp):
+async def send_match_to_telegram(url, ticker, exchange, timestamp, total_seconds):
     message = f"<b>New Stock Match Found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
     message += f"<b>Stock Symbol:</b> {exchange}:{ticker}\n"
+    message += f"<b>Article Fetch time:</b> {total_seconds:.2f}s\n"
 
     await send_ws_message(
         {
