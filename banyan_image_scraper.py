@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 from datetime import datetime
 from typing import List, NamedTuple
 
@@ -126,17 +127,17 @@ async def run_scraper():
                 log_message("Checking for new image set...")
                 image_urls = generate_image_urls(current_time)
                 new_image_urls = [
-                    url for url in image_urls if url not in processed_urls
+                    (name, url) for name, url in image_urls if url not in processed_urls
                 ]
 
                 for name, url in new_image_urls:
                     if await check_image_url(session, name, url):
                         await send_image_to_telegram(name, url)
+                        processed_urls.add(url)
                     await asyncio.sleep(CHECK_INTERVAL)
 
                 # Only run the save function when new image available
                 if new_image_urls:
-                    processed_urls.add(new_image_urls)
                     save_processed_urls(processed_urls)
 
                 await asyncio.sleep(CHECK_INTERVAL)
