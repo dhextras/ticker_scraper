@@ -366,11 +366,15 @@ async def fetch_alert_details(session, proxy_raw):
         ip, port = proxy_raw.split(":")
         proxy = f"http://{ip}:{port}"
 
+        # Create temp header to use so that we don't modify the actual one
+        temp_headers = session.headers
+        temp_headers["Cache-Control"] = "no-store"
+
         start_time = time.time()
         async with aiohttp.ClientSession() as aio_session:
             async with aio_session.get(
                 "https://app.hedgeye.com/feed_items/all",
-                headers=session.headers,
+                headers=temp_headers,
                 cookies=session.cookies,
                 proxy=proxy,
                 timeout=aiohttp.ClientTimeout(total=2),
@@ -457,13 +461,14 @@ async def process_task(
         start_time = time.time()
         alert_details = await fetch_alert_details(task.session, task.proxy)
 
+        if alert_details is None:
+            log_message("fetch_alert_details returns none", "WARNING")
+            return
+
         log_message(
             f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
             "INFO",
         )
-
-        if alert_details is None:
-            return
 
         # Use lock for thread-safe comparison
         async with last_alert_lock:
