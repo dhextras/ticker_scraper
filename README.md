@@ -112,6 +112,10 @@ pip install -r requirements.txt
    ALTUCHER_PASSWORD= # Username for Altucher
    ALTUCHER_COOKIE_TID= # Cokies TID grabbed from requests for Altucher
    ALTUCHER_COOKIE_ID= # Cokies ID grabbed from requests for Altucher
+
+   # Banyan image scraper settings
+   BANYAN_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Banayan image
+   BANYAN_TELEGRAM_GRP=  # Telegram group ID for Banayan image
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -238,11 +242,18 @@ You can run each of the scripts based on your needs:
   python mudddy_waters_scraper.py
   ```
 
-- To run the **Grizzly Media  scraper**, use:
+- To run the **Grizzly Media scraper**, use:
 
   ```bash
   python grizzly_scraper.py
   ```
+
+- To run the **Banayn Image scraper**, use:
+
+  ```bash
+  python banyan_image_scraper.py
+  ```
+
 
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
@@ -269,6 +280,7 @@ ticker_scraper/
 ├── .gitignore                  # Git ignore file
 ├── README.md                   # Project documentation
 ├── altucher_scraper.py         # Altucher ticker scraper
+├── banyan_image_scraper.py     # Banayan image scraper
 ├── bearcave_scraper.py         # Bearcave ticker scraper
 ├── citron_scraper.py           # Citron media scraper
 ├── cnbc_html_scraper.py        # CNBC ticker scraper html implelementation
