@@ -108,7 +108,7 @@ async def send_posts_to_telegram(entries, timestamp):
     urls = [entry["url"] for entry in entries]
     joined_urls = "\n  ".join(urls)
 
-    message = f"<b>New Posts Found</b>\n\n"
+    message = f"<b>New Posts Found - HTML</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URLS:</b>\n  {joined_urls}"
 
@@ -118,7 +118,7 @@ async def send_posts_to_telegram(entries, timestamp):
 
 async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
-    message = f"<b>New Stock Match Found</b>\n\n"
+    message = f"<b>New Stock Match Found - HTML</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
     message += f"<b>Stock Symbol:</b> {stock_symbol}\n"
@@ -127,7 +127,7 @@ async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
 
     await send_ws_message(
         {
-            "name": "Stock News",
+            "name": "Stock News H",
             "type": "Buy",
             "ticker": stock_symbol,
             "sender": "stocknews",
