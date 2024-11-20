@@ -344,7 +344,7 @@ async def fetch_alert_details(session, proxy_raw):
                     raise Exception("Rate limited")
                 html = await response.text()
 
-        log_message(f"Found list: {html}\n")
+        log_message(f"Found list: {html}")
         return None
 
     except Exception as e:
