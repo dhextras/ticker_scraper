@@ -39,6 +39,7 @@ DATA_DIR = "data"
 RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_proxy.json")
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_accounts.json")
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
+LAST_ARTICLE_ID_FILE = os.path.join(DATA_DIR, "hedgeye_last_article_id.json")
 
 # Ensure data, cred directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -75,6 +76,7 @@ class Task:
     session: Session
     email: str
     proxy: str
+    alert_id: int
     start_time: float = 0.0
 
     def __hash__(self):
@@ -87,16 +89,38 @@ class Task:
 
 
 class TaskQueue:
-    def __init__(self, max_concurrent: int = 3):
+    def __init__(self, alert_id: int, max_concurrent: int = 3):
         self.queue = asyncio.Queue()
+        self.alert_id = alert_id
+        self.consecutive_404 = 0
         self.running_tasks: Set[Task] = set()
         self.max_concurrent = max_concurrent
         self.lock = asyncio.Lock()
 
+    async def update_alert_id(self):
+        # Starting the check at 5 rather then 6 so that the next processing request will also be completed
+        if self.consecutive_404 < 5:
+            self.alert_id += 1
+        else:
+            # Wait for all the running task to be finshed and check again
+            while len(self.running_tasks) != 0:
+                await asyncio.sleep(0.1)
+
+            # Check again cause the last alert might be a valid one
+            if self.consecutive_404 >= 6:
+                self.consecutive_404 = 0
+                self.alert_id -= 5 # Because we gotta add 1 to find the next one
+                log_message(
+                    f"Found 6 Consecutive 404's returning to article id: {self.alert_id}\n",
+                    "WARNING",
+                )
+
     async def add_task(self, task: Task) -> bool:
         # Only add task if we're under the combined limit
         if self.queue.qsize() + len(self.running_tasks) >= self.max_concurrent:
+            self.alert_id -= 1
             return False
+
 
         await self.queue.put(task)
         return True
@@ -361,7 +385,7 @@ def load_credentials() -> Tuple[List[Tuple[str, str]], List[str]]:
         return accounts, proxies
 
 
-async def fetch_alert_details(session, proxy_raw):
+async def fetch_alert_details(session, proxy_raw, id):
     try:
         ip, port = proxy_raw.split(":")
         proxy = f"http://{ip}:{port}"
@@ -374,7 +398,7 @@ async def fetch_alert_details(session, proxy_raw):
         start_time = time.time()
         async with aiohttp.ClientSession() as aio_session:
             async with aio_session.get(
-                "https://app.hedgeye.com/feed_items/all",
+                f"https://app.hedgeye.com/feed_items/{id}",
                 headers=temp_headers,
                 cookies=session.cookies,
                 proxy=proxy,
@@ -382,17 +406,32 @@ async def fetch_alert_details(session, proxy_raw):
             ) as response:
                 if response.status == 429:
                     raise Exception("Rate limited")
+                if response.status == 404:
+                    raise Exception("Not found")
+
                 html = await response.text()
 
+        fetch_time = time.time() - start_time
         soup = BeautifulSoup(html, "html.parser")
+
+        # Check for real time alerts other wise move to next
+        article_type_el = soup.select_one(".full-article__label")
+        if article_type_el:
+            aritcle_type = article_type_el.get_text(strip=True)
+            log_message(f"Found a new article type: {aritcle_type}", "DEBUG")
+            if aritcle_type != "REAL-TIME ALERTS":
+                return None, "Not a real time alert"
+        else:
+            return None, "Couldn't find any alert"
+
         alert_title = soup.select_one(".article__header")
         if not alert_title:
-            return None
+            return None, "Couldn't find alert title"
         alert_title = alert_title.get_text(strip=True)
 
         alert_price = soup.select_one(".currency.se-live-or-close-price")
         if not alert_price:
-            return None
+            return None, "Couldn't find alert price"
         alert_price = alert_price.get_text(strip=True)
 
         current_time_edt = datetime.now(pytz.utc).astimezone(
@@ -403,7 +442,6 @@ async def fetch_alert_details(session, proxy_raw):
         created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
         created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
 
-        fetch_time = time.time() - start_time
 
         return {
             "title": alert_title,
@@ -414,10 +452,10 @@ async def fetch_alert_details(session, proxy_raw):
         }
 
     except Exception as e:
-        if "Rate limited" in str(e):
+        if "Rate limited" in str(e) or "Not found" in str(e):
             raise
         log_message(f"Error fetching alert details: {str(e)}", "ERROR")
-        return None
+        return None, "Error while fetching"
 
 
 def load_last_alert():
@@ -425,6 +463,24 @@ def load_last_alert():
         with open(LAST_ALERT_FILE, "r") as f:
             return json.load(f)
     return {}
+
+
+def load_last_article_id() -> Optional[int]:
+    if os.path.exists(LAST_ARTICLE_ID_FILE):
+        with open(LAST_ARTICLE_ID_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("id")
+    return None
+
+
+def save_last_article_id(alert_id):
+    with open(LAST_ARTICLE_ID_FILE, "w") as f:
+        json.dump(
+            {
+                "id": alert_id,
+            },
+            f,
+        )
 
 
 async def get_public_ip(proxy):
@@ -458,16 +514,24 @@ async def process_task(
     telegram_queue: TelegramQueue,
     last_alert_lock: asyncio.Lock,
 ):
+    start_time = time.time()
+
     try:
-        start_time = time.time()
-        alert_details = await fetch_alert_details(task.session, task.proxy)
+        alert_details, reason = await fetch_alert_details(
+            task.session, task.proxy, task.alert_id
+        )
+        task_queue.consecutive_404 = 0
 
         if alert_details is None:
-            log_message("fetch_alert_details returns none", "WARNING")
+            temp_fetch_time = time.time() - start_time
+            log_message(
+                f"fetch_alert_details for id: {task.alert_id} took {temp_fetch_time:.2f}s and returns empty, Reason: {reason}", "INFO"
+            )
+            save_last_article_id(task.alert_id)
             return
 
         log_message(
-            f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
+            f"fetch_alert_details for {task.alert_id} took {alert_details['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
             "INFO",
         )
 
@@ -490,7 +554,7 @@ async def process_task(
                 ticker = ticker_match.group(0) if ticker_match else "-"
 
                 log_message(
-                    f"Trying to send new alert, Title - {alert_details['title']}, Proxy - {task.proxy}",
+                    f"Trying to send new alert, Id - {task.alert_id} Title - {alert_details['title']}, Proxy - {task.proxy}",
                     "INFO",
                 )
                 # Send WebSocket message immediately
@@ -510,6 +574,7 @@ async def process_task(
                     f"Price: {alert_details['price']}\n"
                     f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
                     f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Id: {task.alert_id}\n"
                     f"Fetch Time: {alert_details['fetch_time']:.2f}s"
                 )
                 await telegram_queue.send_message({"text": message})
@@ -526,10 +591,11 @@ async def process_task(
 
                 total_time = time.time() - start_time
                 log_message(
-                    f"New alert processed in {total_time:.2f}s - {alert_details['title']}",
+                    f"New alert id: {task.alert_id} processed in {total_time:.2f}s - {alert_details['title']}",
                     "INFO",
                 )
 
+            save_last_article_id(task.alert_id)
             if alert_details["fetch_time"] > 1.5:
                 public_ip = await get_public_ip(f"http://{task.proxy}")
                 log_message(
@@ -540,6 +606,10 @@ async def process_task(
         if "Rate limited" in str(e):
             proxy_manager.mark_rate_limited(task.proxy)
             log_message(f"Rate limited: Proxy {task.proxy}", "WARNING")
+        if "Not found" in str(e):
+            task_queue.consecutive_404 += 1
+            temp_fetch_time = time.time() - start_time
+            log_message(f"No article to be found at id: {task.alert_id}, fetching took {temp_fetch_time:.2f}", "INFO")
         else:
             log_message(f"Error during monitoring: {str(e)}", "ERROR")
     finally:
@@ -575,11 +645,11 @@ async def task_scheduler(
             await asyncio.sleep(1)
 
 
-async def monitor_feeds_async():
+async def monitor_feeds_async(article_id: int):
     accounts, proxies = load_credentials()
     account_manager = AccountManager(accounts)
     proxy_manager = ProxyManager(proxies)
-    task_queue = TaskQueue(max_concurrent=3)
+    task_queue = TaskQueue(article_id, max_concurrent=3)
     telegram_queue = TelegramQueue()
     last_alert_lock = asyncio.Lock()
     market_is_open = False
@@ -612,6 +682,8 @@ async def monitor_feeds_async():
 
                     async def process_account(email, password, index):
                         session_filename = f"data/hedgeye_session_{index}.pkl"
+                        if index < 2:
+                            return False
 
                         try:
                             if os.path.exists(session_filename):
@@ -688,7 +760,10 @@ async def monitor_feeds_async():
 
                         if session_info:
                             proxy = proxy_manager.get_next_proxy()
-                            task = Task(session_info.session, email, proxy)
+                            await task_queue.update_alert_id()
+                            task = Task(
+                                session_info.session, email, proxy, task_queue.alert_id
+                            )
 
                             if not await task_queue.add_task(task):
                                 await account_manager.release_account(email)
@@ -715,6 +790,9 @@ async def monitor_feeds_async():
 
 
 def main():
+    default_id = 158980
+    last_article_id = load_last_article_id()
+
     if not all(
         [
             HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
@@ -725,8 +803,16 @@ def main():
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
+    if not last_article_id:
+        log_message(
+            f"Missing starting article id, starting at default: {default_id}", "WARNING"
+        )
+        with open(LAST_ARTICLE_ID_FILE, "w") as f:
+            json.dump({"id": default_id}, f)
+        last_article_id = default_id
+
     try:
-        asyncio.run(monitor_feeds_async())
+        asyncio.run(monitor_feeds_async(last_article_id))
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
     except Exception as e:
