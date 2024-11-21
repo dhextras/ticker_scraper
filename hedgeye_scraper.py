@@ -682,8 +682,6 @@ async def monitor_feeds_async(article_id: int):
 
                     async def process_account(email, password, index):
                         session_filename = f"data/hedgeye_session_{index}.pkl"
-                        if index < 2:
-                            return False
 
                         try:
                             if os.path.exists(session_filename):
