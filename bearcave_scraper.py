@@ -131,6 +131,9 @@ async def run_scraper():
                     log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
                     for post in new_posts:
+                        if not "title" in post:
+                            continue
+
                         ticker = extract_ticker(post["title"])
                         await send_to_telegram(post, ticker)
                         processed_urls.add(post["canonical_url"])
