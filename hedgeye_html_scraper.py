@@ -113,7 +113,7 @@ class ProxyManager:
 def setup_driver(proxy: Optional[str] = None) -> webdriver.Chrome:
     """Setup and return a Chrome driver with proxy if provided"""
     chrome_options = Options()
-    # chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--maximize-window")
     chrome_options.add_argument("--disable-dev-shm-usage")
