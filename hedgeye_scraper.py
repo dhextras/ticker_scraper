@@ -449,7 +449,7 @@ async def fetch_alert_details(session, proxy_raw, id):
             "created_at": created_at_edt,
             "current_time": current_time_edt,
             "fetch_time": fetch_time,
-        }
+        }, "Success"
 
     except Exception as e:
         if "Rate limited" in str(e) or "Not found" in str(e):
