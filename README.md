@@ -67,6 +67,8 @@ pip install -r requirements.txt
    CNBC_SCRAPER_GMAIL_USERNAME=  # Gmail username for CNBC scraper
    CNBC_SCRAPER_GMAIL_PASSWORD=  # Gmail password for CNBC scraper
    CNBC_SCRAPER_ARTICLE_DATA_SHA=  # SHA for the article data in CNBC scraper
+   CNBC_SCRAPER_LATEST_ASSETS_SHA= # SHA for latest assets from jim camer
+   CNBC_SCRAPER_LATEST_ARTICLE_SHA= # SHA for latest aritcle
    CNBC_SCRAPER_SESSION_TOKEN=  # Session token for CNBC scraper
 
    # Hedgeye scraper settings
@@ -116,6 +118,11 @@ pip install -r requirements.txt
    # Banyan image scraper settings
    BANYAN_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Banayan image
    BANYAN_TELEGRAM_GRP=  # Telegram group ID for Banayan image
+
+   # Navallier Old scraper settings
+   INVESTOR_PLACE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Navallier Old
+   INVESTOR_PLACE_TELEGRAM_GRP= # Telegram group ID for Navallier Old
+   IPA_LOGIN_COOKIE= # Cookie for Navallier Old
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -254,7 +261,11 @@ You can run each of the scripts based on your needs:
   python banyan_image_scraper.py
   ```
 
+- To run the **Navallier Old scraper**, use:
 
+  ```bash
+  python navallier_old_scraper.py
+  ```
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
@@ -287,11 +298,13 @@ ticker_scraper/
 ├── cnbc_scraper.py             # CNBC ticker scraper
 ├── gmail_scraper.py            # Gmail ticker scraper
 ├── grizzly_scraper.py          # Grizzly Media scraper
+├── hedgeye_html_scraper.py     # Hedgeye html scraper implementation
 ├── hedgeye_scraper.py          # Hedgeye article scraper
 ├── hindenburg_scraper.py       # Hindenburg pdf ticker scraper
 ├── kerrisdale_scraper.py       # Kerrisdale pdf ticker scraper
 ├── motley_fool_scraper.py      # Motley ticker scraper
 ├── mudddy_waters_scraper.py    # Muddy Waters Media scraper
+├── navallier_old_scraper.py    # Navallier old ticker scraper
 ├── oxfordclub_scraper.py       # OxfordClub ticker scraper
 ├── requirements.txt            # Project dependencies
 ├── stocknews_html_scraper.py   # StockNews ticker scraper html implelementation
