@@ -172,13 +172,16 @@ def create_session_with_cookies(cookies):
 
 async def fetch_latest_articles(session_data):
     await rate_limiter.acquire()
+    timestamp = int(time.time() * 10000)
 
     base_url = "https://api.fool.com/premium-graphql-proxy/graphql"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {session_data['accessToken']}",
         "Apikey": FOOL_API_KEY,
-        "Cache-Control": "max-age=0",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "pragma": "no-cache",
+        "cache-timestamp": str(timestamp),
     }
 
     variables = {
@@ -212,6 +215,7 @@ async def fetch_latest_articles(session_data):
         "operationName": "FilteredArticleList",
         "variables": json.dumps(variables),
         "extensions": json.dumps(extensions),
+        "cache-timestamp": str(timestamp),
     }
 
     async with aiohttp.ClientSession() as session:

@@ -296,6 +296,8 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "accept-language": "en-US,en;q=0.9",
         "cache-control": "no-store",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "pragma": "no-cache",
         "priority": "u=1, i",
         "sec-fetch-dest": "document",
         "sec-fetch-mode": "no-cors",
@@ -304,8 +306,9 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     }
 
-    # Create encoded URL
-    encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    # Create encoded URL and timestamp for caching bypass
+    timestamp = int(time.time() * 10000)
+    encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}&timestamp={timestamp}"
     all_alerts = []
 
     # Method 2: aiohttp with headers

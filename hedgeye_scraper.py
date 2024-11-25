@@ -365,11 +365,13 @@ async def fetch_alert_details(session, proxy_raw):
     try:
         ip, port = proxy_raw.split(":")
         proxy = f"http://{ip}:{port}"
+        timestamp = int(time.time() * 10000)
 
         # Create temp header to use so that we don't modify the actual one
         temp_headers = session.headers
         temp_headers["Cache-Control"] = "no-store"
         temp_headers["Connection"] = "keep-alive"
+        temp_headers["cache-timestamp"] = str(timestamp)
 
         start_time = time.time()
         async with aiohttp.ClientSession() as aio_session:
