@@ -220,7 +220,7 @@ async def run_scraper():
             if new_urls:
                 log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
                 timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
-                    "%Y-%m-%d %H:%M:%S"
+                    "%Y-%m-%d %H:%M:%S.%f"
                 )
 
                 for url in new_urls:
