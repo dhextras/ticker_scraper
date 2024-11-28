@@ -153,11 +153,12 @@ async def process_page(session, url):
         log_message(f"Error processing page {url}: {e}", "ERROR")
 
 
-async def send_posts_to_telegram(urls, timestamp):
+async def send_posts_to_telegram(urls, timestamp, time_to_fetch):
     joined_urls = "\n  ".join(urls)
 
     message = f"<b>New Posts Found</b>\n\n"
-    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Time found:</b> {timestamp}\n"
+    message += f"<b>time_to_fetch:</b> {time_to_fetch}\n"
     message += f"<b>URLS:</b>\n  {joined_urls}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
@@ -206,7 +207,9 @@ async def run_scraper():
                 break
 
             log_message("Checking for new posts...")
+            start_time = time.time()
             posts = fetch_json(session)
+            time_to_fetch = time.time() - start_time
 
             new_urls = [
                 post["link"]
@@ -224,7 +227,7 @@ async def run_scraper():
                     await process_page(session, url)
                     processed_urls.add(url)
 
-                await send_posts_to_telegram(new_urls, timestamp)
+                await send_posts_to_telegram(new_urls, timestamp, time_to_fetch)
                 save_processed_urls(processed_urls)
             else:
                 log_message("No new posts found.", "INFO")
