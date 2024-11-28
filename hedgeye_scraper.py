@@ -10,6 +10,7 @@ from asyncio import Queue as AsyncQueue
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
+from uuid import uuid4
 
 import aiohttp
 import pytz
@@ -366,17 +367,21 @@ async def fetch_alert_details(session, proxy_raw):
         ip, port = proxy_raw.split(":")
         proxy = f"http://{ip}:{port}"
         timestamp = int(time.time() * 10000)
+        cache_uuid = uuid4()
 
         # Create temp header to use so that we don't modify the actual one
         temp_headers = session.headers
-        temp_headers["Cache-Control"] = "no-store"
+        temp_headers["Cache-Control"] = (
+            "no-cache, no-store, max-age=0, must-revalidate, private"
+        )
         temp_headers["Connection"] = "keep-alive"
         temp_headers["cache-timestamp"] = str(timestamp)
+        temp_headers["cache-uuid"] = str(cache_uuid)
 
         start_time = time.time()
         async with aiohttp.ClientSession() as aio_session:
             async with aio_session.get(
-                "https://app.hedgeye.com/feed_items/all",
+                f"https://app.hedgeye.com/feed_items/all?timstamp={str(timestamp + 10)}",
                 headers=temp_headers,
                 cookies=session.cookies,
                 proxy=proxy,

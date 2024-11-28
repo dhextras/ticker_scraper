@@ -6,6 +6,7 @@ import re
 import sys
 import time
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 import aiohttp
 import pytz
@@ -173,15 +174,17 @@ def create_session_with_cookies(cookies):
 async def fetch_latest_articles(session_data):
     await rate_limiter.acquire()
     timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
 
     base_url = "https://api.fool.com/premium-graphql-proxy/graphql"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {session_data['accessToken']}",
         "Apikey": FOOL_API_KEY,
-        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
         "pragma": "no-cache",
         "cache-timestamp": str(timestamp),
+        "cache-uuid": str(cache_uuid),
     }
 
     variables = {

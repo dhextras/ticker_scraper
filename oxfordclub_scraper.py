@@ -5,6 +5,7 @@ import re
 import sys
 import time
 from datetime import datetime
+from uuid import uuid4
 
 import pytz
 import requests
@@ -47,8 +48,20 @@ def save_processed_urls(urls):
 
 
 def fetch_json(session):
+    timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
+
     try:
-        response = session.get(JSON_URL)
+        headers = {
+            "Connection": "keep-alive",
+            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
+            "pragma": "no-cache",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
+            "cache-timestamp": str(timestamp),
+            "cache-uuid": str(cache_uuid),
+        }
+
+        response = session.get(JSON_URL, headers=headers)
         if response.status_code == 200:
             data = response.json()
             log_message(f"Fetched {len(data)} posts from JSON", "INFO")
@@ -77,10 +90,17 @@ def login_sync(session):
 
 
 async def process_page(session, url):
+    cache_timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
+
     try:
         headers = {
             "Connection": "keep-alive",
+            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
+            "pragma": "no-cache",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
+            "cache-timestamp": str(cache_timestamp),
+            "cache-uuid": str(cache_uuid),
         }
         start_time = time.time()
         response = session.get(url, headers=headers)

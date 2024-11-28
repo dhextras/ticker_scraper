@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from time import time
 from typing import Dict, List, Set
+from uuid import uuid4
 
 import pytz
 import requests
@@ -65,6 +66,7 @@ async def fetch_latest_assets() -> List[Dict]:
     try:
         base_url = "https://webql-redesign.cnbcfm.com/graphql"
         timestamp = int(time() * 10000)
+        cache_uuid = uuid4()
 
         variables = {
             "id": "15838187",
@@ -86,16 +88,17 @@ async def fetch_latest_assets() -> List[Dict]:
             "variables": json.dumps(variables),
             "extensions": json.dumps(extensions),
             "cache-timestamp": str(timestamp),
+            "cache-uuid": str(cache_uuid),
         }
 
         headers = {
-            "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
             "pragma": "no-cache",
             "priority": "u=0, i",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         }
 
-        # Create encoded URL and timestamp for caching bypass
+        # Create encoded URL, timestamp and uuid for caching bypass
         encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
         response = requests.get(encoded_url, headers=headers)

@@ -8,6 +8,7 @@ import urllib.parse
 from datetime import datetime
 from functools import wraps
 from typing import Dict, List, Tuple
+from uuid import uuid4
 
 import aiohttp
 import pytz
@@ -277,6 +278,7 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
     """Fetch articles using multiple methods and compare results."""
     await rate_limiter.acquire()
     timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
 
     log_message("Starting article fetch with multiple methods", "INFO")
 
@@ -293,11 +295,12 @@ async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
         "variables": json.dumps(variables),
         "extensions": json.dumps(extensions),
         "cache-timestamp": str(timestamp),
+        "cache-uuid": str(cache_uuid),
     }
 
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
         "pragma": "no-cache",
         "priority": "u=0, i",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
