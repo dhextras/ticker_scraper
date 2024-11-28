@@ -89,7 +89,7 @@ def login_sync(session):
         return False
 
 
-async def process_page(session, url):
+async def process_page(url):
     cache_timestamp = int(time.time() * 10000)
     cache_uuid = uuid4()
 
@@ -102,8 +102,9 @@ async def process_page(session, url):
             "cache-timestamp": str(cache_timestamp),
             "cache-uuid": str(cache_uuid),
         }
+
         start_time = time.time()
-        response = session.get(url, headers=headers)
+        response = requests.get(url, headers=headers)
         total_seconds = time.time() - start_time
 
         if response.status_code == 200:
@@ -224,7 +225,7 @@ async def run_scraper():
                 )
 
                 for url in new_urls:
-                    await process_page(session, url)
+                    await process_page(url)
                     processed_urls.add(url)
 
                 await send_posts_to_telegram(new_urls, timestamp, time_to_fetch)
