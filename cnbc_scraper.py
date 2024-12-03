@@ -40,7 +40,7 @@ LATEST_ASSETS_SHA = os.getenv("CNBC_SCRAPER_LATEST_ASSETS_SHA")
 ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
 
 DATA_DIR = Path("data")
-ALERTS_FILE = DATA_DIR / "cnbc_html_alerts.json"
+ALERTS_FILE = DATA_DIR / "cnbc_alerts.json"
 SESSION_TOKEN = os.getenv("CNBC_SCRAPER_SESSION_TOKEN")
 
 # Global variables
