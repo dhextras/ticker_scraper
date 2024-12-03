@@ -125,7 +125,7 @@ async def send_matches_to_telegram(buy_recs):
         ticker = rec["ticker"]
         clean_ticker = re.match(r"^[A-Z]+", ticker)
         if clean_ticker:
-            ticker = clean_ticker
+            ticker = clean_ticker.group(0)
 
         name = rec["name"]
         actionDesc = rec["actionDesc"]
