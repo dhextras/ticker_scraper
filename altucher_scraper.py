@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -122,6 +123,10 @@ async def process_articles(articles):
 async def send_matches_to_telegram(buy_recs):
     for rec in buy_recs:
         ticker = rec["ticker"]
+        clean_ticker = re.match(r"^[A-Z]+", ticker)
+        if clean_ticker:
+            ticker = clean_ticker
+
         name = rec["name"]
         actionDesc = rec["actionDesc"]
         postDate = rec["postDate"]
