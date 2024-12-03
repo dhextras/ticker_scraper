@@ -341,15 +341,16 @@ async def process_article(article, uid, session_token, fetch_time):
             article_timezone = published_date.tzinfo
             ticker = get_ticker(article_data)
 
-            await send_ws_message(
-                {
-                    "name": "CNBC",
-                    "type": "Buy",
-                    "ticker": ticker or f"NO_TICKER_IGNORE - Content: {article_data}",
-                    "sender": "cnbc",
-                },
-                WS_SERVER_URL,
-            )
+            if ticker:
+                await send_ws_message(
+                    {
+                        "name": "CNBC",
+                        "type": "Buy",
+                        "ticker": ticker,
+                        "sender": "cnbc",
+                    },
+                    WS_SERVER_URL,
+                )
 
             current_time = datetime.now(pytz.utc).astimezone(article_timezone)
             log_message(
