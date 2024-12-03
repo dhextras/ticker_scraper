@@ -28,6 +28,11 @@ TELEGRAM_BOT_TOKEN = os.getenv("ALTUCHER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ALTUCHER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
+subscriptions = [
+    {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT"},
+    {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM"},
+]
+
 os.makedirs("data", exist_ok=True)
 
 
@@ -60,13 +65,13 @@ def login(session):
         return None
 
 
-async def fetch_articles(session):
+async def fetch_articles(session, subscription_name, subscription_id):
     try:
         params = {
             "include": 2,
             "order": "-fields.postDate",
             "fields.articleCategory.sys.id": "630ga2Gfm1hh4L2mHMkBHS",
-            "fields.subscription.sys.id": "2rcJUw40n0QEtHPmYrdeeT",
+            "fields.subscription.sys.id": subscription_id,
             "fields.postDate[gte]": "1999-12-31T18:00:00.000Z",
             "fields.postDate[lte]": "2030-12-31T10:22:51.880Z",
             "skip": 0,
@@ -86,11 +91,12 @@ async def fetch_articles(session):
             return data
         else:
             log_message(
-                f"Failed to fetch articles: HTTP {response.status_code}", "ERROR"
+                f"Failed to fetch {subscription_name} articles: HTTP {response.status_code}",
+                "ERROR",
             )
             return []
     except Exception as e:
-        log_message(f"Error fetching articles: {e}", "ERROR")
+        log_message(f"Error fetching {subscription_name} articles: {e}", "ERROR")
         return []
 
 
@@ -164,7 +170,11 @@ async def run_scraper():
                 log_message("Market is closed. Waiting for next market open...")
                 break
 
-            articles = await fetch_articles(session)
+            articles = []
+            for subscription in subscriptions:
+                articles += await fetch_articles(
+                    session, subscription["name"], subscription["id"]
+                )
 
             new_articles = [
                 article
