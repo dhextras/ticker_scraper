@@ -129,8 +129,9 @@ async def check_for_new_alerts():
         # Process each alert
         for alert in current_alerts:
             alert_id = alert["id"]
+            alert_type = alert["type"]
 
-            if alert_id not in previous_trade_alerts:
+            if alert_id not in previous_trade_alerts and alert_type == "cnbcnewsstory":
                 previous_trade_alerts.add(alert_id)
                 alerts_updated = True
 

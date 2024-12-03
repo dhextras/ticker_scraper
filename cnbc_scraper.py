@@ -2,12 +2,14 @@ import asyncio
 import json
 import os
 import random
+import re
 import sys
 import time
 import urllib.parse
 from datetime import datetime
 from functools import wraps
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Set
 from uuid import uuid4
 
 import aiohttp
@@ -34,12 +36,14 @@ TELEGRAM_CHAT_ID = os.getenv("CNBC_SCRAPER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 GMAIL_USERNAME = os.getenv("CNBC_SCRAPER_GMAIL_USERNAME")
 GMAIL_PASSWORD = os.getenv("CNBC_SCRAPER_GMAIL_PASSWORD")
-LATEST_ARTICLE_SHA = os.getenv("CNBC_SCRAPER_LATEST_ARTICLE_SHA")
+LATEST_ASSETS_SHA = os.getenv("CNBC_SCRAPER_LATEST_ASSETS_SHA")
 ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
+
+DATA_DIR = Path("data")
+ALERTS_FILE = DATA_DIR / "cnbc_html_alerts.json"
 SESSION_TOKEN = os.getenv("CNBC_SCRAPER_SESSION_TOKEN")
 
 # Global variables
-previous_articles = []
 last_request_time = 0
 
 # Set up Chrome options
@@ -65,6 +69,41 @@ class RateLimiter:
 
 
 rate_limiter = RateLimiter()
+
+# Global variables to store previous alerts
+previous_trade_alerts = set()
+
+
+def load_saved_alerts() -> Set[str]:
+    """Load previously saved alerts from disk"""
+    try:
+        # Create data directory if it doesn't exist
+        DATA_DIR.mkdir(exist_ok=True)
+
+        if ALERTS_FILE.exists():
+            with open(ALERTS_FILE, "r") as f:
+                data = json.load(f)
+                trade_alerts = set(data.get("trade_alerts", []))
+                articles = set(data.get("articles", []))
+                log_message(
+                    f"Loaded {len(trade_alerts)} trade alerts and {len(articles)} articles from disk"
+                )
+                return trade_alerts
+        return set()
+    except Exception as e:
+        log_message(f"Error loading saved alerts: {e}", "ERROR")
+        return set()
+
+
+def save_alerts(trade_alerts: Set[str]):
+    """Save alerts to disk"""
+    try:
+        DATA_DIR.mkdir(exist_ok=True)
+        data = {"trade_alerts": list(trade_alerts)}
+        with open(ALERTS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        log_message(f"Error saving alerts: {e}", "ERROR")
 
 
 def timing_decorator(func):
@@ -166,9 +205,11 @@ async def get_article_data(article_id, uid, session_token):
         "extensions": json.dumps(extensions),
     }
 
+    encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(base_url, params=params) as response:
+            async with session.get(encoded_url) as response:
                 if response.status == 200:
                     response_json = await response.json()
 
@@ -226,215 +267,85 @@ async def get_article_data(article_id, uid, session_token):
             return None
 
 
-async def process_response(response_json: Dict, method_name: str) -> Tuple[List, int]:
-    """Process the API response and return alerts with count."""
-    trade_alerts = []
-    alert_ids = set()
-
-    dtc_notifications = response_json.get("data", {}).get("dtcNotifications", {})
-
-    if dtc_notifications:
-        trade_alerts_raw = dtc_notifications.get("tradeAlerts", [])
-        if trade_alerts_raw:
-            log_message(
-                f"[{method_name}] Found {len(trade_alerts_raw)} trade alerts", "INFO"
-            )
-            for alert in trade_alerts_raw:
-                if alert.get("id") not in alert_ids:
-                    trade_alerts.append(alert)
-                    alert_ids.add(alert.get("id"))
-
-    assets = []
-    news_items = dtc_notifications.get("news", [])
-    if news_items:
-        log_message(f"[{method_name}] Processing {len(news_items)} news items", "INFO")
-        for item in news_items:
-            asset = item.get("asset")
-            if asset and asset.get("section", {}).get("id") == 106983829:
-                asset_id = asset.get("id")
-                if asset_id not in alert_ids:
-                    assets.append(
-                        {
-                            "id": asset_id,
-                            "title": asset.get("title"),
-                            "type": asset.get("type"),
-                            "tickerSymbols": asset.get("tickerSymbols"),
-                            "dateLastPublished": asset.get("dateLastPublished"),
-                            "url": asset.get("url"),
-                            "contentClassification": asset.get("contentClassification"),
-                            "section": asset.get("section", {}).get("title"),
-                        }
-                    )
-                    alert_ids.add(asset_id)
-
-    combined_alerts = trade_alerts + assets
-    log_message(
-        f"[{method_name}] Total combined alerts: {len(combined_alerts)}", "INFO"
-    )
-    return combined_alerts, len(combined_alerts)
+def get_ticker(data):
+    match = re.search(r"shares of\s+([A-Z]+),", data)
+    if match:
+        return match.group(1)
+    return None
 
 
-async def fetch_latest_articles(uid: str, session_token: str) -> List[Dict]:
-    """Fetch articles using multiple methods and compare results."""
-    await rate_limiter.acquire()
-    timestamp = int(time.time() * 10000)
-    cache_uuid = uuid4()
+async def fetch_latest_assets() -> List[Dict]:
+    """Fetch latest alerts from CNBC Investing Club"""
+    try:
+        base_url = "https://webql-redesign.cnbcfm.com/graphql"
+        timestamp = int(time.time() * 10000)
+        cache_uuid = uuid4()
 
-    log_message("Starting article fetch with multiple methods", "INFO")
-
-    base_url = "https://webql-redesign.cnbcfm.com/graphql"
-    variables = {"hasICAccess": True, "uid": uid, "sessionToken": session_token}
-    extensions = {
-        "persistedQuery": {
-            "version": 1,
-            "sha256Hash": LATEST_ARTICLE_SHA,
+        variables = {
+            "id": "15838187",
+            "offset": 0,
+            "pageSize": 3,
+            "nonFilter": True,
+            "includeNative": False,
+            "include": [],
         }
-    }
-    params = {
-        "operationName": "notifications",
-        "variables": json.dumps(variables),
-        "extensions": json.dumps(extensions),
-        "cache-timestamp": str(timestamp),
-        "cache-uuid": str(cache_uuid),
-    }
 
-    headers = {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
-        "pragma": "no-cache",
-        "priority": "u=0, i",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    }
+        extensions = {
+            "persistedQuery": {
+                "version": 1,
+                "sha256Hash": LATEST_ASSETS_SHA,
+            }
+        }
+        params = {
+            "operationName": "getAssetList",
+            "variables": json.dumps(variables),
+            "extensions": json.dumps(extensions),
+            "cache-timestamp": str(timestamp),
+            "cache-uuid": str(cache_uuid),
+        }
 
-    # Create encoded URL and timestamp for caching bypass
-    encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
-    all_alerts = []
+        headers = {
+            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
+            "pragma": "no-cache",
+            "priority": "u=0, i",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
 
-    # Method 2: aiohttp with headers
-    log_message("Trying aiohttp params with headers", "INFO")
-    async with aiohttp.ClientSession() as session:
-        try:
-            start_time = time.time()
-            async with session.get(
-                base_url, params=params, headers=headers
-            ) as response:
-                if response.status == 200:
-                    response_json = await response.json()
-                    alerts, count = await process_response(
-                        response_json, "aiohttp_headers"
-                    )
-                    elapsed = time.time() - start_time
-                    log_message(
-                        f"aiohttp_headers completed in {elapsed:.2f}s with {count} alerts",
-                        "ERROR",
-                    )
-                    all_alerts.extend(alerts)
-                else:
-                    log_message(
-                        f"aiohttp_headers failed with status {response.status}", "ERROR"
-                    )
-        except Exception as e:
-            log_message(f"Error in aiohttp_headers: {str(e)}", "ERROR")
+        # Create encoded URL, timestamp and uuid for caching bypass
+        encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
-    await asyncio.sleep(1)
-    # Method 3: aiohttp with direct URL
-    log_message("Trying aiohttp with direct URL", "INFO")
-    async with aiohttp.ClientSession() as session:
-        try:
-            start_time = time.time()
-            async with session.get(encoded_url, headers=headers) as response:
-                if response.status == 200:
-                    response_json = await response.json()
-                    alerts, count = await process_response(
-                        response_json, "aiohttp_direct"
-                    )
-                    elapsed = time.time() - start_time
-                    log_message(
-                        f"aiohttp_direct completed in {elapsed:.2f}s with {count} alerts",
-                        "ERROR",
-                    )
-                    all_alerts.extend(alerts)
-                else:
-                    log_message(
-                        f"aiohttp_direct failed with status {response.status}", "ERROR"
-                    )
-        except Exception as e:
-            log_message(f"Error in aiohttp_direct: {str(e)}", "ERROR")
-
-    await asyncio.sleep(1)
-    # Method 5: requests with headers
-    log_message("Trying requests params with headers", "INFO")
-    try:
-        start_time = time.time()
-        response = requests.get(base_url, params=params, headers=headers)
-        if response.status_code == 200:
-            response_json = response.json()
-            alerts, count = await process_response(response_json, "requests_headers")
-            elapsed = time.time() - start_time
-            log_message(
-                f"requests_headers completed in {elapsed:.2f}s with {count} alerts",
-                "ERROR",
-            )
-            all_alerts.extend(alerts)
-        else:
-            log_message(
-                f"requests_headers failed with status {response.status_code}", "ERROR"
-            )
-    except Exception as e:
-        log_message(f"Error in requests_headers: {str(e)}", "ERROR")
-
-    await asyncio.sleep(1)
-    # Method 6: requests with direct URL
-    log_message("Trying requests with direct URL", "INFO")
-    try:
-        start_time = time.time()
         response = requests.get(encoded_url, headers=headers)
-        if response.status_code == 200:
-            response_json = response.json()
-            alerts, count = await process_response(response_json, "requests_direct")
-            elapsed = time.time() - start_time
-            log_message(
-                f"requests_direct completed in {elapsed:.2f}s with {count} alerts",
-                "ERROR",
-            )
-            all_alerts.extend(alerts)
-        else:
-            log_message(
-                f"requests_direct failed with status {response.status_code}", "ERROR"
-            )
+        response.raise_for_status()
+
+        response_json = response.json()
+
+        # Process content
+        assets = response_json.get("data", {}).get("assetList", {}).get("assets", [])
+
+        return assets
     except Exception as e:
-        log_message(f"Error in requests_direct: {str(e)}", "ERROR")
-
-    # Remove duplicates
-    seen_ids = set()
-    unique_alerts = []
-    for alert in all_alerts:
-        if alert["id"] not in seen_ids:
-            unique_alerts.append(alert)
-            seen_ids.add(alert["id"])
-
-    log_message(
-        f"Fetch complete. Found {len(unique_alerts)} unique alerts from all methods",
-        "INFO",
-    )
-    return unique_alerts
+        log_message(f"Error fetching alerts: {e}", "ERROR")
+        return []
 
 
-async def process_article(article, uid, session_token):
+async def process_article(article, uid, session_token, fetch_time):
     try:
+        start_time = time.time()
         article_data = await get_article_data(article.get("id"), uid, session_token)
+        fetch_data_time = time.time() - start_time
+
         if article_data:
-            article["article_data"] = article_data
             published_date = datetime.strptime(
-                article["dateLastPublished"], "%Y-%m-%dT%H:%M:%S%z"
+                article["datePublished"], "%Y-%m-%dT%H:%M:%S%z"
             )
             article_timezone = published_date.tzinfo
+            ticker = get_ticker(article_data)
 
             await send_ws_message(
                 {
                     "name": "CNBC",
                     "type": "Buy",
-                    "ticker": f"NO_TICKER_IGNORE - Title: {article['title']}",
+                    "ticker": ticker or f"NO_TICKER_IGNORE - Content: {article_data}",
                     "sender": "cnbc",
                 },
                 WS_SERVER_URL,
@@ -449,9 +360,14 @@ async def process_article(article, uid, session_token):
                 f"<b>New Article Alert!</b>\n"
                 f"<b>Published Date:</b> {published_date.strftime('%Y-%m-%d %H:%M:%S.%f %Z')}\n"
                 f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S.%f %Z')}\n"
+                f"<b>Time difference:</b> {(current_time - published_date).total_seconds():.2f} seconds\n"
+                f"<b>Assets, Article Data fetch time:</b> {fetch_time:.2f}s, {fetch_data_time:.2f}s\n"
                 f"<b>Title:</b> {article['title']}\n"
-                f"<b>Content:</b> {article['article_data']}\n"
+                f"<b>Content:</b> {article_data}\n"
             )
+
+            if ticker:
+                message += f"\n<b>Ticker:</b> {ticker}\n"
 
             await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             return True
@@ -460,37 +376,41 @@ async def process_article(article, uid, session_token):
     return False
 
 
-@timing_decorator
-async def check_for_new_alerts(prev_articles, uid, session_token):
+async def check_for_new_alerts(uid, session_token):
+    global previous_trade_alerts
+
     try:
-        current_articles = await fetch_latest_articles(uid, session_token)
+        start = time.time()
+        current_articles = await fetch_latest_assets()
+        fetch_time = time.time() - start
+        log_message(f"fetch_latest_assets took {fetch_time:.2f} seconds")
 
-        if not current_articles:
-            return prev_articles, []
+        articles_updated = False
 
-        new_articles = []
-        known_ids = {article.get("id") for article in prev_articles}
-
+        # Process each article
         for article in current_articles:
-            article_id = article.get("id")
-            if article_id and article_id not in known_ids:
-                new_articles.append(article)
+            article_id = article["id"]
+            article_type = article["type"]
 
-        if new_articles:
-            processing_tasks = [
-                process_article(article, uid, session_token) for article in new_articles
-            ]
-            await asyncio.gather(*processing_tasks)
+            if (
+                article_id not in previous_trade_alerts
+                and article_type == "cnbcnewsstory"
+            ):
+                previous_trade_alerts.add(article_id)
+                articles_updated = True
 
-        return current_articles, new_articles
+                await process_article(article, uid, session_token, fetch_time)
+
+        # Save alerts if there were any updates
+        if articles_updated:
+            save_alerts(previous_trade_alerts)
 
     except Exception as e:
         log_message(f"Error in check_for_new_alerts: {e}", "ERROR")
-        return prev_articles, []
 
 
 async def run_alert_monitor(uid, session_token):
-    prev_articles = []
+    global previous_trade_alerts
 
     while True:
         try:
@@ -501,6 +421,9 @@ async def run_alert_monitor(uid, session_token):
             # Get market close time
             _, _, market_close_time = get_next_market_times()
 
+            # Load saved alerts at startup
+            previous_trade_alerts = load_saved_alerts()
+
             # Main market hours loop
             while True:
                 current_time = datetime.now(pytz.timezone("America/New_York"))
@@ -508,23 +431,9 @@ async def run_alert_monitor(uid, session_token):
                     log_message("Market is closed. Waiting for next market open...")
                     break
 
-                start_time = time.time()
-
                 try:
-                    prev_articles, new_articles = await check_for_new_alerts(
-                        prev_articles, uid, session_token
-                    )
-
-                    if new_articles:
-                        log_message(f"Found {len(new_articles)} new articles", "INFO")
-
-                    execution_time = time.time() - start_time
-                    log_message(
-                        f"Total iteration time: {execution_time:.2f} seconds\n", "INFO"
-                    )
-
-                    # Adaptive sleep based on execution time
-                    await asyncio.sleep(min(2, 2 - execution_time))
+                    await check_for_new_alerts(uid, session_token)
+                    await asyncio.sleep(1)
 
                 except Exception as e:
                     log_message(f"Error checking alerts: {e}", "ERROR")
@@ -600,7 +509,7 @@ def main():
             SESSION_TOKEN,
             GMAIL_USERNAME,
             GMAIL_PASSWORD,
-            LATEST_ARTICLE_SHA,
+            LATEST_ASSETS_SHA,
             ARTICLE_DATA_SHA,
         ]
     ):
