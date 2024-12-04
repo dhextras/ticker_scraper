@@ -527,16 +527,17 @@ async def process_task(
             log_message("fetch_alert_details returns none", "WARNING")
             return
 
-        for result in results:
-            log_message(
-                f"fetch_result took {result['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
-                "INFO",
-            )
+        log_message(
+            f"fetch_result took {(time.time() - start_time):.2f} seconds. for {task.email}, {task.proxy}",
+            "INFO",
+        )
 
+        for result in results:
             # Use lock for thread-safe comparison
             async with last_alert_lock:
                 old_alerts = load_old_alert()
-                is_new_alert = not old_alerts or result["title"] in old_alerts
+                is_new_alert = not old_alerts or not result["title"] in old_alerts
+
                 if is_new_alert:
                     signal_type = (
                         "Buy"
