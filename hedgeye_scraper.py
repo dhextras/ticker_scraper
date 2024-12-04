@@ -39,7 +39,8 @@ WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 DATA_DIR = "data"
 RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_proxy.json")
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_accounts.json")
-LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
+# LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
+LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_old_alert.json")
 
 # Ensure data, cred directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -386,7 +387,7 @@ def archive_alert_parser(articles, fetch_time, current_time):
             result.append(
                 {
                     "title": title,
-                    "created_at": created_at_edt.isoformat(),
+                    "created_at": created_at_edt,
                     "current_time": current_time,
                     "fetch_time": fetch_time,
                 }
@@ -479,6 +480,13 @@ def load_last_alert():
     return {}
 
 
+def load_old_alert():
+    if os.path.exists(LAST_ALERT_FILE):
+        with open(LAST_ALERT_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+
 async def get_public_ip(proxy):
     ip_check_url = "https://api.ipify.org?format=text"
     try:
@@ -527,11 +535,8 @@ async def process_task(
 
             # Use lock for thread-safe comparison
             async with last_alert_lock:
-                last_alert = load_last_alert()
-                is_new_alert = not last_alert or result["title"] != last_alert.get(
-                    "title"
-                )
-
+                old_alerts = load_old_alert()
+                is_new_alert = not old_alerts or result["title"] in old_alerts
                 if is_new_alert:
                     signal_type = (
                         "Buy"
@@ -567,13 +572,10 @@ async def process_task(
                     )
                     await telegram_queue.send_message({"text": message})
 
+                    old_alerts.append(result["title"])
                     with open(LAST_ALERT_FILE, "w") as f:
                         json.dump(
-                            {
-                                "title": result["title"],
-                                "price": "$0",
-                                "created_at": result["created_at"].isoformat(),
-                            },
+                            old_alerts,
                             f,
                         )
 
