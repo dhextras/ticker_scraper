@@ -105,7 +105,7 @@ async def process_articles(articles):
     buy_recommendations = []
     for article in articles:
         if article["title"].lower().startswith("buy alert:"):
-            for stock_rec in article["stockRecommendations"]:
+            for stock_rec in article.get("stockRecommendations", []):
                 if stock_rec["action"].lower() == "buy":
                     buy_recommendations.append(
                         {
@@ -193,7 +193,7 @@ async def run_scraper():
                     f"Found {len(new_articles)} new articles to process.", "INFO"
                 )
 
-                buy_recs = await process_articles(articles)
+                buy_recs = await process_articles(new_articles)
                 await send_matches_to_telegram(buy_recs)
 
                 processed_urls.update(new_urls)
