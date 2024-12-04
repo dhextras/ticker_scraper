@@ -32,9 +32,9 @@ os.makedirs("cred", exist_ok=True)
 
 def get_gmail_service():
     creds = None
-    if os.path.exists("cred/gmail_token_a1.json"):
+    if os.path.exists("cred/gmail_token_a2.json"):
         creds = Credentials.from_authorized_user_file(
-            "cred/gmail_token_a1.json", SCOPES
+            "cred/gmail_token_a2.json", SCOPES
         )
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
@@ -44,7 +44,7 @@ def get_gmail_service():
                 "cred/gmail_credentials.json", SCOPES
             )
             creds = flow.run_local_server(port=0)
-        with open("cred/gmail_token_a1.json", "w") as token:
+        with open("cred/gmail_token_a2.json", "w") as token:
             token.write(creds.to_json())
     return build("gmail", "v1", credentials=creds)
 
