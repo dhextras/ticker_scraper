@@ -415,11 +415,11 @@ async def fetch_alert_details(session, proxy_raw):
         temp_headers["cache-uuid"] = str(cache_uuid)
 
         start_time = time.time()
-        today = datetime.now().strftime("%Y-%m-%d")
+        # today = datetime.now().strftime("%Y-%m-%d")
         async with aiohttp.ClientSession() as aio_session:
             async with aio_session.get(
-                # f"https://app.hedgeye.com/feed_items/all?with_category=22-real-time-alerts&timstamp={str(timestamp + 10)}",
-                f"https://app.hedgeye.com/research_archives?with_category=22-real-time-alerts&month={today}&timestamp={str(timestamp + 10)}",
+                f"https://app.hedgeye.com/feed_items/all?with_category=22-real-time-alerts&timstamp={str(timestamp + 10)}",
+                # f"https://app.hedgeye.com/research_archives?with_category=22-real-time-alerts&month={today}&timestamp={str(timestamp + 10)}",
                 headers=temp_headers,
                 cookies=session.cookies,
                 proxy=proxy,
@@ -432,39 +432,38 @@ async def fetch_alert_details(session, proxy_raw):
         soup = BeautifulSoup(html, "html.parser")
 
         # Method 1: https://app.hedgeye.com/feed_items/all
-        # alert_title = soup.select_one(".article__header")
-        # if not alert_title:
-        #     return None
-        # alert_title = alert_title.get_text(strip=True)
-        #
-        # alert_price = soup.select_one(".currency.se-live-or-close-price")
-        # if not alert_price:
-        #     return None
-        # alert_price = alert_price.get_text(strip=True)
-        #
-        #
-        # created_at_utc = soup.select_one("time[datetime]")["datetime"]
-        # created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        # created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
+        alert_title = soup.select_one(".article__header")
+        if not alert_title:
+            return None
+        alert_title = alert_title.get_text(strip=True)
+
+        alert_price = soup.select_one(".currency.se-live-or-close-price")
+        if not alert_price:
+            return None
+        alert_price = alert_price.get_text(strip=True)
+
+        created_at_utc = soup.select_one("time[datetime]")["datetime"]
+        created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
+        created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
 
         current_time_edt = datetime.now(pytz.utc).astimezone(
             pytz.timezone("America/New_York")
         )
         fetch_time = time.time() - start_time
 
-        # return {
-        #     "title": alert_title,
-        #     "price": alert_price,
-        #     "created_at": created_at_edt,
-        #     "current_time": current_time_edt,
-        #     "fetch_time": fetch_time,
-        # }
+        return {
+            "title": alert_title,
+            "price": alert_price,
+            "created_at": created_at_edt,
+            "current_time": current_time_edt,
+            "fetch_time": fetch_time,
+        }
 
         # Method 2: https://app.hedgeye.com/research_archives
-        articles = soup.find_all("div", class_="thumbnail-article__details")
-        results = archive_alert_parser(articles, fetch_time, current_time_edt)
-
-        return results
+        # articles = soup.find_all("div", class_="thumbnail-article__details")
+        # results = archive_alert_parser(articles, fetch_time, current_time_edt)
+        #
+        # return results
 
     except Exception as e:
         if "Rate limited" in str(e):
@@ -520,148 +519,147 @@ async def process_task(
 ):
     try:
         start_time = time.time()
-        # alert_details = await fetch_alert_details(task.session, task.proxy)
-        results = await fetch_alert_details(task.session, task.proxy)
+        alert_details = await fetch_alert_details(task.session, task.proxy)
+        # results = await fetch_alert_details(task.session, task.proxy)
 
-        if results is None:
+        if alert_details is None:
             log_message("fetch_alert_details returns none", "WARNING")
             return
 
-        log_message(
-            f"fetch_result took {(time.time() - start_time):.2f} seconds. for {task.email}, {task.proxy}",
-            "INFO",
-        )
-
-        for result in results:
-            # Use lock for thread-safe comparison
-            async with last_alert_lock:
-                old_alerts = load_old_alert()
-                is_new_alert = not old_alerts or not result["title"] in old_alerts
-
-                if is_new_alert:
-                    signal_type = (
-                        "Buy"
-                        if "buy" in result["title"].lower()
-                        else "Sell" if "sell" in result["title"].lower() else "None"
-                    )
-                    ticker_match = re.search(
-                        r"\b([A-Z]{1,5})\b(?=\s*\$)", result["title"]
-                    )
-                    ticker = ticker_match.group(0) if ticker_match else "-"
-
-                    log_message(
-                        f"Trying to send new alert, Title - {result['title']}, Proxy - {task.proxy}",
-                        "INFO",
-                    )
-                    # Send WebSocket message immediately
-                    await send_ws_message(
-                        {
-                            "name": "Hedgeye",
-                            "type": signal_type,
-                            "ticker": ticker,
-                            "sender": "hedgeye",
-                        },
-                        WS_SERVER_URL,
-                    )
-
-                    # Queue Telegram message separately
-                    message = (
-                        f"Title: {result['title']}\n"
-                        f"Created At: {result['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
-                        f"Current Time: {result['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
-                        f"Fetch Time: {result['fetch_time']:.2f}s"
-                    )
-                    await telegram_queue.send_message({"text": message})
-
-                    old_alerts.append(result["title"])
-                    with open(LAST_ALERT_FILE, "w") as f:
-                        json.dump(
-                            old_alerts,
-                            f,
-                        )
-
-                    total_time = time.time() - start_time
-                    log_message(
-                        f"New alert processed in {total_time:.2f}s - {result['title']}",
-                        "INFO",
-                    )
-
-                if result["fetch_time"] > 1.5:
-                    log_message(
-                        f"Slow fetch detected Publid IP: {result['fetch_time']} seconds",
-                        "WARNING",
-                    )
-
-        #
         # log_message(
-        #     f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
+        #     f"fetch_result took {(time.time() - start_time):.2f} seconds. for {task.email}, {task.proxy}",
         #     "INFO",
         # )
         #
-        # # Use lock for thread-safe comparison
-        # async with last_alert_lock:
-        #     last_alert = load_last_alert()
-        #     is_new_alert = not last_alert or alert_details["title"] != last_alert.get(
-        #         "title"
-        #     )
+        # for result in results:
+        #     # Use lock for thread-safe comparison
+        #     async with last_alert_lock:
+        #         old_alerts = load_old_alert()
+        #         is_new_alert = not old_alerts or not result["title"] in old_alerts
         #
-        #     if is_new_alert:
-        #         signal_type = (
-        #             "Buy"
-        #             if "buy" in alert_details["title"].lower()
-        #             else "Sell" if "sell" in alert_details["title"].lower() else "None"
-        #         )
-        #         ticker_match = re.search(
-        #             r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
-        #         )
-        #         ticker = ticker_match.group(0) if ticker_match else "-"
+        #         if is_new_alert:
+        #             signal_type = (
+        #                 "Buy"
+        #                 if "buy" in result["title"].lower()
+        #                 else "Sell" if "sell" in result["title"].lower() else "None"
+        #             )
+        #             ticker_match = re.search(
+        #                 r"\b([A-Z]{1,5})\b(?=\s*\$)", result["title"]
+        #             )
+        #             ticker = ticker_match.group(0) if ticker_match else "-"
         #
-        #         log_message(
-        #             f"Trying to send new alert, Title - {alert_details['title']}, Proxy - {task.proxy}",
-        #             "INFO",
-        #         )
-        #         # Send WebSocket message immediately
-        #         await send_ws_message(
-        #             {
-        #                 "name": "Hedgeye",
-        #                 "type": signal_type,
-        #                 "ticker": ticker,
-        #                 "sender": "hedgeye",
-        #             },
-        #             WS_SERVER_URL,
-        #         )
-        #
-        #         # Queue Telegram message separately
-        #         message = (
-        #             f"Title: {alert_details['title']}\n"
-        #             f"Price: {alert_details['price']}\n"
-        #             f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
-        #             f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
-        #             f"Fetch Time: {alert_details['fetch_time']:.2f}s"
-        #         )
-        #         await telegram_queue.send_message({"text": message})
-        #
-        #         with open(LAST_ALERT_FILE, "w") as f:
-        #             json.dump(
+        #             log_message(
+        #                 f"Trying to send new alert, Title - {result['title']}, Proxy - {task.proxy}",
+        #                 "INFO",
+        #             )
+        #             # Send WebSocket message immediately
+        #             await send_ws_message(
         #                 {
-        #                     "title": alert_details["title"],
-        #                     "price": alert_details["price"],
-        #                     "created_at": alert_details["created_at"].isoformat(),
+        #                     "name": "Hedgeye",
+        #                     "type": signal_type,
+        #                     "ticker": ticker,
+        #                     "sender": "hedgeye",
         #                 },
-        #                 f,
+        #                 WS_SERVER_URL,
         #             )
         #
-        #         total_time = time.time() - start_time
-        #         log_message(
-        #             f"New alert processed in {total_time:.2f}s - {alert_details['title']}",
-        #             "INFO",
-        #         )
+        #             # Queue Telegram message separately
+        #             message = (
+        #                 f"Title: {result['title']}\n"
+        #                 f"Created At: {result['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+        #                 f"Current Time: {result['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+        #                 f"Fetch Time: {result['fetch_time']:.2f}s"
+        #             )
+        #             await telegram_queue.send_message({"text": message})
         #
-        #     if alert_details["fetch_time"] > 1.5:
-        #         public_ip = await get_public_ip(f"http://{task.proxy}")
-        #         log_message(
-        #             f"Slow fetch detected Publid IP: {public_ip} seconds", "WARNING"
-        #         )
+        #             old_alerts.append(result["title"])
+        #             with open(LAST_ALERT_FILE, "w") as f:
+        #                 json.dump(
+        #                     old_alerts,
+        #                     f,
+        #                 )
+        #
+        #             total_time = time.time() - start_time
+        #             log_message(
+        #                 f"New alert processed in {total_time:.2f}s - {result['title']}",
+        #                 "INFO",
+        #             )
+        #
+        #         if result["fetch_time"] > 1.5:
+        #             log_message(
+        #                 f"Slow fetch detected Publid IP: {result['fetch_time']} seconds",
+        #                 "WARNING",
+        #             )
+
+        log_message(
+            f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {task.email}, {task.proxy}",
+            "INFO",
+        )
+
+        # Use lock for thread-safe comparison
+        async with last_alert_lock:
+            last_alert = load_last_alert()
+            is_new_alert = not last_alert or alert_details["title"] != last_alert.get(
+                "title"
+            )
+
+            if is_new_alert:
+                signal_type = (
+                    "Buy"
+                    if "buy" in alert_details["title"].lower()
+                    else "Sell" if "sell" in alert_details["title"].lower() else "None"
+                )
+                ticker_match = re.search(
+                    r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+                )
+                ticker = ticker_match.group(0) if ticker_match else "-"
+
+                log_message(
+                    f"Trying to send new alert, Title - {alert_details['title']}, Proxy - {task.proxy}",
+                    "INFO",
+                )
+                # Send WebSocket message immediately
+                await send_ws_message(
+                    {
+                        "name": "Hedgeye",
+                        "type": signal_type,
+                        "ticker": ticker,
+                        "sender": "hedgeye",
+                    },
+                    WS_SERVER_URL,
+                )
+
+                # Queue Telegram message separately
+                message = (
+                    f"Title: {alert_details['title']}\n"
+                    f"Price: {alert_details['price']}\n"
+                    f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Fetch Time: {alert_details['fetch_time']:.2f}s"
+                )
+                await telegram_queue.send_message({"text": message})
+
+                with open(LAST_ALERT_FILE, "w") as f:
+                    json.dump(
+                        {
+                            "title": alert_details["title"],
+                            "price": alert_details["price"],
+                            "created_at": alert_details["created_at"].isoformat(),
+                        },
+                        f,
+                    )
+
+                total_time = time.time() - start_time
+                log_message(
+                    f"New alert processed in {total_time:.2f}s - {alert_details['title']}",
+                    "INFO",
+                )
+
+            if alert_details["fetch_time"] > 1.5:
+                public_ip = await get_public_ip(f"http://{task.proxy}")
+                log_message(
+                    f"Slow fetch detected Publid IP: {public_ip} seconds", "WARNING"
+                )
 
     except Exception as e:
         if "Rate limited" in str(e):
