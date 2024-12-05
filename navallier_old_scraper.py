@@ -6,31 +6,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from time import time
-from typing import Dict, List, Set, Tuple
+from typing import List, Set, Tuple
 
 import pytz
 import requests
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-
-from utils.logger import log_message
-from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
-
-load_dotenv()
-import asyncio
-import json
-import os
-import re
-import sys
-from datetime import datetime
-from pathlib import Path
-from time import time
-from typing import Dict, List, Set, Tuple
-
-import aiohttp
-import pytz
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -48,6 +27,7 @@ IPA_LOGIN_COOKIE = os.getenv("IPA_LOGIN_COOKIE")
 CHECK_INTERVAL = 1  # seconds
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "investorplace_alerts.json"
+JSON_URL = "https://investorplace.com/acceleratedprofits/wp-json/wp/v2/posts?author=25699,25547&categories=8&per_page=3"
 
 # Global variables to store previous alerts
 previous_alerts = set()
@@ -85,6 +65,7 @@ def extract_tickers(title: str) -> List[Tuple[str, str]]:
     Extract tickers from the title with their associated action (Buy/Sell)
     Returns list of tuples: (action, ticker)
     """
+    # TODO: add the take or some shit like that
     tickers = []
 
     # Pattern for direct mentions (e.g., "Sell IMO", "Buy CAVA")
@@ -104,7 +85,7 @@ def extract_tickers(title: str) -> List[Tuple[str, str]]:
     return tickers
 
 
-async def fetch_article_data(url: str) -> Dict:
+async def fetch_flash_alerts(url: str) -> List:
     """Fetch and parse article data from InvestorPlace"""
     try:
         headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
@@ -112,33 +93,15 @@ async def fetch_article_data(url: str) -> Dict:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        schema_script = soup.select_one("head > script.speedyseo-schema-graph")
+        if response.status_code == 200:
+            data = response.json()
+            return data
 
-        if not schema_script:
-            raise ValueError("Could not find article schema data")
-
-        schema_data = json.loads(schema_script.string)
-
-        # Find the Article object in the graph
-        article_data = next(
-            (
-                item
-                for item in schema_data.get("@graph", [])
-                if item.get("@type") == "Article"
-            ),
-            None,
-        )
-        print(article_data)
-
-        if not article_data:
-            raise ValueError("Could not find Article data in schema")
-
-        return article_data
+        return []
 
     except Exception as e:
         log_message(f"Error fetching article data: {e}", "ERROR")
-        return {}
+        return []
 
 
 async def process_alert() -> None:
@@ -146,58 +109,78 @@ async def process_alert() -> None:
     global previous_alerts
 
     try:
-        today = datetime.now()
-        url = f"https://investorplace.com/acceleratedprofits/{today.year}/{today.month:02d}/{today.day:02d}/{today.year}{today.month:02d}{today.day:02d}-alert/"
 
         start = time()
-        article_data = await fetch_article_data(url)
+        flash_alerts = await fetch_flash_alerts(JSON_URL)
         log_message(f"fetch_article_data took {(time() - start):.2f} seconds")
 
-        if not article_data:
+        if not flash_alerts or len(flash_alerts) <= 0:
             return
 
-        article_id = article_data.get("@id")
-        if not article_id or article_id in previous_alerts:
-            return
+        new_alerts = [
+            alert for alert in flash_alerts if alert["link"] not in previous_alerts
+        ]
 
-        previous_alerts.add(article_id)
-        save_alerts(previous_alerts)
+        for alert in new_alerts:
+            title = alert["title"]["rendered"]
 
-        title = article_data.get("headline", "")
-        published_date = datetime.fromisoformat(
-            article_data.get("datePublished", "").replace("Z", "+00:00")
-        )
-        current_time = datetime.now(pytz.utc)
+            published_date = alert["modified_gmt"]
+            published_time = datetime.fromisoformat(published_date).astimezone(pytz.utc)
+            current_time = datetime.now(pytz.utc)
 
-        tickers = extract_tickers(title)
-        if tickers:
-            for action, ticker in tickers:
-                await send_ws_message(
-                    {
-                        "name": "Navallier Old",
-                        "type": action,
-                        "ticker": ticker,
-                        "sender": "navallier",
-                    },
-                    WS_SERVER_URL,
-                )
+            tickers = extract_tickers(title)
+            if tickers:
+                buy_tickers = [
+                    (action, ticker)
+                    for action, ticker in tickers
+                    if action.lower() == "buy"
+                ]
+                sell_tickers = [
+                    (action, ticker)
+                    for action, ticker in tickers
+                    if action.lower() == "sell"
+                ]
+                s_action = None
+                s_ticker = None
 
-        ticker_text = "\n".join([f"- {action}: {ticker}" for action, ticker in tickers])
+                if len(buy_tickers) > 0:
+                    s_action, s_ticker = buy_tickers[0]
+                elif len(sell_tickers):
+                    s_action, s_ticker = sell_tickers[0]
 
-        message = (
-            f"<b>New InvestorPlace Alert!</b>\n"
-            f"<b>Title:</b> {title}\n"
-            f"<b>URL:</b> {url}\n"
-            f"<b>Published Time:</b> {published_date.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-            f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-            f"<b>Time difference:</b> {(current_time - published_date).total_seconds():.2f} seconds\n"
-        )
+                if s_action is not None and s_ticker is not None:
+                    await send_ws_message(
+                        {
+                            "name": "Navallier Old",
+                            "type": s_action,
+                            "ticker": s_ticker,
+                            "sender": "navallier",
+                        },
+                        WS_SERVER_URL,
+                    )
 
-        if tickers:
-            message += f"\n<b>Detected Tickers:</b>\n{ticker_text}"
+            ticker_text = "\n".join(
+                [f"- {action}: {ticker}" for action, ticker in tickers]
+            )
 
-        await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
-        log_message("Sent new alert to Telegram")
+            message = (
+                f"<b>New InvestorPlace Alert!</b>\n"
+                f"<b>Title:</b> {title}\n"
+                f"<b>URL:</b> {alert['link']}\n"
+                f"<b>Published Time:</b> {published_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                f"<b>Time difference:</b> {(current_time - published_time).total_seconds():.2f} seconds\n"
+            )
+
+            if tickers:
+                message += f"\n<b>Detected Tickers:</b>\n{ticker_text}"
+
+            await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+            log_message(f"Sent new alert to Telegram, title: {title}")
+
+            new_links = [alert["link"] for alert in new_alerts]
+            previous_alerts.update(new_links)
+            save_alerts(previous_alerts)
 
     except Exception as e:
         log_message(f"Error checking alerts: {e}", "ERROR")
