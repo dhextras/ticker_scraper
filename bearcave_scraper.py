@@ -57,7 +57,7 @@ async def fetch_json(session):
 
 
 def extract_ticker(title):
-    if title.startswith("Problems at"):
+    if title is not None and title.startswith("Problems at"):
         # Look for text within parentheses
         match = re.search(r"\((.*?)\)", title)
         if match:
