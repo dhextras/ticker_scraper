@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from time import time
-from typing import List, Set, Tuple
+from typing import List, Set
 
 import pytz
 import requests
@@ -60,27 +60,33 @@ def save_alerts(alerts: Set[str]):
         log_message(f"Error saving alerts: {e}", "ERROR")
 
 
-def extract_tickers(title: str) -> List[Tuple[str, str]]:
+def extract_tickers(title):
     """
     Extract tickers from the title with their associated action (Buy/Sell)
     Returns list of tuples: (action, ticker)
     """
-    # TODO: add the take or some shit like that
     tickers = []
 
     # Pattern for direct mentions (e.g., "Sell IMO", "Buy CAVA")
-    direct_pattern = r"(Buy|Sell)\s+([A-Z]{2,6})(?:\s|$|,|;)"
+    direct_pattern = r"(Buy|Sell)\s+([A-Z]{2,5})(?:\s|$|,|;)"
     direct_matches = re.finditer(direct_pattern, title)
     for match in direct_matches:
         action, ticker = match.groups()
         tickers.append((action, ticker))
 
     # Pattern for parenthetical mentions (e.g., "Sell Novo Nordisk A/S (NVO)")
-    paren_pattern = r"(Buy|Sell)[^()]*?\(([A-Z]{2,6})\)"
+    paren_pattern = r"(Buy|Sell)[^()]*?\(([A-Z]{2,5})\)"
     paren_matches = re.finditer(paren_pattern, title)
     for match in paren_matches:
         action, ticker = match.groups()
         tickers.append((action, ticker))
+
+    # Pattern for take profits in (e.g., "Take Profits in CLS")
+    profit_pattern = r"Take Profits in\s+([A-Z]{2,5})"
+    profit_matches = re.finditer(profit_pattern, title)
+    for match in profit_matches:
+        ticker = match.group(1)
+        tickers.append(("Buy", ticker))
 
     return tickers
 
