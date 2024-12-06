@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import email
+import json
 import os
 import re
 import sys
@@ -26,8 +27,17 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 TELEGRAM_BOT_TOKEN = os.getenv("GMAIL_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("GMAIL_SCRAPER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
+PROCESSED_IDS_FILE = "data/gmail_processed_ids_file_1.json"
 
 os.makedirs("cred", exist_ok=True)
+os.makedirs("data", exist_ok=True)
+
+
+def load_last_alert():
+    if os.path.exists(PROCESSED_IDS_FILE):
+        with open(PROCESSED_IDS_FILE, "r") as f:
+            return json.load(f)
+    return []
 
 
 def get_gmail_service():
@@ -163,7 +173,7 @@ async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
 
 async def run_gmail_scraper():
     service = get_gmail_service()
-    last_seen_id = None
+    last_seen_ids = load_last_alert()
 
     while True:
         await sleep_until_market_open()
@@ -186,9 +196,12 @@ async def run_gmail_scraper():
                 )
                 messages = results.get("messages", [])
 
-                if messages and messages[0]["id"] != last_seen_id:
+                if messages and messages[0]["id"] not in last_seen_ids:
                     await process_email(service, messages[0]["id"])
-                    last_seen_id = messages[0]["id"]
+                    last_seen_ids.append(messages[0]["id"])
+
+                    with open(PROCESSED_IDS_FILE, "w") as f:
+                        json.dump(last_seen_ids, f)
                 else:
                     log_message("No new emails found.", "INFO")
 
