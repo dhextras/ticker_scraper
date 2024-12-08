@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 
 import aiohttp
@@ -42,8 +43,10 @@ def save_processed_urls(urls):
 
 
 async def fetch_json(session):
+    timestamp = int(time.time() * 10000)
+
     try:
-        async with session.get(JSON_URL) as response:
+        async with session.get(f"{JSON_URL}?limit=10&timestamp={timestamp}") as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched posts from JSON", "INFO")
