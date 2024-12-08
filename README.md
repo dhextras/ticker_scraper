@@ -297,6 +297,7 @@ ticker_scraper/
 ├── cnbc_html_scraper.py        # CNBC ticker scraper html implelementation
 ├── cnbc_scraper.py             # CNBC ticker scraper
 ├── gmail_scraper.py            # Gmail ticker scraper
+├── gmail_scraper_a2.py         # Gmail ticker scraper second account
 ├── grizzly_scraper.py          # Grizzly Media scraper
 ├── hedgeye_html_scraper.py     # Hedgeye html scraper implementation
 ├── hedgeye_scraper.py          # Hedgeye article scraper
