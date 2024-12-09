@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import random
-import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -130,6 +129,7 @@ async def get_new_session_token():
     time.sleep(random.uniform(2, 4))
 
     try:
+        current_url = driver.current_url
         email_input = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.ID, "usernameOrEmail"))
         )
@@ -140,7 +140,14 @@ async def get_new_session_token():
         submit_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
         submit_button.click()
 
-        time.sleep(5)
+        for _ in range(10):
+            time.sleep(1)
+            if current_url != driver.current_url:
+                break
+
+        while current_url == driver.current_url:
+            log_message("Failed to login, waiting for manual login....", "WARNING")
+            time.sleep(5)
 
         browser_session = get_browser_session(driver)
         api_session = await get_api_session(driver)
@@ -188,25 +195,14 @@ async def fetch_latest_articles(session_data):
     }
 
     variables = {
-        "tagsFilterType": "OR",
-        "videoInclusion": "INCLUDE",
-        "includeImages": False,
-        "includeFreeContent": False,
-        "includeStaticPages": True,
         "limit": 10,
         "offset": 0,
-        "tags": [],
-        "tagsExcluded": [],
-        "authorIds": [],
-        "myStocks": False,
         "productIds": [
             1081,  # Stock Advisor
             1069,  # Rule Breakers
             4198,  # Hidden gems
             4488,  # Dividend Investor
         ],
-        "orderBy": "",
-        "authorIdsExcluded": [],
     }
     extensions = {
         "persistedQuery": {
@@ -215,7 +211,7 @@ async def fetch_latest_articles(session_data):
         }
     }
     params = {
-        "operationName": "FilteredArticleList",
+        "operationName": "GetLatestRecArticles",
         "variables": json.dumps(variables),
         "extensions": json.dumps(extensions),
         "cache-timestamp": str(timestamp),
@@ -262,24 +258,25 @@ def save_session_credentials(creds):
         log_message(f"Error saving credentials: {e}", "ERROR")
 
 
-async def extract_ticker(url, session_data):
+async def extract_tickers(article):
     """Extract ticker using browser session cookies"""
     try:
-        async with create_session_with_cookies(session_data["cookies"]) as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    content = await response.text()
-                    ticker_match = re.search(
-                        r"(NYSE|NASDAQ):\s*(\w+)", content, re.IGNORECASE
-                    )
-                    if ticker_match:
-                        return ticker_match.group(2)
+        tickers = []
+        recs = article["recommendations"]
+
+        for rec in recs:
+            action = rec.get("action", None)
+            symbol = rec.get("instrument", {}).get("symbol", None)
+            if action and symbol:
+                tickers.append((action, symbol))
+
+        return tickers
     except Exception as e:
-        log_message(f"Error extracting ticker: {e}", "ERROR")
-    return None
+        log_message(f"Error extracting tickers: {e}", "ERROR")
+    return []
 
 
-async def process_article(article, session_data):
+async def process_rec_article(article):
     try:
         published_date = datetime.fromisoformat(
             article["publishAt"].replace("Z", "+00:00")
@@ -289,39 +286,44 @@ async def process_article(article, session_data):
         if (
             current_time - published_date
         ).total_seconds() < 86400:  # Within last 24 hours
-            product_name = PRODUCT_NAMES.get(article["productId"], "Unknown Product")
+            product_name = PRODUCT_NAMES.get(
+                article["product"]["productId"], "Unknown Product"
+            )
             article_url = f"https://www.fool.com{article['path']}"
 
-            ticker = await extract_ticker(article_url, session_data)
+            tickers = await extract_tickers(article)
 
             message = (
                 f"<b>New {product_name} Article!</b>\n"
                 f"<b>Published Date:</b> {published_date.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
                 f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                f"<b>Title:</b> {article['headline']}\n"
                 f"<b>URL:</b> {article_url}\n"
             )
-            if ticker:
-                message += f"<b>Ticker:</b> {ticker}\n"
 
-            log_message(f"Sending new article alert: {article['headline']}", "INFO")
+            if tickers:
+                ticker_text = "\n".join(
+                    [f"- {action}: {ticker}" for action, ticker in tickers]
+                )
 
-            await asyncio.gather(
-                send_ws_message(
-                    {
-                        "name": product_name,
-                        "type": "Buy",
-                        "ticker": (
-                            ticker
-                            if ticker
-                            else f"NO_TICKER_IGNORE - Title: {article['headline']}"
-                        ),
-                        "sender": "motley_fool",
-                    },
-                    WS_SERVER_URL,
-                ),
-                send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID),
-            )
+                for (
+                    action,
+                    ticker,
+                ) in tickers:
+                    await send_ws_message(
+                        {
+                            "name": product_name,
+                            "type": action,
+                            "ticker": ticker,
+                            "sender": "motley_fool",
+                        },
+                        WS_SERVER_URL,
+                    )
+
+                message += f"<b>Tickers:</b>\n{ticker_text}\n"
+
+            log_message(f"Sending new article alert: {article['path']}", "INFO")
+
+            await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             return True
     except Exception as e:
         log_message(f"Error processing article: {e}", "ERROR")
@@ -353,7 +355,7 @@ async def check_for_new_alerts(prev_articles, session_data):
         if new_articles:
             log_message(f"Found {len(new_articles)} new articles", "INFO")
             processing_tasks = [
-                process_article(article, session_data) for article in new_articles
+                process_rec_article(article) for article in new_articles
             ]
             await asyncio.gather(*processing_tasks)
 
@@ -399,7 +401,7 @@ async def run_alert_monitor():
                 prev_articles, _ = await check_for_new_alerts(
                     prev_articles, session_data
                 )
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)  # Remove in the future if it becomes slow
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
