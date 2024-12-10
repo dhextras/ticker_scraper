@@ -153,14 +153,14 @@ async def process_email(service, message_id):
 
 
 async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
-    message = f"<b>New Stock Alert</b>\n\n"
+    message = f"<b>New Stock Alert A1</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>Sender:</b> {sender}\n"
     message += f"<b>Stock Symbol:</b> {stock_symbol}\n"
 
     await send_ws_message(
         {
-            "name": f"{sender_type.capitalize()} G",
+            "name": f"{sender_type.capitalize()} G A1",
             "type": "Buy",
             "ticker": stock_symbol,
             "sender": sender_type,
