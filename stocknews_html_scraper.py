@@ -70,7 +70,7 @@ def load_processed_urls():
 
 def save_processed_urls(urls):
     with open(PROCESSED_JSON_FILE, "w") as f:
-        json.dump(urls, f)
+        json.dump(urls, f, indent=2)
         log_message("Processed URLs saved.", "INFO")
 
 

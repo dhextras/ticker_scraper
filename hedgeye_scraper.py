@@ -577,7 +577,7 @@ async def process_task(
         #                 json.dump(
         #                     old_alerts,
         #                     f,
-        #                 )
+        #                  indent=2)
         #
         #             total_time = time.time() - start_time
         #             log_message(
@@ -647,6 +647,7 @@ async def process_task(
                             "created_at": alert_details["created_at"].isoformat(),
                         },
                         f,
+                        indent=2,
                     )
 
                 total_time = time.time() - start_time

@@ -273,43 +273,44 @@ Make sure your `.env` file and `cred/` folder are properly set up before running
 
 ```plaintext
 ticker_scraper/
-├── cred/                       # Folder for credential files
+├── cred/                         # Folder for credential files
 │   ├── gmail_credentials.json
 │   ├── gmail_token.json
-│   ├── fool_session.json       # will be created upon first login
+│   ├── fool_session.json         # will be created upon first login
 │   ├── hedgeye_credentials.json
-├── data/                       # Folder to save scraper data to access later
-├── log/                        # Folder for log files
-├── utils/                      # Utility functions
+├── data/                         # Folder to save scraper data to access later
+├── log/                          # Folder for log files
+├── utils/                        # Utility functions
 │   ├── __init__.py
-│   ├── logger.py               # Logger utility
-│   ├── telegram_sender.py      # Telegram sending utility
-│   ├── time_utils.py           # Time utility functions
-│   ├── websocket_sender.py     # WebSocket sending utility
-├── .env                        # Environment variables
-├── .env.example                # Environment variables
-├── .gitignore                  # Git ignore file
-├── README.md                   # Project documentation
-├── altucher_scraper.py         # Altucher ticker scraper
-├── banyan_image_scraper.py     # Banayan image scraper
-├── bearcave_scraper.py         # Bearcave ticker scraper
-├── citron_scraper.py           # Citron media scraper
-├── cnbc_html_scraper.py        # CNBC ticker scraper html implelementation
-├── cnbc_scraper.py             # CNBC ticker scraper
-├── gmail_scraper.py            # Gmail ticker scraper
-├── gmail_scraper_a2.py         # Gmail ticker scraper second account
-├── grizzly_scraper.py          # Grizzly Media scraper
-├── hedgeye_html_scraper.py     # Hedgeye html scraper implementation
-├── hedgeye_scraper.py          # Hedgeye article scraper
-├── hindenburg_scraper.py       # Hindenburg pdf ticker scraper
-├── kerrisdale_scraper.py       # Kerrisdale pdf ticker scraper
-├── motley_fool_scraper.py      # Motley ticker scraper
-├── mudddy_waters_scraper.py    # Muddy Waters Media scraper
-├── navallier_old_scraper.py    # Navallier old ticker scraper
-├── oxfordclub_scraper.py       # OxfordClub ticker scraper
-├── requirements.txt            # Project dependencies
-├── stocknews_html_scraper.py   # StockNews ticker scraper html implelementation
-└── stocknews_scraper.py        # StockNews ticker scraper
+│   ├── logger.py                 # Logger utility
+│   ├── telegram_sender.py        # Telegram sending utility
+│   ├── time_utils.py             # Time utility functions
+│   ├── websocket_sender.py       # WebSocket sending utility
+├── .env                          # Environment variables
+├── .env.example                  # Environment variables
+├── .gitignore                    # Git ignore file
+├── README.md                     # Project documentation
+├── altucher_scraper.py           # Altucher ticker scraper
+├── banyan_image_scraper.py       # Banayan image scraper
+├── bearcave_scraper.py           # Bearcave ticker scraper
+├── citron_scraper.py             # Citron media scraper
+├── cnbc_html_scraper.py          # CNBC ticker scraper html implelementation
+├── cnbc_scraper.py               # CNBC ticker scraper
+├── gmail_scraper.py              # Gmail ticker scraper
+├── gmail_scraper_a2.py           # Gmail ticker scraper second account
+├── grizzly_scraper.py            # Grizzly Media scraper
+├── hedgeye_html_scraper.py       # Hedgeye html scraper implementation
+├── hedgeye_scraper.py            # Hedgeye article scraper
+├── hindenburg_scraper.py         # Hindenburg pdf ticker scraper
+├── kerrisdale_scraper.py         # Kerrisdale pdf ticker scraper
+├── motley_fool_scraper.py        # Motley ticker scraper
+├── mudddy_waters_scraper.py      # Muddy Waters Media scraper
+├── navallier_old_csv_scraper.py  # Navallier protfolio CSV scraper
+├── navallier_old_scraper.py      # Navallier old ticker scraper
+├── oxfordclub_scraper.py         # OxfordClub ticker scraper
+├── requirements.txt              # Project dependencies
+├── stocknews_html_scraper.py     # StockNews ticker scraper html implelementation
+└── stocknews_scraper.py          # StockNews ticker scraper
 ```
 
 ### Important Notes

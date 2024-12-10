@@ -201,7 +201,7 @@ async def run_gmail_scraper():
                     last_seen_ids.append(messages[0]["id"])
 
                     with open(PROCESSED_IDS_FILE, "w") as f:
-                        json.dump(last_seen_ids, f)
+                        json.dump(last_seen_ids, f, indent=2)
                 else:
                     log_message("No new emails found.", "INFO")
 

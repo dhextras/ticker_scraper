@@ -38,7 +38,7 @@ def load_processed_urls():
 
 def save_processed_urls(urls):
     with open(PROCESSED_URLS_FILE, "w") as f:
-        json.dump(list(urls), f)
+        json.dump(list(urls), f, indent=2)
     log_message("Processed URLs saved.", "INFO")
 
 
@@ -46,7 +46,9 @@ async def fetch_json(session):
     timestamp = int(time.time() * 10000)
 
     try:
-        async with session.get(f"{JSON_URL}?limit=10&timestamp={timestamp}") as response:
+        async with session.get(
+            f"{JSON_URL}?limit=10&timestamp={timestamp}"
+        ) as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched posts from JSON", "INFO")

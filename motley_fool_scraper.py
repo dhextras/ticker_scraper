@@ -77,7 +77,7 @@ def load_processed_urls():
 
 def save_processed_urls(urls):
     with open(PROCESSED_URLS_FILE, "w") as f:
-        json.dump(list(urls), f)
+        json.dump(list(urls), f, indent=2)
     log_message("Processed URLs saved.", "INFO")
 
 
@@ -253,7 +253,7 @@ def save_session_credentials(creds):
     try:
         os.makedirs(os.path.dirname(CREDS_PATH), exist_ok=True)
         with open(CREDS_PATH, "w") as f:
-            json.dump(creds, f)
+            json.dump(creds, f, indent=2)
     except Exception as e:
         log_message(f"Error saving credentials: {e}", "ERROR")
 

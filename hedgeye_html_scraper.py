@@ -387,6 +387,7 @@ async def monitor_feeds():
                                         ].isoformat(),
                                     },
                                     f,
+                                    indent=2,
                                 )
 
                 except Exception as e:
