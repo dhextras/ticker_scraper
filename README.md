@@ -46,6 +46,8 @@ pip install -r requirements.txt
 
    ```plaintext
    WS_SERVER_URL=  # WebSocket server URL
+   CLOUDFLARE_BYPASS_SERVER_API_KEY= # SAME BYPASS API KEY You set in the falsk server
+   CLOUDFLARE_BYPASS_SERVER_URL= # FLASK server Url
 
    # OxfordClub scraper settings
    OXFORDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfordClub

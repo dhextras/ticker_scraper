@@ -11,7 +11,6 @@ import aiohttp
 import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
-
 from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -27,6 +26,8 @@ PROCESSED_URLS_FILE = "data/muddy_waters_processed_urls.json"
 SESSION_FILE = "data/muddy_waters_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("MUDDY_WATERS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MUDDY_WATERS_TELEGRAM_GRP")
+API_KEY = os.getenv("CLOUDFLARE_SERVER_API_KEY")
+BYPASS_SERVER_URL = os.getenv("CLOUDFLARE_SERVER_URL")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
@@ -49,7 +50,7 @@ def load_cookies(frash=False) -> Optional[Dict[str, Any]]:
                 "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
                 "WARNING",
             )
-            bypass = bypasser(JSON_URL, SESSION_FILE)
+            bypass = bypasser(API_KEY, BYPASS_SERVER_URL, JSON_URL, SESSION_FILE)
 
             if not bypass or bypass == False:
                 return
@@ -250,7 +251,9 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all(
+        [TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL, API_KEY, BYPASS_SERVER_URL]
+    ):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
