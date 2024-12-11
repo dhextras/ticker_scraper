@@ -39,10 +39,9 @@ def load_cookies(frash=False) -> Optional[Dict[str, Any]]:
         if frash == False:
             if not os.path.exists(SESSION_FILE):
                 log_message(f"Session file not found: {SESSION_FILE}", "WARNING")
-                return None
-
-            with open(SESSION_FILE, "r") as f:
-                cookies = json.load(f)
+            else:
+                with open(SESSION_FILE, "r") as f:
+                    cookies = json.load(f)
 
         # Validate cookies again
         if not cookies or cookies.get("cf_clearance", "") == "":
