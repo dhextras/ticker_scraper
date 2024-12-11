@@ -24,7 +24,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
-
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -39,8 +38,8 @@ WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 DATA_DIR = "data"
 RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_proxy.json")
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_accounts.json")
-# LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
-LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_old_alert.json")
+LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
+# LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_old_alert.json")
 
 # Ensure data, cred directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
