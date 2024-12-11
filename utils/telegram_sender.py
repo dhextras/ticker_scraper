@@ -1,5 +1,6 @@
-import aiohttp
+import ssl
 
+import aiohttp
 from utils.logger import log_message
 
 
@@ -18,9 +19,15 @@ async def send_telegram_message(message, bot_token, chat_id):
     telegram_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
 
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(telegram_url, json=payload) as response:
+            async with session.post(
+                telegram_url, json=payload, ssl=ssl_context
+            ) as response:
                 if response.status == 200:
                     return await response.json()
                 else:
