@@ -27,7 +27,7 @@ SESSION_FILE = "data/muddy_waters_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("MUDDY_WATERS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MUDDY_WATERS_TELEGRAM_GRP")
 API_KEY = os.getenv("CLOUDFLARE_SERVER_API_KEY")
-BYPASS_SERVER_URL = os.getenv("CLOUDFLARE_SERVER_URL")
+BYPASS_SERVER_URL = os.getenv("CLOUDFLARE_BYPASS_SERVER_URL")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
