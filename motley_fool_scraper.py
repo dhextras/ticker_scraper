@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import aiohttp
+from bs4 import BeautifulSoup
 import pytz
 from dotenv import load_dotenv
 from selenium.webdriver.chrome.options import Options
@@ -83,17 +84,13 @@ def save_processed_urls(urls):
 async def get_api_session(driver):
     """Fetch the API session token for GraphQL requests"""
     try:
-        session_response = driver.request(
-            "GET", "https://www.fool.com/premium/api/auth/session"
+        driver.get(
+            "https://www.fool.com/premium/api/auth/session"
         )
-        if session_response.status_code == 200:
-            return session_response.json()
-        else:
-            log_message(
-                f"Failed to get API session token: {session_response.status_code}",
-                "ERROR",
-            )
-            return None
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+        json_data = soup.find('pre').text 
+        return json.loads(json_data)
     except Exception as e:
         log_message(f"Error getting API session token: {e}", "ERROR")
         return None
