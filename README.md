@@ -14,7 +14,7 @@ If you don't have Python and pip installed, you can install them using the follo
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-pip python3-venv
+sudo apt install python3 python3-pip python3-venv python3-dev python3-tk
 ```
 
 ## Step 1: Setup the Virtual Environment
@@ -247,11 +247,15 @@ You can run each of the scripts based on your needs:
 
 - To run the **Muddy Waters Media scraper**, use:
 
+  - Gotta install google chrome as well as install gui and run from there
+
   ```bash
   python mudddy_waters_scraper.py
   ```
 
 - To run the **Grizzly Media scraper**, use:
+
+  - Gotta install google chrome as well as install gui and run from there
 
   ```bash
   python grizzly_scraper.py
