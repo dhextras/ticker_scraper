@@ -94,7 +94,7 @@ async def fetch_json(session, cookies):
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
-                return data
+                return data, None
             elif response.status == 403:
                 log_message(
                     "CF_CLEARANCE expired trying to revalidate it while fetching json",
@@ -103,15 +103,15 @@ async def fetch_json(session, cookies):
                 cookies = load_cookies(frash=True)
                 if not cookies:
                     raise Exception("CF_CLEARANCE Failed: Post")
-                return []
+                return [], cookies
             else:
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return []
+                return [], None
     except Exception as e:
         if "CF_CLEARANCE Failed" in str(e):
             raise
         log_message(f"Error fetching JSON: {e}", "ERROR")
-        return []
+        return [], None
 
 
 async def extract_ticker_from_pdf(session, url, cookies):
@@ -137,10 +137,10 @@ async def extract_ticker_from_pdf(session, url, cookies):
                     # Take the first all-caps word after a bracket
                     for match in matches:
                         if match.isupper():
-                            return match
+                            return match, None
 
                 log_message(f"No ticker found in PDF: {url}", "WARNING")
-                return None
+                return None, None
             elif response.status == 403:
                 log_message(
                     f"CF_CLEARANCE expired trying to revalidate it while fetching url: {url}",
@@ -149,13 +149,13 @@ async def extract_ticker_from_pdf(session, url, cookies):
                 cookies = load_cookies(frash=True)
                 if not cookies:
                     raise Exception(f"CF_CLEARANCE Failed, url: {url}")
-                return None
+                return None, cookies
             else:
                 log_message(f"Failed to fetch PDF: HTTP {response.status}", "ERROR")
-                return None
+                return None, None
     except Exception as e:
         log_message(f"Error processing PDF {url}: {e}", "ERROR")
-        return None
+        return None, None
 
 
 async def send_posts_to_telegram(urls):
@@ -213,8 +213,9 @@ async def run_scraper():
                     break
 
                 log_message("Checking for new posts...")
-                posts = await fetch_json(session, cookies)
+                posts, pos_cookies = await fetch_json(session, cookies)
 
+                cookies = pos_cookies if pos_cookies is not None else cookies
                 if not posts:
                     log_message("Failed to fetch posts or no posts returned", "ERROR")
                     await asyncio.sleep(CHECK_INTERVAL)
@@ -232,9 +233,11 @@ async def run_scraper():
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
-                            ticker = await extract_ticker_from_pdf(
+                            ticker, pos_cookies = await extract_ticker_from_pdf(
                                 session, url, cookies
                             )
+
+                            cookies = pos_cookies if pos_cookies is not None else cookies
                             if ticker:
                                 await send_to_telegram(url, ticker)
                         processed_urls.add(url)
