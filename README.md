@@ -245,7 +245,7 @@ You can run each of the scripts based on your needs:
 
 - To run the **Muddy Waters Media scraper**, use:
 
-  - Follow from [here first](#)
+  - Follow from [here first](#step-7-install-gui)
 
   ```bash
   python mudddy_waters_scraper.py
@@ -253,7 +253,7 @@ You can run each of the scripts based on your needs:
 
 - To run the **Grizzly Media scraper**, use:
 
-  - Gotta install google chrome as well as install gui and run from there
+  - Follow from [here first](#step-7-install-gui)
 
   ```bash
   python grizzly_scraper.py
