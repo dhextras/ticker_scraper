@@ -26,8 +26,6 @@ PROCESSED_URLS_FILE = "data/grizzly_processed_urls.json"
 SESSION_FILE = "data/grizzly_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("GRIZZLY_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("GRIZZLY_TELEGRAM_GRP")
-API_KEY = os.getenv("CLOUDFLARE_SERVER_API_KEY")
-BYPASS_SERVER_URL = os.getenv("CLOUDFLARE_BYPASS_SERVER_URL")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
@@ -251,7 +249,7 @@ async def run_scraper():
 
 def main():
     if not all(
-        [TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL, API_KEY, BYPASS_SERVER_URL]
+        [TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]
     ):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
