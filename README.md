@@ -245,7 +245,7 @@ You can run each of the scripts based on your needs:
 
 - To run the **Muddy Waters Media scraper**, use:
 
-  - Gotta install google chrome as well as install gui and run from there
+  - Follow from [here first](#)
 
   ```bash
   python mudddy_waters_scraper.py
@@ -272,6 +272,23 @@ You can run each of the scripts based on your needs:
   ```
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
+
+## Step 7: Install GUI
+
+> These are only for grizzly & muddy waters ( the ones that need cloudflare bypass )
+
+  1. Install GUI and setup [gnome for the ubuntu server](./gui_setup.md)
+  2. Install google chrome from [here](#1-install-google-chrome)
+  3. Make sure to make the chrome full size after opening via drissionPage
+      ```bash
+      python
+      ```
+
+      ```python
+      from DrissionPage import ChromiumPage
+      driver = ChromiumPage()
+      ```
+  4. Open tmux and setup everything in gui then, open it via ssh and run the script there
 
 ## File Structure Overview
 
@@ -303,6 +320,7 @@ ticker_scraper/
 ├── gmail_scraper.py              # Gmail ticker scraper
 ├── gmail_scraper_a2.py           # Gmail ticker scraper second account
 ├── grizzly_scraper.py            # Grizzly Media scraper
+├── gui_setup.md                  # Setting up gui for ubuntu server
 ├── hedgeye_html_scraper.py       # Hedgeye html scraper implementation
 ├── hedgeye_scraper.py            # Hedgeye article scraper
 ├── hindenburg_scraper.py         # Hindenburg pdf ticker scraper
