@@ -16,3 +16,4 @@ requestium
 selenium-requests
 pdfminer.six
 DrissionPage
+pyautogui
