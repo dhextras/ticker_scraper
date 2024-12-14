@@ -49,7 +49,7 @@ def load_cookies(frash=False) -> Optional[Dict[str, Any]]:
                 "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
                 "WARNING",
             )
-            bypass = bypasser(API_KEY, BYPASS_SERVER_URL, JSON_URL, SESSION_FILE)
+            bypass = bypasser(JSON_URL, SESSION_FILE)
 
             if not bypass or bypass == False:
                 return
