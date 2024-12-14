@@ -278,7 +278,7 @@ Make sure your `.env` file and `cred/` folder are properly set up before running
 > These are only for grizzly & muddy waters ( the ones that need cloudflare bypass )
 
   1. Install GUI and setup [gnome for the ubuntu server](./gui_setup.md)
-  2. Install google chrome from [here](#1-install-google-chrome)
+  2. Install google chrome from step 5
   3. Make sure to make the chrome full size after opening via drissionPage
       ```bash
       python
