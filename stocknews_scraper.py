@@ -26,11 +26,21 @@ PROCESSED_JSON_FILE = "data/stocknews_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
+CONTENT_SNIPPET_LENGTH = 3000  # Number of characters to save for content comparison
 
 os.makedirs("data", exist_ok=True)
 
 
 async def fetch_sitemap(session):
+    """
+    Fetch URLs from the sitemap.
+
+    Args:
+        session (aiohttp.ClientSession): The aiohttp client session
+
+    Returns:
+        list: List of URLs from the sitemap
+    """
     try:
         async with session.get(SITEMAP_URL) as response:
             content = await response.text()
@@ -49,67 +59,133 @@ async def fetch_sitemap(session):
 
 
 def load_processed_urls():
+    """
+    Load previously processed URLs from JSON file.
+
+    Returns:
+        dict: Dictionary of processed URLs
+    """
     try:
         with open(PROCESSED_JSON_FILE, "r") as f:
             return json.load(f)
     except FileNotFoundError:
-        return []
+        return {}
 
 
 def save_processed_urls(urls):
+    """
+    Save processed URLs to JSON file.
+
+    Args:
+        urls (dict): Dictionary of processed URLs
+    """
     with open(PROCESSED_JSON_FILE, "w") as f:
         json.dump(urls, f, indent=2)
         log_message("Processed URLs saved.", "INFO")
 
 
-async def process_new_urls(session, new_urls):
-    for url in new_urls:
-        await process_url(session, url)
+async def fetch_blog_content(session, url):
+    """
+    Fetch the first 1000 characters of a blog post asynchronously.
 
+    Args:
+        session (aiohttp.ClientSession): The aiohttp client session
+        url (str): URL of the blog post
 
-async def process_url(session, url):
-    log_message(f"Processing URL: {url}")
+    Returns:
+        dict: A dictionary containing url, content snippet, and title
+    """
     try:
         async with session.get(url) as response:
             content = await response.text()
+
         soup = BeautifulSoup(content, "html.parser")
-        content = soup.get_text()
+        text_content = soup.get_text(strip=True)
+        post_title = soup.title.string if soup.title else "No title found"
 
-        if SEARCH_WORD in content:
-            match = re.search(r"NASDAQ:\s+([A-Z]+)", content, re.IGNORECASE)
-            if match:
-                stock_symbol = match.group(1)
-                post_title = soup.title.string if soup.title else "No title found"
-                post_date = "not fetching at the moment"
-                log_message(f"Match found: {stock_symbol} in {url}", "INFO")
-                await send_match_to_telegram(url, stock_symbol, post_title, post_date)
-            else:
-                log_message(f"No stock symbol match found in {url}", "WARNING")
-        else:
-            log_message(f"No match for search word in {url}", "WARNING")
+        # Truncate content to specified length
+        content_snippet = text_content[:CONTENT_SNIPPET_LENGTH]
+
+        return {
+            "url": url,
+            "content_snippet": content_snippet,
+            "title": post_title
+        }
     except Exception as e:
-        log_message(f"Error processing URL {url}: {e}", "ERROR")
+        log_message(f"Error fetching content for {url}: {e}", "ERROR")
+        return {
+            "url": url,
+            "content_snippet": None,
+            "title": "No title found",
+            "error": str(e)
+        }
 
 
-async def send_posts_to_telegram(urls, timestamp):
-    joined_urls = "\n  ".join(urls)
+async def process_new_entries(session, new_urls, processed_urls):
+    """
+    Asynchronously process new blog entries, checking content changes and potential stock matches.
 
-    message = f"<b>New Posts Found</b>\n\n"
-    message += f"<b>Time:</b> {timestamp}\n"
-    message += f"<b>URLS:</b>\n  {joined_urls}"
+    Args:
+        session (aiohttp.ClientSession): The aiohttp client session
+        new_urls (list): List of new blog URLs
+        processed_urls (dict): Dictionary of previously processed URLs
 
-    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"New Posts sent to Telegram: {urls}", "INFO")
+    Returns:
+        list: List of entries that have changed content
+    """
+    # Create tasks for fetching content of all new URLs
+    content_tasks = [fetch_blog_content(session, url) for url in new_urls]
+    contents = await asyncio.gather(*content_tasks)
+
+    changed_entries = []
+    for content_info in contents:
+        url = content_info["url"]
+
+        if not content_info.get("content_snippet"):
+            continue
+
+        current_snippet = content_info["content_snippet"]
+        if url not in processed_urls or processed_urls[url].get("content_snippet") != current_snippet:
+            processed_urls[url] = {
+                "content_snippet": current_snippet
+            }
+
+            # Check for NASDAQ match
+            if SEARCH_WORD in current_snippet:
+                match = re.search(r"NASDAQ:\s+([A-Z]+)", current_snippet, re.IGNORECASE)
+                if match:
+                    stock_symbol = match.group(1)
+                    log_message(f"Match found: {stock_symbol} in {url}", "INFO")
+
+                    await send_match_to_telegram(
+                        url, 
+                        stock_symbol, 
+                        content_info["title"]
+                    )
+
+                    changed_entries.append({
+                        "url": url,
+                        "title": content_info["title"]
+                    })
+
+    return changed_entries
 
 
-async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
+async def send_match_to_telegram(url, stock_symbol, post_title):
+    """
+    Send a match notification to Telegram and WebSocket.
+
+    Args:
+        url (str): URL of the blog post
+        stock_symbol (str): Matched stock symbol
+        post_title (str): Title of the blog post
+    """
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
     message = f"<b>New Stock Match Found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
     message += f"<b>Stock Symbol:</b> {stock_symbol}\n"
     message += f"<b>Post Title:</b> {post_title}\n"
-    message += f"<b>Post Date:</b> {post_date}\n"
 
     await send_ws_message(
         {
@@ -125,6 +201,9 @@ async def send_match_to_telegram(url, stock_symbol, post_title, post_date):
 
 
 async def run_scraper():
+    """
+    Main scraper run loop that checks for new blog posts during market hours.
+    """
     processed_urls = load_processed_urls()
 
     async with aiohttp.ClientSession() as session:
@@ -142,30 +221,50 @@ async def run_scraper():
 
                 log_message("Checking for new blog posts...")
                 current_urls = await fetch_sitemap(session)
-                new_urls = [url for url in current_urls if url not in processed_urls]
 
-                if new_urls:
+
+                if current_urls:
                     log_message(
-                        f"Found {len(new_urls)} new blog posts. Processing...", "INFO"
+                        f"Found {len(current_urls)} new blog posts. Processing...", "INFO"
                     )
-                    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
-                    await send_posts_to_telegram(new_urls, timestamp)
 
-                    await process_new_urls(session, new_urls)
+                    changed_entries = await process_new_entries(session, current_urls, processed_urls)
 
-                    # Only keep the list of current urls avaible in the sitemap
-                    processed_urls = current_urls
-                    save_processed_urls(current_urls)
+                    if changed_entries:
+                        timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                        await send_posts_to_telegram(changed_entries, timestamp)
 
-                else:
-                    log_message("No new blog posts found.", "INFO")
+                    processed_urls = {url: processed_urls.get(url, {}) for url in current_urls}
+                    save_processed_urls(processed_urls)
 
                 await asyncio.sleep(CHECK_INTERVAL)
 
 
+async def send_posts_to_telegram(entries, timestamp):
+    """
+    Send a list of new blog post URLs to Telegram.
+
+    Args:
+        entries (list): List of blog post entries
+        timestamp (str): Timestamp of the check
+    """
+    urls = [entry["url"] for entry in entries]
+    joined_urls = "\n  ".join(urls)
+
+    message = f"<b>New Posts Found</b>\n\n"
+    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>URLS:</b>\n  {joined_urls}"
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    log_message(f"New Posts sent to Telegram: {urls}", "INFO")
+
+
 def main():
+    """
+    Main function to run the scraper with error handling.
+    """
     if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
