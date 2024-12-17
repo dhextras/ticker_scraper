@@ -113,7 +113,7 @@ async def process_new_entries(session, new_entries, processed_urls):
         processed_urls (dict): Dictionary of previously processed URLs
 
     Returns:
-        list: List of entries that have changed content
+        list: List of entries that have changed content but doesn't have a ticker in it
     """
     content_tasks = [fetch_blog_content(session, entry["url"]) for entry in new_entries]
     contents = await asyncio.gather(*content_tasks)
@@ -143,8 +143,9 @@ async def process_new_entries(session, new_entries, processed_urls):
                         stock_symbol, 
                         entry["title"], 
                     )
+                    continue
 
-                    changed_entries.append(entry)
+            changed_entries.append(entry)
 
     return changed_entries
 

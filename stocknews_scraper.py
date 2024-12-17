@@ -131,7 +131,7 @@ async def process_new_entries(session, new_urls, processed_urls):
         processed_urls (dict): Dictionary of previously processed URLs
 
     Returns:
-        list: List of entries that have changed content
+        list: List of entries that have changed content but doesn't have a ticker in it
     """
     # Create tasks for fetching content of all new URLs
     content_tasks = [fetch_blog_content(session, url) for url in new_urls]
@@ -162,11 +162,12 @@ async def process_new_entries(session, new_urls, processed_urls):
                         stock_symbol, 
                         content_info["title"]
                     )
+                    continue
 
-                    changed_entries.append({
-                        "url": url,
-                        "title": content_info["title"]
-                    })
+            changed_entries.append({
+                "url": url,
+                "title": content_info["title"]
+            })
 
     return changed_entries
 
