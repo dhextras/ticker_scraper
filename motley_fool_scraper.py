@@ -8,14 +8,15 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import aiohttp
-from bs4 import BeautifulSoup
 import pytz
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -84,12 +85,10 @@ def save_processed_urls(urls):
 async def get_api_session(driver):
     """Fetch the API session token for GraphQL requests"""
     try:
-        driver.get(
-            "https://www.fool.com/premium/api/auth/session"
-        )
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        driver.get("https://www.fool.com/premium/api/auth/session")
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
-        json_data = soup.find('pre').text 
+        json_data = soup.find("pre").text
         return json.loads(json_data)
     except Exception as e:
         log_message(f"Error getting API session token: {e}", "ERROR")
