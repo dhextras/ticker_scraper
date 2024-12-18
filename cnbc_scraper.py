@@ -434,7 +434,7 @@ async def run_alert_monitor(uid, session_token):
 
                 try:
                     await check_for_new_alerts(uid, session_token)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.2)
 
                 except Exception as e:
                     log_message(f"Error checking alerts: {e}", "ERROR")

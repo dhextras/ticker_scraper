@@ -24,7 +24,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("INVESTOR_PLACE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("INVESTOR_PLACE_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 IPA_LOGIN_COOKIE = os.getenv("IPA_LOGIN_COOKIE")
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 0.3  # seconds
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "investorplace_alerts.json"
 JSON_URL = "https://investorplace.com/acceleratedprofits/wp-json/wp/v2/posts?author=25699,25547&categories=8&per_page=3"
