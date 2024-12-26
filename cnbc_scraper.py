@@ -340,12 +340,13 @@ async def process_article(article, uid, session_token, fetch_time):
             )
             article_timezone = published_date.tzinfo
             ticker = get_ticker(article_data)
+            ticker_type = "Sell" if "sell" in article_data.lower() else "Buy"
 
             if ticker:
                 await send_ws_message(
                     {
                         "name": "CNBC",
-                        "type": "Buy",
+                        "type": ticker_type,
                         "ticker": ticker,
                         "sender": "cnbc",
                     },
@@ -368,7 +369,7 @@ async def process_article(article, uid, session_token, fetch_time):
             )
 
             if ticker:
-                message += f"\n<b>Ticker:</b> {ticker}\n"
+                message += f"\n<b>Ticker:</b> {ticker_type} - {ticker}\n"
 
             await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             return True
