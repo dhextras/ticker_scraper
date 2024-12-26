@@ -103,21 +103,21 @@ async def fetch_blog_content(session, url):
         text_content = soup.get_text(strip=True)
         post_title = soup.title.string if soup.title else "No title found"
 
+        # Remove the realated blog post to avoid duplicate post sending
+        if "Related Blogs" in text_content:
+            text_content = text_content.split("Related Blogs")[0]
+
         # Truncate content to specified length
         content_snippet = text_content[:CONTENT_SNIPPET_LENGTH]
 
-        return {
-            "url": url,
-            "content_snippet": content_snippet,
-            "title": post_title
-        }
+        return {"url": url, "content_snippet": content_snippet, "title": post_title}
     except Exception as e:
         log_message(f"Error fetching content for {url}: {e}", "ERROR")
         return {
             "url": url,
             "content_snippet": None,
             "title": "No title found",
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -145,10 +145,11 @@ async def process_new_entries(session, new_urls, processed_urls):
             continue
 
         current_snippet = content_info["content_snippet"]
-        if url not in processed_urls or processed_urls[url].get("content_snippet") != current_snippet:
-            processed_urls[url] = {
-                "content_snippet": current_snippet
-            }
+        if (
+            url not in processed_urls
+            or processed_urls[url].get("content_snippet") != current_snippet
+        ):
+            processed_urls[url] = {"content_snippet": current_snippet}
 
             # Check for NASDAQ match
             if SEARCH_WORD in current_snippet:
@@ -158,16 +159,11 @@ async def process_new_entries(session, new_urls, processed_urls):
                     log_message(f"Match found: {stock_symbol} in {url}", "INFO")
 
                     await send_match_to_telegram(
-                        url, 
-                        stock_symbol, 
-                        content_info["title"]
+                        url, stock_symbol, content_info["title"]
                     )
                     continue
 
-            changed_entries.append({
-                "url": url,
-                "title": content_info["title"]
-            })
+            changed_entries.append({"url": url, "title": content_info["title"]})
 
     return changed_entries
 
@@ -223,13 +219,15 @@ async def run_scraper():
                 log_message("Checking for new blog posts...")
                 current_urls = await fetch_sitemap(session)
 
-
                 if current_urls:
                     log_message(
-                        f"Found {len(current_urls)} new blog posts. Processing...", "INFO"
+                        f"Found {len(current_urls)} new blog posts. Processing...",
+                        "INFO",
                     )
 
-                    changed_entries = await process_new_entries(session, current_urls, processed_urls)
+                    changed_entries = await process_new_entries(
+                        session, current_urls, processed_urls
+                    )
 
                     if changed_entries:
                         timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
@@ -237,7 +235,9 @@ async def run_scraper():
                         )
                         await send_posts_to_telegram(changed_entries, timestamp)
 
-                    processed_urls = {url: processed_urls.get(url, {}) for url in current_urls}
+                    processed_urls = {
+                        url: processed_urls.get(url, {}) for url in current_urls
+                    }
                     save_processed_urls(processed_urls)
 
                 await asyncio.sleep(CHECK_INTERVAL)

@@ -87,20 +87,17 @@ async def fetch_blog_content(session, url):
         soup = BeautifulSoup(content, "html.parser")
         text_content = soup.get_text(strip=True)
 
+        # Remove the realated blog post to avoid duplicate post sending
+        if "Related Blogs" in text_content:
+            text_content = text_content.split("Related Blogs")[0]
+
         # Truncate content to specified length
         content_snippet = text_content[:CONTENT_SNIPPET_LENGTH]
 
-        return {
-            "url": url,
-            "content_snippet": content_snippet
-        }
+        return {"url": url, "content_snippet": content_snippet}
     except Exception as e:
         log_message(f"Error fetching content for {url}: {e}", "ERROR")
-        return {
-            "url": url,
-            "content_snippet": None,
-            "error": str(e)
-        }
+        return {"url": url, "content_snippet": None, "error": str(e)}
 
 
 async def process_new_entries(session, new_entries, processed_urls):
@@ -126,10 +123,11 @@ async def process_new_entries(session, new_entries, processed_urls):
             continue
 
         current_snippet = content_info["content_snippet"]
-        if url not in processed_urls or processed_urls[url].get("content_snippet") != current_snippet:
-            processed_urls[url] = {
-                "content_snippet": current_snippet
-            }
+        if (
+            url not in processed_urls
+            or processed_urls[url].get("content_snippet") != current_snippet
+        ):
+            processed_urls[url] = {"content_snippet": current_snippet}
 
             # Check for NASDAQ match
             if SEARCH_WORD in current_snippet:
@@ -139,9 +137,9 @@ async def process_new_entries(session, new_entries, processed_urls):
                     log_message(f"Match found: {stock_symbol} in {url}", "INFO")
 
                     await send_match_to_telegram(
-                        url, 
-                        stock_symbol, 
-                        entry["title"], 
+                        url,
+                        stock_symbol,
+                        entry["title"],
                     )
                     continue
 
@@ -196,7 +194,9 @@ async def run_scraper():
                         "INFO",
                     )
 
-                    changed_entries = await process_new_entries(session, current_entries, processed_urls)
+                    changed_entries = await process_new_entries(
+                        session, current_entries, processed_urls
+                    )
 
                     if changed_entries:
                         timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
