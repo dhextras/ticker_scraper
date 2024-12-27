@@ -10,10 +10,10 @@ def get_next_market_times():
     """Calculates the next market open and close times, adjusts to the next day if already past market close."""
     current_time_edt = datetime.now(pytz.timezone("America/New_York"))
     market_open_time = current_time_edt.replace(
-        hour=8, minute=0, second=0, microsecond=0
+        hour=6, minute=0, second=0, microsecond=0
     )
     market_close_time = current_time_edt.replace(
-        hour=17, minute=0, second=0, microsecond=0
+        hour=19, minute=0, second=0, microsecond=0
     )
 
     # If current time is past the close time, set the open/close times for the next day
