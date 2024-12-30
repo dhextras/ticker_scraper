@@ -123,6 +123,12 @@ pip install -r requirements.txt
    INVESTOR_PLACE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Navallier Old
    INVESTOR_PLACE_TELEGRAM_GRP= # Telegram group ID for Navallier Old
    IPA_LOGIN_COOKIE= # Cookie for Navallier Old
+
+   # Zacks Trading Service settings
+   ZACKS_TS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Zacks TS alerts
+   ZACKS_TS_TELEGRAM_GRP=  # Telegram group ID for Zacks TS alerts
+   ZACKS_USERNAME=  # Zacks login username
+   ZACKS_PASSWORD=  # Zacks login password
    ```
 
 **Note:** Fill in the values for each variable as needed.
