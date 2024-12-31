@@ -277,10 +277,13 @@ async def get_article_data(article_id, uid, session_token):
 
 
 def get_ticker(data):
-    match = re.search(r"shares of\s+([A-Z]+),", data)
+    match = re.search(r"shares of\s+([A-Z]+),\s+(\w+)\s+its", data)
     if match:
-        return match.group(1)
-    return None
+        ticker = match.group(1)
+        action_word = match.group(2).lower()
+        action = "buy" if action_word == "increasing" else "sell"
+        return ticker, action
+    return None, None
 
 
 async def fetch_latest_assets() -> List[Dict]:
@@ -348,14 +351,13 @@ async def process_article(article, uid, session_token, fetch_time):
                 article["datePublished"], "%Y-%m-%dT%H:%M:%S%z"
             )
             article_timezone = published_date.tzinfo
-            ticker = get_ticker(article_data)
-            ticker_type = "Sell" if "sell" in article_data.lower() else "Buy"
+            ticker, action = get_ticker(article_data)
 
             if ticker:
                 await send_ws_message(
                     {
                         "name": "CNBC",
-                        "type": ticker_type,
+                        "type": action,
                         "ticker": ticker,
                         "sender": "cnbc",
                     },
@@ -378,7 +380,7 @@ async def process_article(article, uid, session_token, fetch_time):
             )
 
             if ticker:
-                message += f"\n<b>Ticker:</b> {ticker_type} - {ticker}\n"
+                message += f"\n<b>Ticker:</b> {action} - {ticker}\n"
 
             await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             return True
