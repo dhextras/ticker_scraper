@@ -125,8 +125,8 @@ pip install -r requirements.txt
    IPA_LOGIN_COOKIE= # Cookie for Navallier Old
 
    # Zacks Trading Service settings
-   ZACKS_TS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Zacks TS alerts
-   ZACKS_TS_TELEGRAM_GRP=  # Telegram group ID for Zacks TS alerts
+   ZACKS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Zacks alerts
+   ZACKS_TELEGRAM_GRP=  # Telegram group ID for Zacks alerts
    ZACKS_USERNAME=  # Zacks login username
    ZACKS_PASSWORD=  # Zacks login password
    ```

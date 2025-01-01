@@ -19,8 +19,8 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TS_TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("ZACKS_TS_TELEGRAM_GRP")
+TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 ZACKS_USERNAME = os.getenv("ZACKS_USERNAME")
 ZACKS_PASSWORD = os.getenv("ZACKS_PASSWORD")
