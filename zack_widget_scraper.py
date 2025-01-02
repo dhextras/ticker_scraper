@@ -76,7 +76,18 @@ async def fetch_ticker_data(session, ticker):
     try:
         async with session.get(url, headers=headers) as response:
             if response.status != 200:
-                return ticker, None
+                if response.status == 429:
+                    log_message(
+                        f"Got hit with rate limitation for '{ticker}', sleeping for a bit...",
+                        "WARNING",
+                    )
+                    await asyncio.sleep(0.2)
+                else:
+                    log_message(
+                        f"Fetching '{ticker}' failed with status '{response.status}': {response.text}",
+                        "ERROR",
+                    )
+                    return ticker, None
 
             data = await response.json()
             return ticker, data
@@ -178,6 +189,8 @@ async def process_results(results):
 
         for ticker, data in results:
             # Check if data is an object (dictionary) vs empty (None or [])
+            if data is None:
+                continue
             has_alert = isinstance(data, dict)
 
             # If ticker is in our saved list
