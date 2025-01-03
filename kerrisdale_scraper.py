@@ -45,7 +45,11 @@ def save_processed_urls(urls):
 
 async def fetch_json(session):
     try:
-        async with session.get(JSON_URL) as response:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+
+        async with session.get(JSON_URL, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
