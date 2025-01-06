@@ -17,3 +17,5 @@ selenium-requests
 pdfminer.six
 DrissionPage
 pyautogui
+openai
+pydantic

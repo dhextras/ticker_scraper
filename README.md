@@ -46,6 +46,7 @@ pip install -r requirements.txt
 
    ```plaintext
    WS_SERVER_URL=  # WebSocket server URL
+   GPT_API_KEY= # Api key for gpt
 
    # OxfordClub scraper settings
    OXFORDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfordClub
