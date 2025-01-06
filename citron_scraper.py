@@ -8,6 +8,7 @@ import aiohttp
 import pytz
 from dotenv import load_dotenv
 
+from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -59,16 +60,19 @@ async def fetch_json(session):
         return []
 
 
-async def send_to_telegram(url):
+async def send_to_telegram(url, ticker_object: TickerAnalysis | None):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
 
-    # No need to find the ticker nor send to ws for now
-    # ticker = None
+    # No need to send to ws for now
 
     message = f"<b>New Citron Research Report</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
-    # message += f"<b>Identifier:</b> {ticker}\n"
+
+    if ticker_object and ticker_object.found:
+        message += f"\n<b>Ticker:</b> {ticker_object.ticker}\n"
+        message += f"<b>Company:</b> {ticker_object.company_name}\n"
+        message += f"<b>Confidency:</b> {ticker_object.confidence}\n"
 
     # await send_ws_message(
     #     {
@@ -114,7 +118,10 @@ async def run_scraper():
                     log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
 
                     for url in new_urls:
-                        await send_to_telegram(url)
+                        ticker_object = None
+                        if url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                            ticker_object = await analyze_image_for_ticker(url)
+                        await send_to_telegram(url, ticker_object)
                         processed_urls.add(url)
                     save_processed_urls(processed_urls)
                 else:

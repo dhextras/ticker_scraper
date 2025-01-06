@@ -8,6 +8,7 @@ import aiohttp
 import pytz
 from dotenv import load_dotenv
 
+from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -100,13 +101,21 @@ async def check_image_url(session: aiohttp.ClientSession, name: str, url: str) -
         return False
 
 
-async def send_image_to_telegram(name: str, url: str):
+async def send_to_telegram(name: str, url: str, ticker_obj: TickerAnalysis):
     """Send image URL to Telegram."""
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
+
+    # No need to send to ws for now
+
     message = f"<b>New Banyan Hill Image Found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>Source:</b> {name}\n"
-    message += f"<b>URL:</b> {url}"
+    message += f"<b>URL:</b> {url}\n"
+
+    if ticker_obj and ticker_obj.found:
+        message += f"\n<b>Ticker:</b> {ticker_obj.ticker}\n"
+        message += f"<b>Company:</b> {ticker_obj.company_name}\n"
+        message += f"<b>Confidency:</b> {ticker_obj.confidence}\n"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Image URL sent to Telegram: {url}", "INFO")
@@ -136,7 +145,8 @@ async def run_scraper():
 
                 for name, url in new_image_urls:
                     if await check_image_url(session, name, url):
-                        await send_image_to_telegram(name, url)
+                        ticker_obj = await analyze_image_for_ticker(url)
+                        await send_to_telegram(name, url, ticker_obj)
                         processed_urls.add(url)
                     await asyncio.sleep(CHECK_INTERVAL)
 

@@ -11,6 +11,7 @@ import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
 
+from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -103,13 +104,21 @@ async def send_posts_to_telegram(urls):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_to_telegram(url, ticker):
+async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
 
     message = f"<b>New Kerrisdale Ticker found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
-    message += f"<b>Ticker:</b> {ticker}\n"
+
+    if isinstance(ticker_obj, str):
+        ticker = ticker_obj
+        message += f"<b>Ticker:</b> {ticker_obj}\n"
+    else:
+        ticker = ticker_obj.ticker
+        message += f"\n<b>Ticker:</b> {ticker_obj.ticker}\n"
+        message += f"<b>Company:</b> {ticker_obj.company_name}\n"
+        message += f"<b>Confidency:</b> {ticker_obj.confidence}\n"
 
     await send_ws_message(
         {
@@ -158,7 +167,12 @@ async def run_scraper():
                         if url.lower().endswith(".pdf"):
                             ticker = await extract_ticker_from_pdf(session, url)
                             if ticker:
-                                await send_to_telegram(url, ticker)
+                                await send_to_telegram(url, ticker_obj=ticker)
+                        elif url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                            ticker_object = await analyze_image_for_ticker(url)
+                            if ticker_object and ticker_object.found:
+                                await send_to_telegram(url, ticker_obj=ticker_object)
+
                         processed_urls.add(url)
                     save_processed_urls(processed_urls)
                 else:
