@@ -130,6 +130,11 @@ pip install -r requirements.txt
    ZACKS_TELEGRAM_GRP=  # Telegram group ID for Zacks alerts
    ZACKS_USERNAME=  # Zacks login username
    ZACKS_PASSWORD=  # Zacks login password
+
+   # Youtube Channel Monitor settings
+   YOUTUBE_TELEGRAM_BOT_TOKEN= # Telegram bot token for youtube channel monitor
+   YOUTUBE_TELEGRAM_GRP= # Telegram group ID for youtube channel monitor
+   YOUTUBE_PLAYLIST_ID= # Play list id of the channel you wants to monitor
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -277,6 +282,14 @@ You can run each of the scripts based on your needs:
   ```bash
   python navallier_old_scraper.py
   ```
+
+
+- To run the **Youtube Channel Monitor**, use:
+
+  ```bash
+  python youtube_channel_monitor.py
+  ```
+
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
