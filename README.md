@@ -135,6 +135,10 @@ pip install -r requirements.txt
    YOUTUBE_TELEGRAM_BOT_TOKEN= # Telegram bot token for youtube channel monitor
    YOUTUBE_TELEGRAM_GRP= # Telegram group ID for youtube channel monitor
    YOUTUBE_PLAYLIST_ID= # Play list id of the channel you wants to monitor
+
+   # Beta Ville Scraper settings
+   BETA_VILLE_TELEGRAM_BOT_TOKEN= # Telegram bot token for beta ville scraper
+   BETA_VILLE_TELEGRAM_GRP= # Telegram group ID for beta ville scraper
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -283,11 +287,16 @@ You can run each of the scripts based on your needs:
   python navallier_old_scraper.py
   ```
 
-
 - To run the **Youtube Channel Monitor**, use:
 
   ```bash
   python youtube_channel_monitor.py
+  ```
+
+- To run the **Beta Ville Scraper**, use:
+
+  ```bash
+  python beta_ville_scrper.py
   ```
 
 
@@ -316,9 +325,13 @@ Make sure your `.env` file and `cred/` folder are properly set up before running
 ticker_scraper/
 ├── cred/                         # Folder for credential files
 │   ├── gmail_credentials.json
-│   ├── gmail_token.json
 │   ├── fool_session.json         # will be created upon first login
+│   ├── gmail_token_a1.json
+│   ├── gmail_token_a2.json
 │   ├── hedgeye_credentials.json
+│   ├── youtube_api_keys.json
+│   ├── zacks_ts_html_proxies.json
+│   ├── zacks_widget_proxies.json
 ├── data/                         # Folder to save scraper data to access later
 ├── log/                          # Folder for log files
 ├── utils/                        # Utility functions
@@ -334,6 +347,7 @@ ticker_scraper/
 ├── altucher_scraper.py           # Altucher ticker scraper
 ├── banyan_image_scraper.py       # Banayan image scraper
 ├── bearcave_scraper.py           # Bearcave ticker scraper
+├── beta_ville_scrper.py          # Beta Ville Scraper
 ├── citron_scraper.py             # Citron media scraper
 ├── cnbc_html_scraper.py          # CNBC ticker scraper html implelementation
 ├── cnbc_scraper.py               # CNBC ticker scraper
@@ -352,7 +366,11 @@ ticker_scraper/
 ├── oxfordclub_scraper.py         # OxfordClub ticker scraper
 ├── requirements.txt              # Project dependencies
 ├── stocknews_html_scraper.py     # StockNews ticker scraper html implelementation
-└── stocknews_scraper.py          # StockNews ticker scraper
+├── stocknews_scraper.py          # StockNews ticker scraper
+├── youtube_channel_monitor.py    # Moon Market channel monitor
+├── zack_html_ts_scraper.py       # Zacks trading service html implementation
+└── zack_widget_scraper.py        # Zacks widget3 ticker scraper
+
 ```
 
 ### Important Notes
