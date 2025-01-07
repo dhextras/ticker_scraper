@@ -101,7 +101,6 @@ class YouTubeMonitor:
 
     async def get_recent_videos(self, max_videos=5):
         api_key = self.get_next_available_api_key()
-        print(api_key)
         if not api_key:
             log_message("All API keys are currently restricted", "ERROR")
             return []
