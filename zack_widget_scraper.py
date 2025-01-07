@@ -30,7 +30,7 @@ DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
 TICKERS_FILE = DATA_DIR / "zacks_tickers.json"
 ALERTS_FILE = DATA_DIR / "zacks_widget_alerts.json"
-PROXY_FILE = CRED_DIR / "zacks_proxies.json"
+PROXY_FILE = CRED_DIR / "zacks_widget_proxies.json"
 
 # Global variables
 previous_alerts = set()
@@ -156,17 +156,15 @@ async def process_results(results):
                 continue
             has_alert = isinstance(data, dict)
 
-            if ticker in previous_alerts:
-                if not has_alert:
-                    new_sells.add(ticker)
-            else:
-                if has_alert:
-                    new_buys.add(ticker)
+            if ticker in previous_alerts and not has_alert:
+                new_sells.add(ticker)
+            elif ticker not in previous_alerts and has_alert:
+                new_buys.add(ticker)
 
         if new_buys or new_sells:
             current_time = datetime.now(pytz.utc)
 
-            # # Send WebSocket messages
+            # Send WebSocket messages
             # ws_tasks = []
             # for ticker in new_buys:
             #     ws_tasks.append(
@@ -194,7 +192,7 @@ async def process_results(results):
             #     )
             #
             # await asyncio.gather(*ws_tasks)
-            #
+
             # Prepare and send Telegram message
             changes = []
             if new_buys:
@@ -208,13 +206,15 @@ async def process_results(results):
                 f"\n{'\n'.join(changes)}"
             )
 
-            await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+            # Update alerts first
+            previous_alerts.difference_update(new_sells)
+            previous_alerts.update(new_buys)
 
-            # Update alerts with proper locking
-            async with alert_lock:
-                previous_alerts.difference_update(new_sells)
-                previous_alerts.update(new_buys)
-                await save_alerts(previous_alerts)
+            # Run operations concurrently
+            await asyncio.gather(
+                send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID),
+                save_alerts(previous_alerts),
+            )
 
             log_message(
                 f"Processed changes - Buys: {len(new_buys)}, Sells: {len(new_sells)}"
@@ -232,12 +232,8 @@ async def run_scraper():
     tickers = load_tickers()
     proxies = load_proxies()
 
-    if not tickers:
-        log_message("No tickers loaded", "CRITICAL")
-        return
-
-    if not proxies:
-        log_message("No proxies loaded", "CRITICAL")
+    if not tickers or not proxies:
+        log_message("Missing tickers or proxies", "CRITICAL")
         return
 
     while True:
@@ -257,21 +253,22 @@ async def run_scraper():
 
             try:
                 async with aiohttp.ClientSession() as session:
-                    batch_tasks = []
+                    all_results = []
+                    tasks = []
 
+                    # Create all tasks at once
                     for i in range(0, len(tickers), BATCH_SIZE):
                         batch = tickers[i : i + BATCH_SIZE]
                         proxy = await get_available_proxy(proxies)
 
-                        batch_tasks.append(process_batch(session, batch, proxy))
+                        tasks.append(process_batch(session, batch, proxy))
 
-                    # Run all batches concurrently and gather results
-                    all_batch_results = await asyncio.gather(*batch_tasks)
+                    # Run all batches truly concurrently
+                    batch_results = await asyncio.gather(*tasks)
 
-                    # Flatten results from all batches
-                    all_results = []
-                    for batch_result in all_batch_results:
-                        all_results.extend(batch_result)
+                    # Flatten results
+                    for batch in batch_results:
+                        all_results.extend(batch)
 
                     await process_results(all_results)
 
@@ -302,4 +299,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
