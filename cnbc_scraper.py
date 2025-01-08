@@ -281,7 +281,7 @@ def get_ticker(data):
     if match:
         ticker = match.group(1)
         action_word = match.group(2).lower()
-        action = "buy" if action_word == "increasing" else "sell"
+        action = "Buy" if action_word == "increasing" else "Sell"
         return ticker, action
     return None, None
 
