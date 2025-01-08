@@ -31,55 +31,6 @@ TELEGRAM_GRP = os.getenv("BETA_VILLE_TELEGRAM_GRP")
 os.makedirs("data", exist_ok=True)
 
 
-class BrowserSession:
-    def __init__(self):
-        self.driver = None
-        self.setup_browser()
-
-    def setup_browser(self):
-        try:
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")  # Run in headless mode
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--window-size=1920,1080")
-
-            # Add user agent
-            chrome_options.add_argument(
-                "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-
-            # Initialize the Chrome WebDriver
-            self.driver = webdriver.Chrome(options=chrome_options)
-            log_message("Browser session initialized successfully", "INFO")
-        except Exception as e:
-            log_message(f"Error setting up browser: {e}", "ERROR")
-            raise
-
-    def get_page(self, url: str) -> str:
-        try:
-            self.driver.get(url)
-            # Wait for the content to load
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "Post_post__v5D6j"))
-            )
-            return self.driver.page_source
-        except Exception as e:
-            log_message(f"Error fetching page: {e}", "ERROR")
-            # Attempt to recreate the browser session
-            self.cleanup()
-            self.setup_browser()
-            return ""
-
-    def cleanup(self):
-        if self.driver:
-            try:
-                self.driver.quit()
-            except Exception as e:
-                log_message(f"Error cleaning up browser: {e}", "ERROR")
-
-
 class BetavillePost:
     def __init__(self, post_id: str, title: str, date: str, tags: List[str]):
         self.post_id = post_id
@@ -110,23 +61,40 @@ def save_processed_posts(posts: Dict[str, Dict]):
     log_message("Processed posts saved.", "INFO")
 
 
-def fetch_betaville_posts(browser: BrowserSession) -> List[BetavillePost]:
-    try:
-        page_content = browser.get_page(BETAVILLE_URL)
-        if not page_content:
-            return []
+def setup_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
 
-        soup = BeautifulSoup(page_content, "html.parser")
+    return webdriver.Chrome(options=chrome_options)
+
+
+def fetch_betaville_posts() -> List[BetavillePost]:
+    driver = None
+
+    try:
+        driver = setup_driver()
+        driver.get(BETAVILLE_URL)
+        # Wait for content to load
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "Post_post__v5D6j"))
+        )
+
+        soup = BeautifulSoup(driver.page_source, "html.parser")
         posts = []
 
-        # Find all posts with both classes
         post_divs = soup.find_all(
             "div",
             class_=lambda x: x and "Post_post__v5D6j" in x and "Post_intel__l1FPV" in x,
         )
 
         for div in post_divs:
-            # Extract post ID from URL
             link = div.find("a", class_="Post_intel__l1FPV")
             if not link:
                 continue
@@ -137,14 +105,10 @@ def fetch_betaville_posts(browser: BrowserSession) -> List[BetavillePost]:
             if not post_id:
                 continue
 
-            # Extract title
             title = link.text.strip()
-
-            # Extract date
             date_span = div.find("span", class_="Post_date__panpL")
             date = date_span.text.strip() if date_span else ""
 
-            # Extract tags
             tags = []
             tag_spans = div.find_all("span", class_="Post_tag__i0aZV")
             for tag_span in tag_spans:
@@ -155,9 +119,12 @@ def fetch_betaville_posts(browser: BrowserSession) -> List[BetavillePost]:
             posts.append(BetavillePost(post_id, title, date, tags))
 
         log_message(f"Fetched {len(posts)} posts from Betaville", "INFO")
+        driver.quit()
         return posts
     except Exception as e:
         log_message(f"Error fetching Betaville posts: {e}", "ERROR")
+        if driver:
+            driver.quit()
         return []
 
 
@@ -183,7 +150,7 @@ async def send_to_telegram(
 
 async def run_scraper():
     processed_posts = load_processed_posts()
-    browser = BrowserSession()
+    log_message("Browser initialized", "INFO")
 
     try:
         while True:
@@ -199,7 +166,7 @@ async def run_scraper():
                     break
 
                 log_message("Checking for new posts...")
-                posts = fetch_betaville_posts(browser)
+                posts = fetch_betaville_posts()
 
                 new_posts = [
                     post for post in posts if post.post_id not in processed_posts
@@ -209,7 +176,6 @@ async def run_scraper():
                     log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
                     for post in new_posts:
-                        # # Analyze title for ticker
                         ticker_obj = await analyze_company_name_for_ticker(
                             post.tags, post.title
                         )
@@ -222,8 +188,10 @@ async def run_scraper():
                     log_message("No new posts found.", "INFO")
 
                 await asyncio.sleep(CHECK_INTERVAL)
-    finally:
-        browser.cleanup()
+
+    except Exception as e:
+        log_message(f"Error in run_scraper: {e}", "ERROR")
+        raise
 
 
 def main():
