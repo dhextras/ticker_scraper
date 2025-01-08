@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytz
 import requests
@@ -89,9 +89,8 @@ class YouTubeMonitor:
 
     def mark_api_key_exceeded(self, api_key):
         tomorrow = datetime.now(pytz.UTC).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        tomorrow = tomorrow.replace(day=tomorrow.day + 1)
+            hour=8, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
 
         self.api_usage[api_key] = {
             "exceeded_time": datetime.now(pytz.UTC).isoformat(),
