@@ -135,7 +135,7 @@ async def analyze_company_name_for_ticker(
         """
 
         response = client.beta.chat.completions.parse(
-            model="gpt-4-mini",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": analysis_context},
