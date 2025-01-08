@@ -63,8 +63,6 @@ async def fetch_json(session):
 async def send_to_telegram(url, ticker_object: TickerAnalysis | None):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
 
-    # No need to send to ws for now
-
     message = f"<b>New Citron Research Report</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
@@ -74,18 +72,23 @@ async def send_to_telegram(url, ticker_object: TickerAnalysis | None):
         message += f"<b>Company:</b> {ticker_object.company_name}\n"
         message += f"<b>Confidency:</b> {ticker_object.confidence}\n"
 
-    # await send_ws_message(
-    #     {
-    #         "name": "Citron Research",
-    #         "type": "Buy",
-    #         "ticker": ticker,
-    #         "sender": "citron",
-    #     },
-    #     WS_SERVER_URL,
-    # )
-    # log_message(f"Report sent to Telegram and WebSocket: {ticker} - {url}", "INFO")
+        await send_ws_message(
+            {
+                "name": "Citron Research",
+                "type": "Buy",
+                "ticker": ticker_object.ticker,
+                "sender": "citron",
+            },
+            WS_SERVER_URL,
+        )
+        log_message(
+            f"Report sent to Telegram and WebSocket for: {ticker_object.ticker} - {url}",
+            "INFO",
+        )
+    else:
+        log_message(f"Report sent to Telegram - {url}", "INFO")
+
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Report sent to Telegram - {url}", "INFO")
 
 
 async def run_scraper():

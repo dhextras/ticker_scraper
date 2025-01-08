@@ -12,6 +12,7 @@ from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ CHECK_INTERVAL = 1
 TELEGRAM_BOT_TOKEN = os.getenv("BANYAN_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BANYAN_TELEGRAM_GRP")
 PROCESSED_JSON_FILE = "data/banyan_processed_images.json"
+WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -105,8 +107,6 @@ async def send_to_telegram(name: str, url: str, ticker_obj: TickerAnalysis):
     """Send image URL to Telegram."""
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
 
-    # No need to send to ws for now
-
     message = f"<b>New Banyan Hill Image Found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>Source:</b> {name}\n"
@@ -117,8 +117,23 @@ async def send_to_telegram(name: str, url: str, ticker_obj: TickerAnalysis):
         message += f"<b>Company:</b> {ticker_obj.company_name}\n"
         message += f"<b>Confidency:</b> {ticker_obj.confidence}\n"
 
+        await send_ws_message(
+            {
+                "name": f"Banyan - {name}",
+                "type": "Buy",
+                "ticker": ticker_obj.ticker,
+                "sender": "banyan",
+            },
+            WS_SERVER_URL,
+        )
+        log_message(
+            f"Image sent to Telegram and WebSocket for: {ticker_obj.ticker} - {url}",
+            "INFO",
+        )
+    else:
+        log_message(f"Image URL sent to Telegram: {url}", "INFO")
+
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Image URL sent to Telegram: {url}", "INFO")
 
 
 async def run_scraper():
@@ -159,7 +174,7 @@ async def run_scraper():
 
 def main():
     """Main function."""
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
         log_message("Missing required environment variables", "CRITICAL")
         return
 
