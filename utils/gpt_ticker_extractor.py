@@ -88,13 +88,13 @@ async def analyze_image_for_ticker(image_url: str) -> TickerAnalysis:
 
 
 async def analyze_company_name_for_ticker(
-    company_names: List[str], title: str
+    tags: List[str], title: str
 ) -> TickerAnalysis:
     """
-    Analyzes company names using GPT to extract stock ticker information.
+    Analyzes tags and title using GPT to extract stock ticker information.
 
     Args:
-        company_names (List[str]): List of company names to analyze
+        tags (List[str]): List of tags to analyze
         title (str): Title or headline containing additional context
 
     Returns:
@@ -110,8 +110,8 @@ async def analyze_company_name_for_ticker(
 
         # System prompt to guide the analysis
         system_prompt = """
-        Analyze the company names and title to extract stock ticker information. 
-        Focus on finding the most likely publicly traded company and its ticker.
+        Analyze the Tags and title to extract stock ticker information. 
+        Focus on finding the most likely publicly traded company from the title and its ticker.
         Respond in JSON format like:
         {
             "found": true,
@@ -131,7 +131,7 @@ async def analyze_company_name_for_ticker(
         # Prepare the context for analysis
         analysis_context = f"""
         Title: {title}
-        Company Names: {', '.join(company_names)}
+        Tags: {', '.join(tags)}
         """
 
         response = client.beta.chat.completions.parse(
@@ -147,13 +147,11 @@ async def analyze_company_name_for_ticker(
         # Parse the response
         parsed_result = response.choices[0].message.parsed
         if not parsed_result or not parsed_result.found:
-            log_message(f"No ticker found for companies: {company_names}", "INFO")
+            log_message(f"No ticker found for title: {title}", "INFO")
             return TickerAnalysis(found=False)
 
         return parsed_result
 
     except Exception as e:
-        log_message(
-            f"Error analyzing companies {company_names} for ticker: {e}", "ERROR"
-        )
+        log_message(f"Error analyzing tilte: {title} for ticker: {e}", "ERROR")
         return TickerAnalysis(found=False)
