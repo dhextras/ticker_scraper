@@ -197,6 +197,12 @@ You can run each of the scripts based on your needs:
   python oxfordclub_scraper.py
   ```
 
+- To run the **Oxford Communique scraper**, use:
+
+  ```bash
+  python oxford_communique_scraper.py
+  ```
+
 - To run the **StockNews ticker scraper**, use:
 
   ```bash
@@ -364,6 +370,7 @@ ticker_scraper/
 ├── navallier_old_csv_scraper.py  # Navallier protfolio CSV scraper
 ├── navallier_old_scraper.py      # Navallier old ticker scraper
 ├── oxfordclub_scraper.py         # OxfordClub ticker scraper
+├── oxford_communique_scraper.py  # Oxford Communique scraper
 ├── requirements.txt              # Project dependencies
 ├── stocknews_html_scraper.py     # StockNews ticker scraper html implelementation
 ├── stocknews_scraper.py          # StockNews ticker scraper
