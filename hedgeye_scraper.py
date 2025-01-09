@@ -24,6 +24,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from seleniumrequests import Chrome
+
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
@@ -398,11 +399,11 @@ def archive_alert_parser(articles, fetch_time, current_time):
 
 
 async def fetch_alert_details(session, proxy_raw):
+    proxy = f"http://{proxy_raw}"
+    timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
+
     try:
-        ip, port = proxy_raw.split(":")
-        proxy = f"http://{ip}:{port}"
-        timestamp = int(time.time() * 10000)
-        cache_uuid = uuid4()
 
         # Create temp header to use so that we don't modify the actual one
         temp_headers = session.headers
@@ -433,11 +434,13 @@ async def fetch_alert_details(session, proxy_raw):
         # Method 1: https://app.hedgeye.com/feed_items/all
         alert_title = soup.select_one(".article__header")
         if not alert_title:
+            log_message("Failed to get alert title", "WARNING")
             return None
         alert_title = alert_title.get_text(strip=True)
 
         alert_price = soup.select_one(".currency.se-live-or-close-price")
         if not alert_price:
+            log_message("Failed to get alert price", "WARNING")
             return None
         alert_price = alert_price.get_text(strip=True)
 
@@ -464,6 +467,13 @@ async def fetch_alert_details(session, proxy_raw):
         #
         # return results
 
+    except asyncio.TimeoutError as e:
+        public_ip = await get_public_ip(proxy)
+        log_message(
+            f"Fetch alert took more then 2 seconds with ip: {public_ip}, Gotta fix this ASAP: {str(e)}",
+            "CRITICAL",
+        )
+        return None
     except Exception as e:
         if "Rate limited" in str(e):
             raise
@@ -522,7 +532,6 @@ async def process_task(
         # results = await fetch_alert_details(task.session, task.proxy)
 
         if alert_details is None:
-            log_message("fetch_alert_details returns none", "WARNING")
             return
 
         # log_message(
@@ -658,7 +667,8 @@ async def process_task(
             if alert_details["fetch_time"] > 1.5:
                 public_ip = await get_public_ip(f"http://{task.proxy}")
                 log_message(
-                    f"Slow fetch detected Publid IP: {public_ip} seconds", "WARNING"
+                    f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
+                    "WARNING",
                 )
 
     except Exception as e:
