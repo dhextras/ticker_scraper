@@ -18,6 +18,7 @@ from utils.gpt_ticker_extractor import TickerAnalysis, analyze_company_name_for_
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -25,8 +26,9 @@ load_dotenv()
 BETAVILLE_URL = "https://www.betaville.co.uk"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_POSTS_FILE = "data/betaville_processed_posts.json"
-TELEGRAM_BOT_TOKEN = os.getenv("BETA_VILLE_TELEGRAM_BOT_TOKEN")
+WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 TELEGRAM_GRP = os.getenv("BETA_VILLE_TELEGRAM_GRP")
+TELEGRAM_BOT_TOKEN = os.getenv("BETA_VILLE_TELEGRAM_BOT_TOKEN")
 
 os.makedirs("data", exist_ok=True)
 
@@ -131,7 +133,10 @@ def fetch_betaville_posts() -> List[BetavillePost]:
 async def send_to_telegram(
     post: BetavillePost, ticker_obj: Optional[TickerAnalysis] = None
 ):
+    current_time = datetime.now(pytz.utc)
+
     message = f"<b>New Betaville Alert!</b>\n\n"
+    message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Post Time:</b> {post.date}\n"
     message += f"<b>Title:</b> {post.title}\n"
     message += f"<b>URL:</b> {BETAVILLE_URL}/betaville-intelligence/{post.post_id}\n"
@@ -140,6 +145,16 @@ async def send_to_telegram(
         message += f"<b>Tags:</b> {', '.join(post.tags)}\n"
 
     if ticker_obj and ticker_obj.found:
+        await send_ws_message(
+            {
+                "name": "Navallier Old",
+                "type": "Buy",
+                "ticker": ticker_obj.ticker,
+                "sender": "navallier",
+            },
+            WS_SERVER_URL,
+        )
+
         message += f"\n<b>Ticker:</b> {ticker_obj.ticker}\n"
         message += f"<b>Company:</b> {ticker_obj.company_name}\n"
         message += f"<b>Confidence:</b> {ticker_obj.confidence}\n"
