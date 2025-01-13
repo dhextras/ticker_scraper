@@ -139,6 +139,10 @@ pip install -r requirements.txt
    # Beta Ville Scraper settings
    BETA_VILLE_TELEGRAM_BOT_TOKEN= # Telegram bot token for beta ville scraper
    BETA_VILLE_TELEGRAM_GRP= # Telegram group ID for beta ville scraper
+
+   # Blue Orca Scraper settings
+   BLUEORCA_TELEGRAM_BOT_TOKEN= # Telegram bot token for blue orca scraper
+   BLUEORCA_TELEGRAM_GRP= # Telegram group ID for blue orca scraper
    ```
 
 **Note:** Fill in the values for each variable as needed.
