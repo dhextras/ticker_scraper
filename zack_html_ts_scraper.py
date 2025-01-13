@@ -134,44 +134,79 @@ async def save_alerts(service_name, data):
 
 
 def process_raw_data(html, service):
-    """Process HTML and extract portfolio data"""
+    """
+    Process HTML and extract portfolio data from main, addition, and deletion tables.
+    Returns consolidated portfolio data after applying additions and removals.
+    """
     try:
         soup = BeautifulSoup(html, "html.parser")
-        table = soup.find("table", id="port_sort")
-        if not table:
-            return []
 
-        tbody = table.find("tbody")
-        if not tbody:
-            return []
+        # Helper function to extract data from a table
+        def extract_table_data(table_id):
+            table = soup.find("table", id=table_id)
+            if not table:
+                return []
 
-        rows = tbody.find_all("tr")
-        extracted_data = []
+            tbody = table.find("tbody")
+            if not tbody:
+                return []
 
-        for row in rows:
-            try:
-                symbol_elem = row.find("td", class_="symbol")
-                if not symbol_elem:
+            rows = tbody.find_all("tr")
+            extracted_data = []
+
+            for row in rows:
+                try:
+                    symbol_elem = row.find("td", class_="symbol")
+                    if not symbol_elem:
+                        continue
+
+                    symbol_container = symbol_elem.find(
+                        "a", class_="hoverquote-container-od"
+                    )
+                    if not symbol_container or "rel" not in symbol_container.attrs:
+                        continue
+
+                    symbol_list = symbol_container["rel"]
+                    if len(symbol_list) < 1:
+                        continue
+
+                    data = {
+                        "company": row.find("th", class_="company")["title"],
+                        "symbol": symbol_list[0],
+                        "date_added": row.find("td", class_="date-add").text.strip(),
+                        "price_added": row.find("td", class_="price-add").text.strip(),
+                    }
+                    extracted_data.append(data)
+                except Exception as e:
+                    log_message(
+                        f"Error processing row for {service.name}: {e}", "ERROR"
+                    )
                     continue
 
-                symbol_list = symbol_elem.find("a", class_="hoverquote-container-od")[
-                    "rel"
-                ]
-                if len(symbol_list) < 1:
-                    continue
+            return extracted_data
 
-                data = {
-                    "company": row.find("th", class_="company")["title"],
-                    "symbol": symbol_list[0],
-                    "date_added": row.find("td", class_="date-add").text.strip(),
-                    "price_added": row.find("td", class_="price-add").text.strip(),
-                }
-                extracted_data.append(data)
-            except Exception as e:
-                log_message(f"Error processing row for {service.name}: {e}", "ERROR")
-                continue
+        # Extract data from all three tables
+        main_data = extract_table_data("port_sort")
+        additions = extract_table_data("add_sort")
+        deletions = extract_table_data("del_sort")
 
-        return extracted_data
+        main_symbols = {item["symbol"] for item in main_data}
+
+        # Process additions - add only if not already in main portfolio
+        for addition in additions:
+            if addition["symbol"] not in main_symbols:
+                main_data.append(addition)
+                main_symbols.add(addition["symbol"])
+
+        # Process deletions - remove if present in main portfolio
+        main_data = [
+            item
+            for item in main_data
+            if item["symbol"] not in {deletion["symbol"] for deletion in deletions}
+        ]
+
+        return main_data
+
     except Exception as e:
         log_message(f"Failed to process raw html data for {service.name}: {e}", "ERROR")
         return []
