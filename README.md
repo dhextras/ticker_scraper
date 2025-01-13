@@ -143,6 +143,10 @@ pip install -r requirements.txt
    # Blue Orca Scraper settings
    BLUEORCA_TELEGRAM_BOT_TOKEN= # Telegram bot token for blue orca scraper
    BLUEORCA_TELEGRAM_GRP= # Telegram group ID for blue orca scraper
+
+   # Jehoshaphat Reaserch Scraper settings
+   JEHOSHAPHAT_TELEGRAM_BOT_TOKEN= # Telegram bot token for Jehoshaphat Reaserch scraper
+   JEHOSHAPHAT_TELEGRAM_GRP= # Telegram group ID for Jehoshaphat Reaserch scraper
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -309,6 +313,19 @@ You can run each of the scripts based on your needs:
   python beta_ville_scrper.py
   ```
 
+- To run the **Blue Orca Ville Scraper**, use:
+
+  ```bash
+  python blue_orca_scraper.py
+  ```
+
+- To run the **Jehoshaphat Research Scraper**, use:
+
+  ```bash
+  python jehoshaphat_scraper.py
+  ```
+
+
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
 
@@ -358,6 +375,7 @@ ticker_scraper/
 ├── banyan_image_scraper.py       # Banayan image scraper
 ├── bearcave_scraper.py           # Bearcave ticker scraper
 ├── beta_ville_scrper.py          # Beta Ville Scraper
+├── blueorca_scraper.py           # Blue Orca pdf & image ticker scraper
 ├── citron_scraper.py             # Citron media scraper
 ├── cnbc_html_scraper.py          # CNBC ticker scraper html implelementation
 ├── cnbc_scraper.py               # CNBC ticker scraper
@@ -367,8 +385,9 @@ ticker_scraper/
 ├── gui_setup.md                  # Setting up gui for ubuntu server
 ├── hedgeye_html_scraper.py       # Hedgeye html scraper implementation
 ├── hedgeye_scraper.py            # Hedgeye article scraper
-├── hindenburg_scraper.py         # Hindenburg pdf ticker scraper
-├── kerrisdale_scraper.py         # Kerrisdale pdf ticker scraper
+├── hindenburg_scraper.py         # Hindenburg pdf & image ticker scraper
+├── jehoshaphat_scraper.py        # Jehoshaphat pdf & image ticker scraper
+├── kerrisdale_scraper.py         # Kerrisdale pdf & image ticker scraper
 ├── motley_fool_scraper.py        # Motley ticker scraper
 ├── mudddy_waters_scraper.py      # Muddy Waters Media scraper
 ├── navallier_old_csv_scraper.py  # Navallier protfolio CSV scraper
