@@ -162,7 +162,6 @@ async def run_scraper():
 
                 if new_urls:
                     log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
-                    await send_posts_to_telegram(new_urls)
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
@@ -175,6 +174,8 @@ async def run_scraper():
                                 await send_to_telegram(url, ticker_obj=ticker_object)
 
                         processed_urls.add(url)
+
+                    await send_posts_to_telegram(new_urls)
                     save_processed_urls(processed_urls)
                 else:
                     log_message("No new posts found.", "INFO")
