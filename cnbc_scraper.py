@@ -241,30 +241,34 @@ async def get_article_data(article_id, uid, session_token):
                             if content_block.get("tagName") == "div":
                                 for child in content_block.get("children", []):
                                     if child.get("tagName") == "blockquote":
-                                        paragraph = child.get("children", [])
+                                        paragraphs = child.get("children", [])
 
-                                        if (
-                                            len(paragraph) > 0
-                                            and paragraph[0].get("tagName") == "p"
-                                        ):
-                                            text = "".join(
-                                                [
-                                                    (
-                                                        part
-                                                        if isinstance(part, str)
-                                                        else (
-                                                            part.get("children", [])[0]
-                                                            if isinstance(part, dict)
-                                                            and part.get("children")
-                                                            else ""
+                                        joined_text = ""
+                                        for paragraph in paragraphs:
+                                            if paragraph.get("tagName") == "p":
+                                                text = "".join(
+                                                    [
+                                                        (
+                                                            part
+                                                            if isinstance(part, str)
+                                                            else (
+                                                                part.get(
+                                                                    "children", []
+                                                                )[0]
+                                                                if isinstance(
+                                                                    part, dict
+                                                                )
+                                                                and part.get("children")
+                                                                else ""
+                                                            )
                                                         )
-                                                    )
-                                                    for part in paragraph[0].get(
-                                                        "children", []
-                                                    )
-                                                ]
-                                            )
-                                            return text
+                                                        for part in paragraph.get(
+                                                            "children", []
+                                                        )
+                                                    ]
+                                                )
+                                                joined_text += f" {text}"
+                                        return joined_text
                     return None
                 else:
                     log_message(
