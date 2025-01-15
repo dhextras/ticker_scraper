@@ -19,7 +19,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://thebearcave.substack.com/api/v1/posts"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 1.2  # seconds
 PROCESSED_URLS_FILE = "data/bearcave_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
