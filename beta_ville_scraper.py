@@ -147,10 +147,10 @@ async def send_to_telegram(
     if ticker_obj and ticker_obj.found:
         await send_ws_message(
             {
-                "name": "Navallier Old",
+                "name": "Beta Ville",
                 "type": "Buy",
                 "ticker": ticker_obj.ticker,
-                "sender": "navallier",
+                "sender": "betaville",
             },
             WS_SERVER_URL,
         )
