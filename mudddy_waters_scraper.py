@@ -4,13 +4,16 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 import aiohttp
 import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
+
 from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -83,14 +86,22 @@ def save_processed_urls(urls):
 
 
 async def fetch_json(session, cookies):
+    timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
+
     try:
         headers = {
             "User-Agent": f"{cookies['user_agent']}",
-            "Cache-Control": "max-age=0",
+            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
+            "pragma": "no-cache",
             "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
+            "cache-timestamp": str(timestamp),
+            "cache-uuid": str(cache_uuid),
         }
 
-        async with session.get(JSON_URL, headers=headers, cookies=cookies) as response:
+        url = f"{JSON_URL}?cache-timestamp={timestamp}"
+
+        async with session.get(url, headers=headers, cookies=cookies) as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
@@ -238,7 +249,9 @@ async def run_scraper():
                                 session, url, cookies
                             )
 
-                            cookies = pos_cookies if pos_cookies is not None else cookies
+                            cookies = (
+                                pos_cookies if pos_cookies is not None else cookies
+                            )
                             if ticker:
                                 await send_to_telegram(url, ticker)
                         processed_urls.add(url)
@@ -252,9 +265,7 @@ async def run_scraper():
 
 
 def main():
-    if not all(
-        [TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]
-    ):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
