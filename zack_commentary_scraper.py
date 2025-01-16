@@ -63,10 +63,10 @@ ZACKS_SERVICES = [
     ZacksService("Large-Cap Trader", "largecaptrader"),
     ZacksService("Options Trader", "optionstrader"),
     ZacksService("Short Sell List", "shortlist"),
+    ZacksService("Surprise Trader", "surprisetrader"),
     ZacksService("TAZR", "tazr"),
     # Other Services
     ZacksService("Zacks Confidential", "confidential"),
-    ZacksService("Zacks Premium", "premium"),
     ZacksService("Zacks Ultimate", "ultimate"),
 ]
 
