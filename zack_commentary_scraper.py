@@ -106,6 +106,8 @@ async def get_or_create_session():
 
 async def fetch_commentary(comment_id: int):
     """Fetch commentary for Zacks Confidential"""
+    global session
+
     current_session = await get_or_create_session()
     if not current_session:
         return None
@@ -124,7 +126,6 @@ async def fetch_commentary(comment_id: int):
                     async with session_lock:
                         if session and not session.closed:
                             await session.close()
-                            global session
                             session = None
                 return None
             return await response.text()
@@ -162,6 +163,7 @@ def process_commentary(html: str):
 
 async def run_scraper():
     """Main scraper loop that respects market hours"""
+    global session
     current_comment_id = load_last_comment_id()
 
     while True:
@@ -177,7 +179,6 @@ async def run_scraper():
                 async with session_lock:
                     if session and not session.closed:
                         await session.close()
-                        global session
                         session = None
                 break
 
