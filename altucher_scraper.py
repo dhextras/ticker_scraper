@@ -32,6 +32,7 @@ WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 subscriptions = [
     {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT"},
     {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM"},
+    {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn"},
 ]
 
 os.makedirs("data", exist_ok=True)
@@ -87,9 +88,15 @@ async def fetch_articles(session, subscription_name, subscription_id):
 
         response = session.get(JSON_URL, params=params, headers=headers)
         if response.status_code == 200:
-            data = response.json()
-            log_message(f"Fetched {len(data)} articles", "INFO")
-            return data
+            raw_data = response.json()
+            processed_data = []
+            log_message(f"Fetched {len(raw_data)} articles", "INFO")
+
+            for stocRecs in raw_data:
+                stocRecs["subscription_name"] = subscription_name
+                processed_data.append(stocRecs)
+
+            return processed_data
         else:
             log_message(
                 f"Failed to fetch {subscription_name} articles: HTTP {response.status_code}",
@@ -104,7 +111,8 @@ async def fetch_articles(session, subscription_name, subscription_id):
 async def process_articles(articles):
     buy_recommendations = []
     for article in articles:
-        if article["title"].lower().startswith("buy alert:"):
+        title = article["title"].lower()
+        if title.startswith("buy alert:") or title.startswith("flash buy:"):
             for stock_rec in article.get("stockRecommendations", []):
                 if stock_rec["action"].lower() == "buy":
                     buy_recommendations.append(
@@ -114,6 +122,7 @@ async def process_articles(articles):
                             "actionDesc": stock_rec["actionDescription"],
                             "postDate": article["cfUpdatedAt"],
                             "url": article["slug"],
+                            "subscription_name": article["subscription_name"],
                         }
                     )
 
@@ -130,9 +139,10 @@ async def send_matches_to_telegram(buy_recs):
         name = rec["name"]
         actionDesc = rec["actionDesc"]
         postDate = rec["postDate"]
+        sub_name = rec["subscription_name"].upper()
         url = f"https://my.paradigmpressgroup.com/article/{rec['url']}"
 
-        message = f"<b>New Buy Recommendation</b>\n\n"
+        message = f"<b>New Buy Recommendation - {sub_name}</b>\n\n"
         message += f"<b>Stock Symbol:</b> {ticker}\n"
         message += f"<b>Stock Name:</b> {name}\n"
         message += f"<b>Action Desc:</b> {actionDesc}\n"
@@ -141,7 +151,7 @@ async def send_matches_to_telegram(buy_recs):
 
         await send_ws_message(
             {
-                "name": "Altucher",
+                "name": f"Altucher - {sub_name}",
                 "type": "Buy",
                 "ticker": ticker,
                 "sender": "altucher",
@@ -150,7 +160,8 @@ async def send_matches_to_telegram(buy_recs):
         )
         await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
         log_message(
-            f"Recommendations sent to Telegram and WebSocket: {ticker} - {url}", "INFO"
+            f"Recommendations for `{sub_name}` with the ticker: `{ticker}` sent to Telegram and WebSocket: {ticker} - {url}",
+            "INFO",
         )
 
 
