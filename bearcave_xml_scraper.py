@@ -1,8 +1,11 @@
 import asyncio
 import json
 import os
+import random
 import re
 import sys
+import time
+import uuid
 from datetime import datetime
 
 import pytz
@@ -19,13 +22,27 @@ load_dotenv()
 
 # Constants
 XML_FEED_URL = "https://thebearcave.substack.com/feed"
-CHECK_INTERVAL = 0.5  # seconds
+CHECK_INTERVAL = 0.4  # seconds
 PROCESSED_URLS_FILE = "data/bearcave_xml_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
+
+# User agents list
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 OPR/78.0.4093.112",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/91.0.4472.80 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+]
 
 
 def load_processed_urls():
@@ -40,6 +57,36 @@ def save_processed_urls(urls):
     with open(PROCESSED_URLS_FILE, "w") as f:
         json.dump(list(urls), f, indent=2)
     log_message("Processed URLs saved.", "INFO")
+
+
+def get_random_headers():
+    """Generate random headers for requests"""
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "X-Requested-With": str(uuid.uuid4()),
+        "X-Request-Time": str(int(time.time())),
+    }
+
+
+def get_random_cache_buster():
+    """Generate random cache busting url variable for requests"""
+    cache_busters = [
+        ("timestamp", lambda: int(time.time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time.time())),
+        ("ran_time", lambda: int(time.time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time.time()))),
+    ]
+
+    variable, value_generator = random.choice(cache_busters)
+    return (variable, value_generator())
 
 
 def fetch_xml_feed():
@@ -150,7 +197,7 @@ async def run_scraper():
 
                 for post in new_posts:
                     if not "title" in post:
-                        continue
+                        post["title"] = "No title found"
 
                     ticker = extract_ticker(post["title"])
                     await send_to_telegram(post, ticker)
