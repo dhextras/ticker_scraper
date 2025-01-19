@@ -159,7 +159,9 @@ pip install -r requirements.txt
    - `gmail_credentials.json`  # Credentials for Gmail API (download this from Google Cloud API)
    - `cnbc_latest_article_id.json` # Contains {"article_id": xxxxxxxxx}
    - `fool_session.json` # Contains Session data from where you manually logged in with out a headless mode
-   - `hedgeye_credentials.json` # Contains login accounts and proxies for hedgeye
+   - `hedgeye_credentials.json` # Contains login accounts for hedgeye
+   - `proxies.json` # Contains all the proxies for all scripts
+   - `youtube_api_keys.json` # Contains youtube api keys
 
 Ensure that these files are named exactly as specified.
 
@@ -357,8 +359,7 @@ ticker_scraper/
 │   ├── gmail_token_a2.json
 │   ├── hedgeye_credentials.json
 │   ├── youtube_api_keys.json
-│   ├── zacks_ts_html_proxies.json
-│   ├── zacks_widget_proxies.json
+│   └── proxies.json
 ├── data/                         # Folder to save scraper data to access later
 ├── log/                          # Folder for log files
 ├── utils/                        # Utility functions
@@ -366,7 +367,7 @@ ticker_scraper/
 │   ├── logger.py                 # Logger utility
 │   ├── telegram_sender.py        # Telegram sending utility
 │   ├── time_utils.py             # Time utility functions
-│   ├── websocket_sender.py       # WebSocket sending utility
+│   └── websocket_sender.py       # WebSocket sending utility
 ├── .env                          # Environment variables
 ├── .env.example                  # Environment variables
 ├── .gitignore                    # Git ignore file
