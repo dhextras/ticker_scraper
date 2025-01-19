@@ -37,7 +37,7 @@ CHECK_INTERVAL = 0.2  # seconds
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
-PROXY_FILE = CRED_DIR / "zacks_ts_html_proxies.json"
+PROXY_FILE = CRED_DIR / "proxies.json"
 
 # Services configuration
 ZACKS_SERVICES = [
@@ -77,7 +77,7 @@ def load_proxies():
     try:
         with open(PROXY_FILE, "r") as f:
             data = json.load(f)
-            return data["proxies"]
+            return data["zacks_ts"]
     except Exception as e:
         log_message(f"Error loading proxies: {e}", "ERROR")
         return []

@@ -30,7 +30,7 @@ DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
 TICKERS_FILE = DATA_DIR / "zacks_tickers.json"
 ALERTS_FILE = DATA_DIR / "zacks_widget_alerts.json"
-PROXY_FILE = CRED_DIR / "zacks_widget_proxies.json"
+PROXY_FILE = CRED_DIR / "proxies.json"
 
 # Global variables
 previous_alerts = set()
@@ -44,7 +44,7 @@ def load_proxies() -> List[str]:
     try:
         with open(PROXY_FILE, "r") as f:
             data = json.load(f)
-            return data["proxies"]
+            return data["zacks_widget"]
     except Exception as e:
         log_message(f"Error loading proxies: {e}", "ERROR")
         return []

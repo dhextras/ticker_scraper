@@ -40,7 +40,7 @@ DATA_DIR = "data"
 RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_proxy.json")
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(DATA_DIR, "hedgeye_rate_limited_accounts.json")
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_last_alert.json")
-# LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_old_alert.json")
+# LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_old_alert.json")  this is for the different URL we ues
 
 # Ensure data, cred directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -355,12 +355,18 @@ def login(driver, email, password):
         return False
 
 
-def load_credentials() -> Tuple[List[Tuple[str, str]], List[str]]:
+def load_accounts() -> List[Tuple[str, str]]:
     with open("cred/hedgeye_credentials.json", "r") as f:
         data = json.load(f)
         accounts = [(acc["email"], acc["password"]) for acc in data["accounts"]]
-        proxies = data["proxies"]
-        return accounts, proxies
+        return accounts
+
+
+def load_proxies() -> List[str]:
+    with open("cred/proxies.json", "r") as f:
+        data = json.load(f)
+        proxies = data["hedgeye"]
+        return proxies
 
 
 def archive_alert_parser(articles, fetch_time, current_time):
@@ -711,7 +717,8 @@ async def task_scheduler(
 
 
 async def monitor_feeds_async():
-    accounts, proxies = load_credentials()
+    proxies = load_proxies()
+    accounts = load_accounts()
     account_manager = AccountManager(accounts)
     proxy_manager = ProxyManager(proxies)
     task_queue = TaskQueue(max_concurrent=3)
@@ -746,7 +753,7 @@ async def monitor_feeds_async():
                     log_message("Logging in or loading sessions...", "INFO")
 
                     async def process_account(email, password, index):
-                        session_filename = f"data/hedgeye_session_{index}.pkl"
+                        session_filename = f"data/hedgeye_session/{index}.pkl"
 
                         try:
                             if os.path.exists(session_filename):
