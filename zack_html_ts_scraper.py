@@ -68,7 +68,7 @@ proxy_sessions: Dict[str, aiohttp.ClientSession] = {}
 def get_alerts_file(service_name):
     """Get the alerts file path for a specific service"""
     return (
-        DATA_DIR / f"zacks_ts_portfolio_{service_name.lower().replace(' ', '_')}.json"
+        DATA_DIR / f"zacks_ts_portfolio/{service_name.lower().replace(' ', '_')}.json"
     )
 
 
