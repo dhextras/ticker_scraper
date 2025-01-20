@@ -347,7 +347,7 @@ async def process_rec_article(article):
 
             log_message(f"Sending new article alert: {article['path']}", "INFO")
 
-            # await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+            await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             return True
     except Exception as e:
         log_message(f"Error processing article: {e}", "ERROR")
