@@ -178,7 +178,11 @@ async def fetch_latest_articles(session_data):
     timestamp = int(time.time() * 10000)
     cache_uuid = uuid4()
 
-    base_url = "https://api.fool.com/premium-graphql-proxy/graphql"
+    base_url = (
+        # TODO: ADD timestamp later in case we need to make it faster
+        # f"https://api.fool.com/premium-graphql-proxy/graphql?cache-timestap={timestamp}"
+        "https://api.fool.com/premium-graphql-proxy/graphql"
+    )
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {session_data['accessToken']}",
@@ -189,35 +193,56 @@ async def fetch_latest_articles(session_data):
         "cache-uuid": str(cache_uuid),
     }
 
-    variables = {
-        "limit": 10,
-        "offset": 0,
-        "productIds": [
-            1081,  # Stock Advisor
-            1069,  # Rule Breakers
-            4198,  # Hidden gems
-            4488,  # Dividend Investor
-        ],
-    }
-    extensions = {
-        "persistedQuery": {
-            "version": 1,
-            "sha256Hash": FOOL_GRAPHQL_HASH,
+    query = """
+        query GetLatestUniqueArticles($limit: Int) {
+            contents(limit: $limit) {
+            product {
+                productId
+            }
+            recommendations {
+                action
+                instrument {
+                    name
+                    symbol
+                }
+            }
+            url
+            path
+            publishAt
+            }
         }
-    }
+    """
+
     params = {
-        "operationName": "GetLatestRecArticles",
-        "variables": json.dumps(variables),
-        "extensions": json.dumps(extensions),
-        "cache-timestamp": str(timestamp),
+        "operationName": "GetLatestUniqueArticles",
+        "query": query,
+        "variables": json.dumps({"limit": 10}),
     }
+
+    # FIXME: IF the above method works after few days of observation remove these
+    # variables = {
+    #     "limit": 10,
+    #     "offset": 0,
+    #     "productIds": PRODUCT_NAMES.keys(),
+    # }
+
+    # extensions = {
+    #     "persistedQuery": {
+    #         "version": 1,
+    #         "sha256Hash": FOOL_GRAPHQL_HASH,
+    #     }
+    # }
+
+    # params = {
+    #     "operationName": "GetNewestRecsArticles",
+    #     "variables": json.dumps(variables),
+    #     "extensions": json.dumps(extensions),
+    # }
 
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(
-                base_url,
-                params=params,
-                headers=headers,
+                base_url, params=params, headers=headers
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -262,8 +287,9 @@ async def extract_tickers(article):
         for rec in recs:
             action = rec.get("action", None)
             symbol = rec.get("instrument", {}).get("symbol", None)
+            name = rec.get("instrument", {}).get("name", "")
             if action and symbol:
-                tickers.append((action, symbol))
+                tickers.append((action.lower().capitalize(), symbol, name))
 
         return tickers
     except Exception as e:
@@ -284,7 +310,7 @@ async def process_rec_article(article):
             product_name = PRODUCT_NAMES.get(
                 article["product"]["productId"], "Unknown Product"
             )
-            article_url = f"https://www.fool.com{article['path']}"
+            article_url = article["url"]
 
             tickers = await extract_tickers(article)
 
@@ -297,7 +323,10 @@ async def process_rec_article(article):
 
             if tickers:
                 ticker_text = "\n".join(
-                    [f"- {action}: {ticker}" for action, ticker in tickers]
+                    [
+                        f"- {action}: {ticker}, company: {name}"
+                        for action, ticker, name in tickers
+                    ]
                 )
 
                 for (
@@ -318,7 +347,7 @@ async def process_rec_article(article):
 
             log_message(f"Sending new article alert: {article['path']}", "INFO")
 
-            await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+            # await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             return True
     except Exception as e:
         log_message(f"Error processing article: {e}", "ERROR")
