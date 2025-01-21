@@ -332,6 +332,7 @@ async def process_rec_article(article):
                 for (
                     action,
                     ticker,
+                    _,
                 ) in tickers:
                     await send_ws_message(
                         {
