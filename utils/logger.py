@@ -22,12 +22,18 @@ class ColoredFormatter(logging.Formatter):
 
 
 def setup_logger(log_file=None):
+    main_script = inspect.stack()[-1].filename
     caller_script = inspect.stack()[2].filename
-    script_name = os.path.splitext(os.path.basename(caller_script))[0]
+    script_name = os.path.splitext(os.path.basename(main_script))[0]
+    logger_name = os.path.splitext(os.path.basename(caller_script))[0]
 
-    logger_name = script_name
-    date = datetime.now().strftime("%m_%d")
-    log_file = log_file or os.path.join("log", f"{script_name}_{date}.log")
+    date = datetime.now().strftime("%Y/%m")
+    folder_name = os.path.join("log", date, script_name)
+    os.makedirs(folder_name, exist_ok=True)
+
+    log_file = log_file or os.path.join(
+        folder_name, f"{datetime.now().strftime('%d')}.log"
+    )
 
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
