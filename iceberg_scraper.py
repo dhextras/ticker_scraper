@@ -1,18 +1,13 @@
 import asyncio
-import io
 import json
 import os
-import re
 import sys
 from datetime import datetime
-from typing import Any, Dict, Optional
 
-import aiohttp
 import pytz
 from dotenv import load_dotenv
-from pdfminer.high_level import extract_text
+from DrissionPage import ChromiumOptions, ChromiumPage
 
-from utils.bypass_cloudflare import bypasser
 from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -25,48 +20,11 @@ load_dotenv()
 JSON_URL = "https://iceberg-research.com/wp-json/wp/v2/media"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/iceberg_processed_urls.json"
-SESSION_FILE = "data/iceberg_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ICEBERG_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ICEBERG_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
-
-
-def load_cookies(frash=False) -> Optional[Dict[str, Any]]:
-    try:
-        cookies = None
-        if frash == False:
-            if not os.path.exists(SESSION_FILE):
-                log_message(f"Session file not found: {SESSION_FILE}", "WARNING")
-            else:
-                with open(SESSION_FILE, "r") as f:
-                    cookies = json.load(f)
-
-        if not cookies or cookies.get("cf_clearance", "") == "":
-            log_message(
-                "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
-                "WARNING",
-            )
-            bypass = bypasser(JSON_URL, SESSION_FILE)
-
-            if not bypass or bypass == False:
-                return
-
-            with open(SESSION_FILE, "r") as f:
-                cookies = json.load(f)
-
-            if not cookies or cookies.get("cf_clearance", "") == "":
-                return None
-
-        return cookies
-
-    except json.JSONDecodeError:
-        log_message("Failed to decode JSON from session file.", "ERROR")
-    except Exception as e:
-        log_message(f"Error loading session: {e}", "ERROR")
-
-    return None
 
 
 def load_processed_urls():
@@ -83,80 +41,18 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-async def fetch_json(session, cookies):
+async def fetch_json():
     try:
-        headers = {
-            "User-Agent": f"{cookies['user_agent']}",
-            "Cache-Control": "max-age=0",
-            "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
-        }
-
-        async with session.get(JSON_URL, headers=headers, cookies=cookies) as response:
-            if response.status == 200:
-                data = await response.json()
-                log_message(f"Fetched {len(data)} posts from JSON", "INFO")
-                return data, None
-            elif response.status == 403:
-                log_message(
-                    "CF_CLEARANCE expired trying to revalidate it while fetching json",
-                    "ERROR",
-                )
-                cookies = load_cookies(frash=True)
-                if not cookies:
-                    raise Exception("CF_CLEARANCE Failed: Post")
-                return [], cookies
-            else:
-                log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return [], None
+        co = ChromiumOptions()
+        page = ChromiumPage(co)
+        page.get(JSON_URL)
+        data = page.json
+        page.quit()
+        log_message(f"Fetched {len(data)} posts from JSON", "INFO")
+        return data
     except Exception as e:
-        if "CF_CLEARANCE Failed" in str(e):
-            raise
         log_message(f"Error fetching JSON: {e}", "ERROR")
-        return [], None
-
-
-async def extract_ticker_from_pdf(session, url, cookies):
-    try:
-        headers = {
-            "User-Agent": f"{cookies['user_agent']}",
-            "Cache-Control": "max-age=0",
-            "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
-        }
-
-        async with session.get(url, headers=headers, cookies=cookies) as response:
-            if response.status == 200:
-                pdf_content = await response.read()
-                pdf_file = io.BytesIO(pdf_content)
-
-                first_page = extract_text(pdf_file, page_numbers=[0])
-
-                # Look for capitalized words after brackets
-                bracket_pattern = r"\((.*?)\)"
-                matches = re.findall(bracket_pattern, first_page)
-
-                if matches:
-                    # Take the first all-caps word after a bracket
-                    for match in matches:
-                        if match.isupper():
-                            return match, None
-
-                log_message(f"No ticker found in PDF: {url}", "WARNING")
-                return None, None
-            elif response.status == 403:
-                log_message(
-                    f"CF_CLEARANCE expired trying to revalidate it while fetching url: {url}",
-                    "ERROR",
-                )
-                cookies = load_cookies(frash=True)
-                if not cookies:
-                    raise Exception(f"CF_CLEARANCE Failed, url: {url}")
-                return None, cookies
-            else:
-                log_message(f"Failed to fetch PDF: HTTP {response.status}", "ERROR")
-                return None, None
-    except Exception as e:
-        log_message(f"Error processing PDF {url}: {e}", "ERROR")
-        return None, None
+        return []
 
 
 async def send_posts_to_telegram(urls):
@@ -203,66 +99,48 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
 
 async def run_scraper():
     processed_urls = load_processed_urls()
-    cookies = load_cookies()
 
-    if not cookies:
-        log_message("Failed to get valid cf_clearance", "CRITICAL")
-        return
+    while True:
+        await sleep_until_market_open()
+        log_message("Market is open. Starting to check for new posts...")
+        _, _, market_close_time = get_next_market_times()
 
-    async with aiohttp.ClientSession() as session:
         while True:
-            await sleep_until_market_open()
-            log_message("Market is open. Starting to check for new posts...")
-            _, _, market_close_time = get_next_market_times()
+            current_time = datetime.now(pytz.timezone("America/New_York"))
 
-            while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
+            if current_time > market_close_time:
+                log_message("Market is closed. Waiting for next market open...")
+                break
 
-                if current_time > market_close_time:
-                    log_message("Market is closed. Waiting for next market open...")
-                    break
+            log_message("Checking for new posts...")
+            posts = await fetch_json()
 
-                log_message("Checking for new posts...")
-                posts, pos_cookies = await fetch_json(session, cookies)
-
-                cookies = pos_cookies if pos_cookies is not None else cookies
-                if not posts:
-                    log_message("Failed to fetch posts or no posts returned", "ERROR")
-                    await asyncio.sleep(CHECK_INTERVAL)
-                    continue
-
-                new_urls = [
-                    post["source_url"]
-                    for post in posts
-                    if post.get("source_url")
-                    and post["source_url"] not in processed_urls
-                ]
-
-                if new_urls:
-                    log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
-                    await send_posts_to_telegram(new_urls)
-
-                    for url in new_urls:
-                        if url.lower().endswith(".pdf"):
-                            ticker, pos_cookies = await extract_ticker_from_pdf(
-                                session, url, cookies
-                            )
-                            cookies = (
-                                pos_cookies if pos_cookies is not None else cookies
-                            )
-                            if ticker:
-                                await send_to_telegram(url, ticker_obj=ticker)
-                        elif url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-                            ticker_object = await analyze_image_for_ticker(url)
-                            if ticker_object and ticker_object.found:
-                                await send_to_telegram(url, ticker_obj=ticker_object)
-
-                        processed_urls.add(url)
-                    save_processed_urls(processed_urls)
-                else:
-                    log_message("No new posts found.", "INFO")
-
+            if not posts:
                 await asyncio.sleep(CHECK_INTERVAL)
+                continue
+
+            new_urls = [
+                post["source_url"]
+                for post in posts
+                if post.get("source_url") and post["source_url"] not in processed_urls
+            ]
+
+            if new_urls:
+                log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
+                await send_posts_to_telegram(new_urls)
+
+                for url in new_urls:
+                    if url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                        ticker_object = await analyze_image_for_ticker(url)
+                        if ticker_object and ticker_object.found:
+                            await send_to_telegram(url, ticker_obj=ticker_object)
+
+                    processed_urls.add(url)
+                save_processed_urls(processed_urls)
+            else:
+                log_message("No new posts found.", "INFO")
+
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
