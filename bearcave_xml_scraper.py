@@ -91,7 +91,12 @@ def get_random_cache_buster():
 
 def fetch_xml_feed():
     try:
-        response = requests.get(XML_FEED_URL)
+        headers = get_random_headers()
+        random_cache_buster = get_random_cache_buster()
+
+        response = requests.get(
+            f"{XML_FEED_URL}?{random_cache_buster}", headers=headers
+        )
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "xml")
 
