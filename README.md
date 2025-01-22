@@ -147,6 +147,26 @@ pip install -r requirements.txt
    # Jehoshaphat Reaserch Scraper settings
    JEHOSHAPHAT_TELEGRAM_BOT_TOKEN= # Telegram bot token for Jehoshaphat Reaserch scraper
    JEHOSHAPHAT_TELEGRAM_GRP= # Telegram group ID for Jehoshaphat Reaserch scraper
+
+   # Friendly Bear Research Scraper settings
+   FRIENDLY_BEAR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Friendly Bear Research scraper
+   FRIENDLY_BEAR_TELEGRAM_GRP=        # Telegram group ID for Friendly Bear Research scraper
+
+   # Viceroy Research Scraper settings
+   VICEROY_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Viceroy Research scraper
+   VICEROY_TELEGRAM_GRP=              # Telegram group ID for Viceroy Research scraper
+
+   # Iceberg Research Scraper settings
+   ICEBERG_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Iceberg Research scraper
+   ICEBERG_TELEGRAM_GRP=              # Telegram group ID for Iceberg Research scraper
+
+   # Hunter Brook Research Scraper settings
+   HUNTER_BROOK_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Hunter Brook Research scraper
+   HUNTER_BROOK_TELEGRAM_GRP=              # Telegram group ID for Hunter Brook Research scraper
+
+   # Mariner Research Scraper settings
+   MARINER_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Mariner Research scraper
+   MARINER_TELEGRAM_GRP=              # Telegram group ID for Mariner Research scraper
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -201,132 +221,56 @@ These steps are only needed if you are using the **Hedgeye** scraper.
 
 You can run each of the scripts based on your needs:
 
-- To run the **OxfordClub ticker scraper**, use:
+Here’s a simplified and concise README for running your scripts:
 
-  ```bash
-  python oxfordclub_scraper.py
-  ```
+---
 
-- To run the **Oxford Communique scraper**, use:
+# Scraper Instructions
 
-  ```bash
-  python oxford_communique_scraper.py
-  ```
+To run any of the scrapers, use the following general command format:
 
-- To run the **StockNews ticker scraper**, use:
+```bash
+python <script_name>.py
+```
 
-  ```bash
-  python stocknews_scraper.py
-  ```
+### Available Scripts:
 
-  ```bash
-  python stocknews_html_scraper.py
-  ```
+### 1. **Ticker Scrapers**
+- **OxfordClub:** `oxfordclub_scraper.py`
+- **Oxford Communique:** `oxford_communique_scraper.py`
+- **StockNews:** `stocknews_scraper.py`, `stocknews_html_scraper.py`
+- **CNBC:** `cnbc_scraper.py`, `cnbc_html_scraper.py`
+- **Motley Fool:** `motley_fool_scraper.py`
+- **Navallier:** `navallier_old_scraper.py`, `navallier_old_csv_scraper.py`
+- **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`
+- **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`
 
-- To run the **Gmail ticker scraper**, use:
+### 2. **PDF & Image Scrapers**
+- **Blue Orca:** `blueorca_scraper.py`
+- **Hindenburg:** `hindenburg_scraper.py`
+- **Jehoshaphat Research:** `jehoshaphat_scraper.py` (*requires GUI setup*)
+- **Friendly Bear:** `friendly_bear_scraper.py`
+- **HunterBrook Research:** `hunterbrook_scraper.py`
+- **Iceberg Research:** `iceberg_scraper.py`
+- **Kerrisdale Capital:** `kerrisdale_scraper.py`
+- **Mariner Research:** `mariner_scraper.py`
+- **Viceroy Research:** `viceroy_scraper.py`
+- **Citron Research:** `citron_scraper.py`
+- **Muddy Waters Media:** `mudddy_waters_scraper.py` (*requires GUI setup*)
+- **Grizzly Media:** `grizzly_scraper.py` (*requires GUI setup*)
+- **Bearcave:** `bearcave_scraper.py`, `bearcave_xml_scraper.py`
+- **Beta Ville:** `beta_ville_scrper.py`
 
-  ```bash
-  python gmail_scraper.py
-  ```
+### 3. **Email Scrapers**
+- **Gmail:** `gmail_scraper.py`, `gmail_scraper_a2.py`
 
-- To run the **CNBC ticker scraper**, use:
+### 4. **Image Scrapers**
+- **Banyan Image Scraper:** `banyan_image_scraper.py`
 
-  ```bash
-  python cnbc_scraper.py
-  ```
+### 5. **Specialized Scrapers**
+- **YouTube Channel Monitor:** `youtube_channel_monitor.py`
 
-  ```bash
-  python cnbc_html_scraper.py
-  ```
-
-- To run the **Motley scraper**, use:
-
-  ```bash
-  python motley_fool_scraper.py
-  ```
-
-- To run the **Kerrisdale Capital scraper**, use:
-
-  ```bash
-  python kerrisdale_scraper.py
-  ```
-
-- To run the **Hindenburg Research scraper**, use:
-
-  ```bash
-  python hindenburg_scraper.py
-  ```
-
-- To run the **Citron Research scraper**, use:
-
-  ```bash
-  python citron_scraper.py
-  ```
-
-- To run the **Bearcave Ticker scraper**, use:
-
-  ```bash
-  python bearcave_scraper.py
-  ```
-
-- To run the **Altucher Ticker scraper**, use:
-
-  ```bash
-  python altucher_scraper.py
-  ```
-
-- To run the **Muddy Waters Media scraper**, use:
-
-  - Follow from [here first](#step-7-install-gui)
-
-  ```bash
-  python mudddy_waters_scraper.py
-  ```
-
-- To run the **Grizzly Media scraper**, use:
-
-  - Follow from [here first](#step-7-install-gui)
-
-  ```bash
-  python grizzly_scraper.py
-  ```
-
-- To run the **Banayn Image scraper**, use:
-
-  ```bash
-  python banyan_image_scraper.py
-  ```
-
-- To run the **Navallier Old scraper**, use:
-
-  ```bash
-  python navallier_old_scraper.py
-  ```
-
-- To run the **Youtube Channel Monitor**, use:
-
-  ```bash
-  python youtube_channel_monitor.py
-  ```
-
-- To run the **Beta Ville Scraper**, use:
-
-  ```bash
-  python beta_ville_scrper.py
-  ```
-
-- To run the **Blue Orca Ville Scraper**, use:
-
-  ```bash
-  python blue_orca_scraper.py
-  ```
-
-- To run the **Jehoshaphat Research Scraper**, use:
-
-  ```bash
-  python jehoshaphat_scraper.py
-  ```
-
+> For GUI-dependent scripts (e.g., Muddy Waters or Grizzly Media, Jehoshaphat Research), ensure you have the GUI environment set up as described in [Here](./gui_setup.md)
 
 
 Make sure your `.env` file and `cred/` folder are properly set up before running these scripts.
@@ -375,11 +319,13 @@ ticker_scraper/
 ├── altucher_scraper.py           # Altucher ticker scraper
 ├── banyan_image_scraper.py       # Banayan image scraper
 ├── bearcave_scraper.py           # Bearcave ticker scraper
+├── bearcave_xml_scraper.py       # Bearcave xml method ticker scraper
 ├── beta_ville_scrper.py          # Beta Ville Scraper
 ├── blueorca_scraper.py           # Blue Orca pdf & image ticker scraper
 ├── citron_scraper.py             # Citron media scraper
 ├── cnbc_html_scraper.py          # CNBC ticker scraper html implelementation
 ├── cnbc_scraper.py               # CNBC ticker scraper
+├── friendly_bear_scraper.py      # Friendly Bear Research pdf & image ticker scraper
 ├── gmail_scraper.py              # Gmail ticker scraper
 ├── gmail_scraper_a2.py           # Gmail ticker scraper second account
 ├── grizzly_scraper.py            # Grizzly Media scraper
@@ -387,8 +333,11 @@ ticker_scraper/
 ├── hedgeye_html_scraper.py       # Hedgeye html scraper implementation
 ├── hedgeye_scraper.py            # Hedgeye article scraper
 ├── hindenburg_scraper.py         # Hindenburg pdf & image ticker scraper
+├── hunterbrook_scraper.py        # Hunterbrook Research pdf & image ticker scraper
+├── iceberg_scraper.py            # Iceberg Research pdf & image ticker scraper
 ├── jehoshaphat_scraper.py        # Jehoshaphat pdf & image ticker scraper
 ├── kerrisdale_scraper.py         # Kerrisdale pdf & image ticker scraper
+├── mariner_scraper.py            # Mariner Research pdf & image ticker scraper
 ├── motley_fool_scraper.py        # Motley ticker scraper
 ├── mudddy_waters_scraper.py      # Muddy Waters Media scraper
 ├── navallier_old_csv_scraper.py  # Navallier protfolio CSV scraper
@@ -398,6 +347,7 @@ ticker_scraper/
 ├── requirements.txt              # Project dependencies
 ├── stocknews_html_scraper.py     # StockNews ticker scraper html implelementation
 ├── stocknews_scraper.py          # StockNews ticker scraper
+├── viceroy_scraper.py            # Viceroy Research pdf & image ticker scraper
 ├── youtube_channel_monitor.py    # Moon Market channel monitor
 ├── zack_html_ts_scraper.py       # Zacks trading service html implementation
 └── zack_widget_scraper.py        # Zacks widget3 ticker scraper
