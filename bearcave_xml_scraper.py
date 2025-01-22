@@ -86,7 +86,7 @@ def get_random_cache_buster():
     ]
 
     variable, value_generator = random.choice(cache_busters)
-    return (variable, value_generator())
+    return f"{variable}={value_generator()}"
 
 
 def fetch_xml_feed():
