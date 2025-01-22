@@ -5,12 +5,14 @@ import os
 import re
 import sys
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 import aiohttp
 import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
 
+from utils.bypass_cloudflare import bypasser
 from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -23,11 +25,48 @@ load_dotenv()
 JSON_URL = "https://iceberg-research.com/wp-json/wp/v2/media"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/iceberg_processed_urls.json"
+SESSION_FILE = "data/iceberg_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ICEBERG_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ICEBERG_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
+
+
+def load_cookies(frash=False) -> Optional[Dict[str, Any]]:
+    try:
+        cookies = None
+        if frash == False:
+            if not os.path.exists(SESSION_FILE):
+                log_message(f"Session file not found: {SESSION_FILE}", "WARNING")
+            else:
+                with open(SESSION_FILE, "r") as f:
+                    cookies = json.load(f)
+
+        if not cookies or cookies.get("cf_clearance", "") == "":
+            log_message(
+                "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
+                "WARNING",
+            )
+            bypass = bypasser(JSON_URL, SESSION_FILE)
+
+            if not bypass or bypass == False:
+                return
+
+            with open(SESSION_FILE, "r") as f:
+                cookies = json.load(f)
+
+            if not cookies or cookies.get("cf_clearance", "") == "":
+                return None
+
+        return cookies
+
+    except json.JSONDecodeError:
+        log_message("Failed to decode JSON from session file.", "ERROR")
+    except Exception as e:
+        log_message(f"Error loading session: {e}", "ERROR")
+
+    return None
 
 
 def load_processed_urls():
@@ -44,28 +83,47 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-async def fetch_json(session):
+async def fetch_json(session, cookies):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "User-Agent": f"{cookies['user_agent']}",
+            "Cache-Control": "max-age=0",
+            "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
         }
 
-        async with session.get(JSON_URL, headers=headers) as response:
+        async with session.get(JSON_URL, headers=headers, cookies=cookies) as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
-                return data
+                return data, None
+            elif response.status == 403:
+                log_message(
+                    "CF_CLEARANCE expired trying to revalidate it while fetching json",
+                    "ERROR",
+                )
+                cookies = load_cookies(frash=True)
+                if not cookies:
+                    raise Exception("CF_CLEARANCE Failed: Post")
+                return [], cookies
             else:
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return []
+                return [], None
     except Exception as e:
+        if "CF_CLEARANCE Failed" in str(e):
+            raise
         log_message(f"Error fetching JSON: {e}", "ERROR")
-        return []
+        return [], None
 
 
-async def extract_ticker_from_pdf(session, url):
+async def extract_ticker_from_pdf(session, url, cookies):
     try:
-        async with session.get(url) as response:
+        headers = {
+            "User-Agent": f"{cookies['user_agent']}",
+            "Cache-Control": "max-age=0",
+            "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
+        }
+
+        async with session.get(url, headers=headers, cookies=cookies) as response:
             if response.status == 200:
                 pdf_content = await response.read()
                 pdf_file = io.BytesIO(pdf_content)
@@ -80,16 +138,25 @@ async def extract_ticker_from_pdf(session, url):
                     # Take the first all-caps word after a bracket
                     for match in matches:
                         if match.isupper():
-                            return match
+                            return match, None
 
                 log_message(f"No ticker found in PDF: {url}", "WARNING")
-                return None
+                return None, None
+            elif response.status == 403:
+                log_message(
+                    f"CF_CLEARANCE expired trying to revalidate it while fetching url: {url}",
+                    "ERROR",
+                )
+                cookies = load_cookies(frash=True)
+                if not cookies:
+                    raise Exception(f"CF_CLEARANCE Failed, url: {url}")
+                return None, cookies
             else:
                 log_message(f"Failed to fetch PDF: HTTP {response.status}", "ERROR")
-                return None
+                return None, None
     except Exception as e:
         log_message(f"Error processing PDF {url}: {e}", "ERROR")
-        return None
+        return None, None
 
 
 async def send_posts_to_telegram(urls):
@@ -136,6 +203,11 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
 
 async def run_scraper():
     processed_urls = load_processed_urls()
+    cookies = load_cookies()
+
+    if not cookies:
+        log_message("Failed to get valid cf_clearance", "CRITICAL")
+        return
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -151,7 +223,13 @@ async def run_scraper():
                     break
 
                 log_message("Checking for new posts...")
-                posts = await fetch_json(session)
+                posts, pos_cookies = await fetch_json(session, cookies)
+
+                cookies = pos_cookies if pos_cookies is not None else cookies
+                if not posts:
+                    log_message("Failed to fetch posts or no posts returned", "ERROR")
+                    await asyncio.sleep(CHECK_INTERVAL)
+                    continue
 
                 new_urls = [
                     post["source_url"]
@@ -166,7 +244,12 @@ async def run_scraper():
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
-                            ticker = await extract_ticker_from_pdf(session, url)
+                            ticker, pos_cookies = await extract_ticker_from_pdf(
+                                session, url, cookies
+                            )
+                            cookies = (
+                                pos_cookies if pos_cookies is not None else cookies
+                            )
                             if ticker:
                                 await send_to_telegram(url, ticker_obj=ticker)
                         elif url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
