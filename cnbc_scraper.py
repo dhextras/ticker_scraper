@@ -241,33 +241,33 @@ async def get_article_data(article_id, uid, session_token):
                             if content_block.get("tagName") == "div":
                                 for child in content_block.get("children", []):
                                     if child.get("tagName") == "blockquote":
-                                        paragraphs = child.get("children", [])
+                                        elements = child.get("children", [])
 
                                         joined_text = ""
-                                        for paragraph in paragraphs:
-                                            if paragraph.get("tagName") == "p":
-                                                text = "".join(
-                                                    [
-                                                        (
-                                                            part
-                                                            if isinstance(part, str)
-                                                            else (
-                                                                part.get(
-                                                                    "children", []
-                                                                )[0]
-                                                                if isinstance(
-                                                                    part, dict
-                                                                )
-                                                                and part.get("children")
-                                                                else ""
-                                                            )
-                                                        )
-                                                        for part in paragraph.get(
-                                                            "children", []
-                                                        )
-                                                    ]
-                                                )
-                                                joined_text += f" {text}"
+
+                                        def extract_text(element):
+                                            # Recursively extract text from allowed tags
+                                            text = ""
+                                            if isinstance(element, str):
+                                                return element
+                                            if isinstance(element, dict):
+                                                tag = element.get("tagName")
+                                                if tag in [
+                                                    "p",
+                                                    "ul",
+                                                    "ol",
+                                                    "li",
+                                                    "div",
+                                                ]:  # Allowed tags
+                                                    for child in element.get(
+                                                        "children", []
+                                                    ):
+                                                        text += extract_text(child)
+                                            return text
+
+                                        for element in elements:
+                                            joined_text += f" {extract_text(element)}"
+
                                         return joined_text
                     return None
                 else:
@@ -379,6 +379,7 @@ async def process_article(article, uid, session_token, fetch_time):
                 f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S.%f %Z')}\n"
                 f"<b>Time difference:</b> {(current_time - published_date).total_seconds():.2f} seconds\n"
                 f"<b>Assets, Article Data fetch time:</b> {fetch_time:.2f}s, {fetch_data_time:.2f}s\n"
+                f"<b>ID:</b> {article['id']}\n"
                 f"<b>Title:</b> {article['title']}\n"
                 f"<b>Content:</b> {article_data}\n"
             )
