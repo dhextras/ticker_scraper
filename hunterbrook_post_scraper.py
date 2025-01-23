@@ -80,7 +80,7 @@ async def process_post(post):
     message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
     message += f"<b>Link:</b> {link}\n"
     message += f"<b>Title:</b> {title}\n"
-    message += f"<b>Box Content:</b> {box_content}\n"
+    message += f"<b>Box Content:</b> {box_content.text if box_content else ''}\n"
 
     if box_ticker:
         message += f"<b>\n\nTicker:</b> {box_ticker}\n"
