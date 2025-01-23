@@ -33,6 +33,7 @@ subscriptions = [
     {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT"},
     {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM"},
     {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn"},
+    {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso"},
 ]
 
 os.makedirs("data", exist_ok=True)
@@ -90,7 +91,9 @@ async def fetch_articles(session, subscription_name, subscription_id):
         if response.status_code == 200:
             raw_data = response.json()
             processed_data = []
-            log_message(f"Fetched {len(raw_data)} articles", "INFO")
+            log_message(
+                f"Fetched {len(raw_data)} {subscription_name.upper()} articles", "INFO"
+            )
 
             for stocRecs in raw_data:
                 stocRecs["subscription_name"] = subscription_name
@@ -112,7 +115,11 @@ async def process_articles(articles):
     buy_recommendations = []
     for article in articles:
         title = article["title"].lower()
-        if title.startswith("buy alert:") or title.startswith("flash buy:"):
+        if (
+            title.startswith("buy alert:")
+            or title.startswith("flash buy:")
+            or title.startswith("new trade alert:")
+        ):
             for stock_rec in article.get("stockRecommendations", []):
                 if stock_rec["action"].lower() == "buy":
                     buy_recommendations.append(
