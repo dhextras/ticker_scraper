@@ -238,6 +238,7 @@ python <script_name>.py
 ### 1. **Ticker Scrapers**
 - **OxfordClub:** `oxfordclub_scraper.py`
 - **Oxford Communique:** `oxford_communique_scraper.py`
+- **Oxford Income Letter:** `oxford_income_let_scraper.py`
 - **StockNews:** `stocknews_scraper.py`, `stocknews_html_scraper.py`
 - **CNBC:** `cnbc_scraper.py`, `cnbc_html_scraper.py`
 - **Motley Fool:** `motley_fool_scraper.py`
@@ -251,6 +252,7 @@ python <script_name>.py
 - **Jehoshaphat Research:** `jehoshaphat_scraper.py` (*requires GUI setup*)
 - **Friendly Bear:** `friendly_bear_scraper.py`
 - **HunterBrook Research:** `hunterbrook_scraper.py`
+- **HunterBrook Post Scraper:** `hunterbrook_post_scraper.py`
 - **Iceberg Research:** `iceberg_scraper.py`
 - **Kerrisdale Capital:** `kerrisdale_scraper.py`
 - **Mariner Research:** `mariner_scraper.py`
@@ -334,6 +336,7 @@ ticker_scraper/
 ├── hedgeye_scraper.py            # Hedgeye article scraper
 ├── hindenburg_scraper.py         # Hindenburg pdf & image ticker scraper
 ├── hunterbrook_scraper.py        # Hunterbrook Research pdf & image ticker scraper
+├── hunterbrook_post_scraper.py   # Hunterbrook Post ticker scraper
 ├── iceberg_scraper.py            # Iceberg Research pdf & image ticker scraper
 ├── jehoshaphat_scraper.py        # Jehoshaphat pdf & image ticker scraper
 ├── kerrisdale_scraper.py         # Kerrisdale pdf & image ticker scraper
@@ -344,6 +347,7 @@ ticker_scraper/
 ├── navallier_old_scraper.py      # Navallier old ticker scraper
 ├── oxfordclub_scraper.py         # OxfordClub ticker scraper
 ├── oxford_communique_scraper.py  # Oxford Communique scraper
+├── oxford_income_let_scraper.py  # Oxford Income Letter scraper
 ├── requirements.txt              # Project dependencies
 ├── stocknews_html_scraper.py     # StockNews ticker scraper html implelementation
 ├── stocknews_scraper.py          # StockNews ticker scraper
