@@ -61,10 +61,19 @@ def login_sync(session):
         return False
 
 
-def extract_ticker_from_text(text):
-    pattern = r"\((NASDAQ|NYSE):\s*([A-Z]+)\)"
-    match = re.search(pattern, text)
-    return match.group(2) if match else None
+async def fetch_initial_content(session, url):
+    try:
+        response = session.get(url)
+        if response.status_code != 200:
+            return None
+        soup = BeautifulSoup(response.text, "html.parser")
+        link = soup.select_one(
+            "body > div.page-section.members-content > div > article > div > p:nth-child(2) > a"
+        )
+        return link["href"] if link else None
+    except Exception as e:
+        log_message(f"Error fetching initial content: {e}", "ERROR")
+        return None
 
 
 async def fetch_article_content(session, url):
@@ -72,24 +81,7 @@ async def fetch_article_content(session, url):
         response = session.get(url)
         if response.status_code != 200:
             return None
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        content = soup.select_one(
-            "body > div.page-section.members-content > div > article > div"
-        )
-        if not content:
-            return None
-
-        text = content.get_text()
-        start_marker = "In case you missed it…"
-        end_marker = "Click here to read"
-
-        if start_marker in text and end_marker in text:
-            start_idx = text.index(start_marker) + len(start_marker)
-            end_idx = text.index(end_marker)
-            return text[start_idx:end_idx].strip()
-
-        return None
+        return BeautifulSoup(response.text, "html.parser")
     except Exception as e:
         log_message(f"Error fetching article content: {e}", "ERROR")
         return None
@@ -127,16 +119,16 @@ async def fetch_and_process_archive(session):
         return []
 
 
-async def send_to_telegram_and_ws(article_data, content, ticker):
+async def send_to_telegram_and_ws(article_data, url, ticker):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
         "%Y-%m-%d %H:%M:%S.%f"
     )
 
     message = f"<b>New Income Letter Article Found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
-    message += f"<b>URL:</b> {article_data['url']}\n"
+    message += f"<b>Issue URL:</b> {article_data['url']}\n"
+    message += f"<b>Actual Content URL:</b> {url}\n"
     message += f"<b>Title:</b> {article_data['title']}\n"
-    message += f"<b>Content:</b> {content}\n"
 
     if ticker:
         message += f"\n<b>Extracted Ticker:</b> {ticker}"
@@ -153,6 +145,36 @@ async def send_to_telegram_and_ws(article_data, content, ticker):
         # )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+
+def extract_ticker_from_text(soup, url):
+    try:
+        all_text = soup.get_text(separator=" ", strip=True)
+        action_sections = re.split(r"Action to Take", all_text, flags=re.IGNORECASE)
+
+        if len(action_sections) < 2:
+            log_message(f"'Action to Take' not found: {url}", "WARNING")
+            return None
+
+        for section in action_sections[1:]:
+            buy_match = re.search(r"Buy", section, re.IGNORECASE)
+            ticker_match = re.search(r"(NYSE|NASDAQ):\s*(\w+)", section, re.IGNORECASE)
+
+            if buy_match and ticker_match and buy_match.start() < ticker_match.start():
+                return ticker_match.group(2)
+            elif not ticker_match:
+                log_message(f"No ticker found in section: {url}", "WARNING")
+            elif not buy_match or (
+                buy_match and ticker_match and buy_match.start() > ticker_match.start()
+            ):
+                log_message(
+                    f"'Buy' not found before ticker in section: {url}", "WARNING"
+                )
+
+        return None
+    except Exception as e:
+        log_message(f"Error extracting ticker: {e}", "ERROR")
+        return None
 
 
 async def run_scraper():
@@ -179,11 +201,19 @@ async def run_scraper():
             ]
 
             for article in new_articles:
-                content = await fetch_article_content(session, article["url"])
-                if content:
-                    ticker = extract_ticker_from_text(content)
-                    await send_to_telegram_and_ws(article, content, ticker)
-                    processed_urls.add(article["url"])
+                initial_url = await fetch_initial_content(session, article["url"])
+                if initial_url:
+                    content_soup = await fetch_article_content(session, initial_url)
+                    if content_soup:
+                        ticker = extract_ticker_from_text(content_soup, initial_url)
+                        if ticker:
+                            await send_to_telegram_and_ws(article, initial_url, ticker)
+                            processed_urls.add(article["url"])
+                else:
+                    log_message(
+                        f"Couldn't able to find the inside content url for: {article['url']}",
+                        "ERROR",
+                    )
 
             if new_articles:
                 save_processed_urls(processed_urls)
