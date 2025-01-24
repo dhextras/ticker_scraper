@@ -26,6 +26,10 @@ WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
+# Initialize browser once
+co = ChromiumOptions()
+page = ChromiumPage(co)
+
 
 def load_processed_urls():
     try:
@@ -43,11 +47,8 @@ def save_processed_urls(urls):
 
 async def fetch_json():
     try:
-        co = ChromiumOptions()
-        page = ChromiumPage(co)
         page.get(JSON_URL)
         data = page.json
-        page.quit()
         log_message(f"Fetched {len(data)} posts from JSON", "INFO")
         return data
     except Exception as e:
@@ -152,8 +153,10 @@ def main():
         asyncio.run(run_scraper())
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
+        page.quit()
     except Exception as e:
         log_message(f"Critical error in main: {e}", "CRITICAL")
+        page.quit()
         sys.exit(1)
 
 
