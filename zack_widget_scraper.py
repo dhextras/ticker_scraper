@@ -185,7 +185,7 @@ async def process_results(results):
             #                 "name": "Zacks Widget",
             #                 "type": "Sell",
             #                 "ticker": ticker,
-            #                 "sender": "zacks_widget",
+            #                 "sender": "zacks",
             #             },
             #             WS_SERVER_URL,
             #         )
