@@ -85,16 +85,15 @@ async def process_post(post):
     if box_ticker:
         message += f"<b>\n\nTicker:</b> {box_ticker}\n"
 
-        # TODO: Don't send to websocket until we verify it
-        # await send_ws_message(
-        #     {
-        #         "name": "Hunter Brook - Post",
-        #         "type": "Sell",
-        #         "ticker": box_ticker,
-        #         "sender": "hunterbrook",
-        #     },
-        #     WS_SERVER_URL,
-        # )
+        await send_ws_message(
+            {
+                "name": "Hunter Brook - Post",
+                "type": "Sell",
+                "ticker": box_ticker,
+                "sender": "hunterbrook",
+            },
+            WS_SERVER_URL,
+        )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Report sent to Telegram: {box_ticker} - {link}", "INFO")
