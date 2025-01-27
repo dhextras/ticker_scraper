@@ -167,6 +167,10 @@ pip install -r requirements.txt
    # Mariner Research Scraper settings
    MARINER_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Mariner Research scraper
    MARINER_TELEGRAM_GRP=              # Telegram group ID for Mariner Research scraper
+
+   # White Diamond Research scraper settings
+   WDR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for White Diamond Research
+   WDR_TELEGRAM_GRP=  # Telegram group ID for White Diamond Research
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -245,6 +249,7 @@ python <script_name>.py
 - **Navallier:** `navallier_old_scraper.py`, `navallier_old_csv_scraper.py`
 - **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`
 - **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`
+- **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`
@@ -353,6 +358,9 @@ ticker_scraper/
 ├── stocknews_scraper.py          # StockNews ticker scraper
 ├── viceroy_scraper.py            # Viceroy Research pdf & image ticker scraper
 ├── youtube_channel_monitor.py    # Moon Market channel monitor
+├── wdr_ticker_scraper.py         # White diamond Article scraper
+├── wdr_article_scraper.py        # White diamond table ticker scraper
+├── zack_commentary_scraper.py    # Zacks trading service commentary scraper
 ├── zack_html_ts_scraper.py       # Zacks trading service html implementation
 └── zack_widget_scraper.py        # Zacks widget3 ticker scraper
 
