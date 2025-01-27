@@ -140,7 +140,7 @@ async def get_research_pdfs(session, cookies):
                         "title": "Items",
                         "config": {
                             "collection": "Items",
-                            "pageSize": 25,
+                            "pageSize": 10,
                             "sort": [{"date": "desc"}],
                             "lowercase": True,
                             "seoV2": True,
