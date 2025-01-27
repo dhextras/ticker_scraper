@@ -171,6 +171,10 @@ pip install -r requirements.txt
    # White Diamond Research scraper settings
    WDR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for White Diamond Research
    WDR_TELEGRAM_GRP=  # Telegram group ID for White Diamond Research
+
+   # Wolfpack Research scraper settings
+   WPR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Wolfpack Research
+   WPR_TELEGRAM_GRP=  # Telegram group ID for Wolfpack Research
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -250,6 +254,7 @@ python <script_name>.py
 - **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`
 - **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`
 - **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
+- **Wolfpack:** `wolfpack_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`
@@ -360,6 +365,7 @@ ticker_scraper/
 ├── youtube_channel_monitor.py    # Moon Market channel monitor
 ├── wdr_ticker_scraper.py         # White diamond Article scraper
 ├── wdr_article_scraper.py        # White diamond table ticker scraper
+├── wolfpack_scraper.py           # Wolfpack pdf scraper
 ├── zack_commentary_scraper.py    # Zacks trading service commentary scraper
 ├── zack_html_ts_scraper.py       # Zacks trading service html implementation
 └── zack_widget_scraper.py        # Zacks widget3 ticker scraper
