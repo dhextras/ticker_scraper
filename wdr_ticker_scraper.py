@@ -127,7 +127,6 @@ async def send_to_telegram_and_ws(entry_data):
     #     WS_SERVER_URL,
     # )
 
-    print(message)
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
