@@ -254,7 +254,7 @@ python <script_name>.py
 - **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`
 - **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`
 - **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
-- **Wolfpack:** `wolfpack_scraper.py`
+- **Wolfpack:** `wolfpack_scraper.py`, `wolfpack_xml_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`
@@ -366,6 +366,7 @@ ticker_scraper/
 ├── wdr_ticker_scraper.py         # White diamond Article scraper
 ├── wdr_article_scraper.py        # White diamond table ticker scraper
 ├── wolfpack_scraper.py           # Wolfpack pdf scraper
+├── wolfpack_xml_scraper.py       # Wolfpack xml pdf scraper
 ├── zack_commentary_scraper.py    # Zacks trading service commentary scraper
 ├── zack_html_ts_scraper.py       # Zacks trading service html implementation
 └── zack_widget_scraper.py        # Zacks widget3 ticker scraper
