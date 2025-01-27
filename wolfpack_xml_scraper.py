@@ -206,13 +206,13 @@ async def send_to_telegram_and_ws(article_data, process_time):
         "%Y-%m-%d %H:%M:%S.%f"
     )
 
-    message = f"<b>New Wolfpack Article Found</b>\n\n"
+    message = f"<b>New Wolfpack Article Found - XML</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Article Date:</b> {article_data['date']}\n"
     message += f"<b>Title:</b> {article_data['title']}\n"
     message += f"<b>Sub Title:</b> {article_data['subtitle']}\n"
     message += f"<b>Article URL:</b> {article_data['url']}\n"
-    message += f"<b>Fetch + Process Time:</b> {process_time:.2f} seconds\n"
+    message += f"<b>Fetch and Process Time:</b> {process_time:.2f} seconds\n"
 
     if article_data.get("pdf_url"):
         message += f"<b>Pdf URL:</b> {article_data['pdf_url']}\n"
@@ -223,7 +223,7 @@ async def send_to_telegram_and_ws(article_data, process_time):
     # TODO: Implement websocket sending
     # await send_ws_message(
     #     {
-    #         "name": "Wolfpack Research Article",
+    #         "name": "Wolfpack Article - XML",
     #         "type": "Buy",
     #         "ticker": article_data['ticker'],
     #         "sender": "wolfpack",
