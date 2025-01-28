@@ -164,17 +164,18 @@ async def send_to_telegram_and_ws(article_data, tickers_data):
     if sell_tickers:
         message += f"Extracted Sell Tickers:\n{'\n'.join(sell_tickers)}\n"
 
-    # for action in ["Buy", "Sell"]:
-    #     for _, ticker in tickers_data[action]:
-    #         await send_ws_message(
-    #             {
-    #                 "name": "OXFORD Communique",
-    #                 "type": action,
-    #                 "ticker": ticker,
-    #                 "sender": "oxfordclub",
-    #             },
-    #             WS_SERVER_URL,
-    #         )
+    for action in ["Buy", "Sell"]:
+        for _, ticker in tickers_data[action]:
+            await send_ws_message(
+                {
+                    "name": "OXFORD Communique",
+                    "type": action,
+                    "ticker": ticker,
+                    "sender": "oxfordclub",
+                    "target": "CSS",
+                },
+                WS_SERVER_URL,
+            )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
