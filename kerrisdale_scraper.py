@@ -65,7 +65,11 @@ async def fetch_json(session):
 
 async def extract_ticker_from_pdf(session, url):
     try:
-        async with session.get(url) as response:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+
+        async with session.get(url, headers=headers) as response:
             if response.status == 200:
                 pdf_content = await response.read()
                 pdf_file = io.BytesIO(pdf_content)
