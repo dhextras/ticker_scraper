@@ -91,6 +91,7 @@ async def process_post(post):
                 "type": "Sell",
                 "ticker": box_ticker,
                 "sender": "hunterbrook",
+                "target": "CSS",
             },
             WS_SERVER_URL,
         )

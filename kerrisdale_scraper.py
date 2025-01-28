@@ -126,6 +126,7 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
             "type": "Sell",
             "ticker": ticker,
             "sender": "kerrisdale",
+            "target": "CSS",
         },
         WS_SERVER_URL,
     )

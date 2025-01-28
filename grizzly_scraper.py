@@ -11,6 +11,7 @@ import aiohttp
 import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
+
 from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -184,6 +185,7 @@ async def send_to_telegram(url, ticker):
             "type": "Sell",
             "ticker": ticker,
             "sender": "grizzly",
+            "target": "CSS",
         },
         WS_SERVER_URL,
     )
@@ -237,7 +239,9 @@ async def run_scraper():
                                 session, url, cookies
                             )
 
-                            cookies = pos_cookies if pos_cookies is not None else cookies
+                            cookies = (
+                                pos_cookies if pos_cookies is not None else cookies
+                            )
                             if ticker:
                                 await send_to_telegram(url, ticker)
                         processed_urls.add(url)
@@ -251,9 +255,7 @@ async def run_scraper():
 
 
 def main():
-    if not all(
-        [TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]
-    ):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

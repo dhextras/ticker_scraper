@@ -195,6 +195,7 @@ async def send_to_telegram(url, ticker):
             "type": "Sell",
             "ticker": ticker,
             "sender": "muddy_waters",
+            "target": "CSS",
         },
         WS_SERVER_URL,
     )

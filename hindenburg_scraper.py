@@ -122,6 +122,7 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
             "type": "Sell",
             "ticker": ticker,
             "sender": "hindenburg",
+            "target": "CSS",
         },
         WS_SERVER_URL,
     )

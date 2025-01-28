@@ -116,16 +116,16 @@ async def send_to_telegram_and_ws(entry_data):
     message += f"<b>Sentiment:</b> {entry_data['sentiment']}\n"
     message += f"<b>URL:</b> {entry_data['url']}\n"
 
-    # TODO: Implement websocket sending
-    # await send_ws_message(
-    #     {
-    #         "name": "White Diamond Table",
-    #         "type": ws_type,
-    #         "ticker": entry_data['ticker'],
-    #         "sender": "whitediamond",
-    #     },
-    #     WS_SERVER_URL,
-    # )
+    await send_ws_message(
+        {
+            "name": "White Diamond Table",
+            "type": ws_type,
+            "ticker": entry_data["ticker"],
+            "sender": "whitediamond",
+            "target": "CSS",
+        },
+        WS_SERVER_URL,
+    )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 

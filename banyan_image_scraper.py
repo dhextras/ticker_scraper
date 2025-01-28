@@ -123,6 +123,7 @@ async def send_to_telegram(name: str, url: str, ticker_obj: TickerAnalysis):
                 "type": "Buy",
                 "ticker": ticker_obj.ticker,
                 "sender": "banyan",
+                "target": "CSS",
             },
             WS_SERVER_URL,
         )

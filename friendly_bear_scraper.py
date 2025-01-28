@@ -120,16 +120,16 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
         message += f"<b>Company:</b> {ticker_obj.company_name}\n"
         message += f"<b>Confidency:</b> {ticker_obj.confidence}\n"
 
-    # TODO: Don't send to websocket until we verify it
-    # await send_ws_message(
-    #     {
-    #         "name": "Friendly Bear",
-    #         "type": "Sell",
-    #         "ticker": ticker,
-    #         "sender": "friendlybear",
-    #     },
-    #     WS_SERVER_URL,
-    # )
+    await send_ws_message(
+        {
+            "name": "Friendly Bear",
+            "type": "Sell",
+            "ticker": ticker,
+            "sender": "friendlybear",
+            "target": "CSS",
+        },
+        WS_SERVER_URL,
+    )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Report sent to Telegram: {ticker} - {url}", "INFO")
 

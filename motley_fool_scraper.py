@@ -340,6 +340,7 @@ async def process_rec_article(article):
                             "type": action,
                             "ticker": ticker,
                             "sender": "motley_fool",
+                            "target": "CSS",
                         },
                         WS_SERVER_URL,
                     )

@@ -209,16 +209,16 @@ async def run_scraper():
                         if commentary["ticker"] and commentary["action"]:
                             ticker_info = f"\n<b>Action:</b> {commentary['action']} {commentary['ticker']}"
 
-                            # TODO: Send to Websocket when needed
-                            # await send_ws_message(
-                            #     {
-                            #         "name": "Zacks - Commentary",
-                            #         "type": commentary["action"],
-                            #         "ticker": commentary["ticker"],
-                            #         "sender": "zacks",
-                            #     },
-                            #     WS_SERVER_URL,
-                            # )
+                            await send_ws_message(
+                                {
+                                    "name": "Zacks - Commentary",
+                                    "type": commentary["action"],
+                                    "ticker": commentary["ticker"],
+                                    "sender": "zacks",
+                                    "target": "CSS",
+                                },
+                                WS_SERVER_URL,
+                            )
 
                         message = (
                             f"<b>New Zacks Commentary!</b>\n"

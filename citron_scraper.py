@@ -78,6 +78,7 @@ async def send_to_telegram(url, ticker_object: TickerAnalysis | None):
                 "type": "Buy",
                 "ticker": ticker_object.ticker,
                 "sender": "citron",
+                "target": "CSS",
             },
             WS_SERVER_URL,
         )

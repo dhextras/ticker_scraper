@@ -17,6 +17,7 @@ from pdfminer.high_level import extract_text
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -220,16 +221,16 @@ async def send_to_telegram_and_ws(article_data, process_time):
     if article_data.get("ticker"):
         message += f"<b>Ticker:</b> {article_data['ticker']}\n"
 
-    # TODO: Implement websocket sending
-    # await send_ws_message(
-    #     {
-    #         "name": "Wolfpack Article - XML",
-    #         "type": "Buy",
-    #         "ticker": article_data['ticker'],
-    #         "sender": "wolfpack",
-    #     },
-    #     WS_SERVER_URL,
-    # )
+    await send_ws_message(
+        {
+            "name": "Wolfpack Article - XML",
+            "type": "Buy",
+            "ticker": article_data["ticker"],
+            "sender": "wolfpack",
+            "target": "CSS",
+        },
+        WS_SERVER_URL,
+    )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 

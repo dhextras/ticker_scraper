@@ -210,16 +210,16 @@ async def send_to_telegram_and_ws(article_data):
     if article_data.get("ticker"):
         message += f"<b>Ticker:</b> {article_data['ticker']}\n"
 
-    # TODO: Implement websocket sending
-    # await send_ws_message(
-    #     {
-    #         "name": "Wolfpack Article - API",
-    #         "type": "Buy",
-    #         "ticker": article_data['ticker'],
-    #         "sender": "wolfpack",
-    #     },
-    #     WS_SERVER_URL,
-    # )
+    await send_ws_message(
+        {
+            "name": "Wolfpack Article - API",
+            "type": "Buy",
+            "ticker": article_data["ticker"],
+            "sender": "wolfpack",
+            "target": "CSS",
+        },
+        WS_SERVER_URL,
+    )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
