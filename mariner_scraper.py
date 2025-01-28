@@ -131,7 +131,6 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
     #     WS_SERVER_URL,
     # )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    print(message)
     log_message(f"Report sent to Telegram: {ticker} - {url}", "INFO")
 
 

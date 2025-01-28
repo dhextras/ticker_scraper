@@ -231,7 +231,6 @@ async def run_scraper():
                         await send_telegram_message(
                             message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
                         )
-                        print(message)
                         log_message(f"Found commentary for ID: {current_comment_id}")
                         current_comment_id += 1
                         await save_comment_id(current_comment_id)
