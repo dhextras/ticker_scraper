@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from dotenv import load_dotenv
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -23,6 +25,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 ZACKS_USERNAME = os.getenv("ZACKS_USERNAME")
 ZACKS_PASSWORD = os.getenv("ZACKS_PASSWORD")
+WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 CHECK_INTERVAL = 0.2  # seconds
 STARTING_CID = 43250  # Starting comment ID
 
@@ -32,6 +35,17 @@ COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
 # Session management
 session: Optional[aiohttp.ClientSession] = None
 session_lock = asyncio.Lock()
+
+
+def extract_ticker(title, content):
+    if "BUY" in title or "Buy" in title or "Buying" in title or "Adding" in title:
+        match = re.search(r"\(([A-Z]+)\)", content)
+        if match:
+            return match.group(1), "Buy"
+
+    # TODO: Later also process sell alerts
+
+    return None, None
 
 
 def load_last_comment_id():
@@ -152,10 +166,9 @@ def process_commentary(html: str):
         if not title or not content:
             return None
 
-        return {
-            "title": title,
-            "content": content,
-        }
+        ticker, action = extract_ticker(title, content)
+
+        return {"title": title, "content": content, "ticker": ticker, "action": action}
     except Exception as e:
         log_message(f"Error processing commentary: {e}", "ERROR")
         return None
@@ -191,10 +204,26 @@ async def run_scraper():
                     commentary = process_commentary(raw_html)
                     if commentary:
                         current_time = datetime.now(pytz.utc)
+
+                        ticker_info = ""
+                        if commentary["ticker"] and commentary["action"]:
+                            ticker_info = f"\n<b>Action:</b> {commentary['action']} {commentary['ticker']}"
+
+                            # TODO: Send to Websocket when needed
+                            # await send_ws_message(
+                            #     {
+                            #         "name": "Zacks - Commentary",
+                            #         "type": commentary["action"],
+                            #         "ticker": commentary["ticker"],
+                            #         "sender": "zacks",
+                            #     },
+                            #     WS_SERVER_URL,
+                            # )
+
                         message = (
                             f"<b>New Zacks Commentary!</b>\n"
                             f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                            f"<b>Comment Id:</b> {current_comment_id}\n\n"
+                            f"<b>Comment Id:</b> {current_comment_id}{ticker_info}\n\n"
                             f"<b>Title:</b> {commentary['title']}\n\n"
                             f"{commentary['content'][:600]}\n\n\nthere is more......."
                         )
@@ -202,6 +231,7 @@ async def run_scraper():
                         await send_telegram_message(
                             message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
                         )
+                        print(message)
                         log_message(f"Found commentary for ID: {current_comment_id}")
                         current_comment_id += 1
                         await save_comment_id(current_comment_id)
