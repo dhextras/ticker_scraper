@@ -65,7 +65,7 @@ async def process_post(post: Dict) -> str:
     soup = BeautifulSoup(post["content"], "html.parser")
     formatted_content = soup.get_text(separator="\n", strip=True)
 
-    message = f"<b>Minervini Daily Post Update</b>\n\n"
+    message = f"<b>Minervini live Update</b>\n\n"
     message += (
         f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S EDT')}\n"
     )
