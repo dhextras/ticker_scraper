@@ -175,6 +175,10 @@ pip install -r requirements.txt
    # Wolfpack Research scraper settings
    WPR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Wolfpack Research
    WPR_TELEGRAM_GRP=  # Telegram group ID for Wolfpack Research
+
+   # Miner vini scraper settings
+   MINERVINI_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Miner Vini
+   MINERVINI_TELEGRAM_GRP=  # Telegram group ID for Miner Vini
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -255,6 +259,7 @@ python <script_name>.py
 - **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`
 - **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
 - **Wolfpack:** `wolfpack_scraper.py`, `wolfpack_xml_scraper.py`
+- **MinerVini:** `minervini_live_scraper.py`, `minervini_post_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`
@@ -351,6 +356,8 @@ ticker_scraper/
 ├── jehoshaphat_scraper.py        # Jehoshaphat pdf & image ticker scraper
 ├── kerrisdale_scraper.py         # Kerrisdale pdf & image ticker scraper
 ├── mariner_scraper.py            # Mariner Research pdf & image ticker scraper
+├── minervini_live_scraper.py     # Miner vini live stream scraper
+├── minervini_post_scraper.py     # Minervini post scraper
 ├── motley_fool_scraper.py        # Motley ticker scraper
 ├── mudddy_waters_scraper.py      # Muddy Waters Media scraper
 ├── navallier_old_csv_scraper.py  # Navallier protfolio CSV scraper
@@ -370,7 +377,6 @@ ticker_scraper/
 ├── zack_commentary_scraper.py    # Zacks trading service commentary scraper
 ├── zack_html_ts_scraper.py       # Zacks trading service html implementation
 └── zack_widget_scraper.py        # Zacks widget3 ticker scraper
-
 ```
 
 ### Important Notes
