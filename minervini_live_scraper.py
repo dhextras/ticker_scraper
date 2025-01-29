@@ -21,8 +21,23 @@ TELEGRAM_BOT_TOKEN = os.getenv("MINERVINI_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MINERVINI_TELEGRAM_GRP")
 TOKENS_FILE = "data/minervini_access_token.json"
 BASE_URL = "https://mpa.minervini.com/api/streams/1/live/"
+PROCESSED_IDS_FILE = "data/minervini_processed_post_ids.json"
 
 os.makedirs("data", exist_ok=True)
+
+
+def load_processed_ids() -> set:
+    try:
+        with open(PROCESSED_IDS_FILE, "r") as f:
+            return set(json.load(f))
+    except FileNotFoundError:
+        return set()
+
+
+def save_processed_ids(processed_ids: set) -> None:
+    with open(PROCESSED_IDS_FILE, "w") as f:
+        json.dump(list(processed_ids), f)
+    log_message("Processed IDs saved", "INFO")
 
 
 def load_tokens() -> Optional[Dict]:
@@ -69,6 +84,7 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
         log_message("Token isn't available...", "WARNING")
         return
 
+    processed_ids = load_processed_ids()
     log_message("Fetching for new posts...", "INFO")
     headers = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -91,12 +107,20 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
                 return
 
             if data["posts"]:
-                log_message(f"Fetched {len(data['posts'])} posts.", "INFO")
-                for post in data["posts"]:
-                    message = await process_post(post)
-                    await send_telegram_message(
-                        message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
-                    )
+                new_posts = [
+                    post
+                    for post in data["posts"]
+                    if str(post["id"]) not in processed_ids
+                ]
+                if new_posts:
+                    log_message(f"Fetched {len(new_posts)} new posts", "INFO")
+                    for post in data["posts"]:
+                        message = await process_post(post)
+                        await send_telegram_message(
+                            message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
+                        )
+                        processed_ids.add(str(post["id"]))
+                    save_processed_ids(processed_ids)
             else:
                 log_message("No posts found for current date", "INFO")
 
