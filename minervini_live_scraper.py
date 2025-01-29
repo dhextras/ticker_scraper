@@ -21,7 +21,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("MINERVINI_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MINERVINI_TELEGRAM_GRP")
 TOKENS_FILE = "data/minervini_access_token.json"
 BASE_URL = "https://mpa.minervini.com/api/streams/1/live/"
-PROCESSED_IDS_FILE = "data/minervini_processed_post_ids.json"
+PROCESSED_IDS_FILE = "data/minervini_processed_live_ids.json"
 
 os.makedirs("data", exist_ok=True)
 
