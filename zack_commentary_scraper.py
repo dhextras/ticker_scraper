@@ -38,10 +38,12 @@ session_lock = asyncio.Lock()
 
 
 def extract_ticker(title, content):
-    if "BUY" in title or "Buy" in title or "Buying" in title or "Adding" in title:
+    if "BUY" in title or "Buy" in title or "Buying" in title:
         match = re.search(r"\(([A-Z]+)\)", content)
         if match:
             return match.group(1), "Buy"
+    elif "Adding" in title:
+        return title.split()[1].trim(), "Buy"
 
     # TODO: Later also process sell alerts
 
