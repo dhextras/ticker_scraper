@@ -43,7 +43,7 @@ def extract_ticker(title, content):
         if match:
             return match.group(1), "Buy"
     elif "Adding" in title:
-        return title.split()[1].trim(), "Buy"
+        return title.split()[1].strip(), "Buy"
 
     # TODO: Later also process sell alerts
 
