@@ -114,7 +114,7 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
                 ]
                 if new_posts:
                     log_message(f"Fetched {len(new_posts)} new posts", "INFO")
-                    for post in data["posts"]:
+                    for post in new_posts:
                         message = await process_post(post)
                         await send_telegram_message(
                             message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
