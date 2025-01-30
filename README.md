@@ -48,6 +48,10 @@ pip install -r requirements.txt
    WS_SERVER_URL=  # WebSocket server URL
    GPT_API_KEY= # Api key for gpt
 
+   # Error Notify bot settings
+   ERROR_NOTIFY_BOT_TOKEN=  # Telegram bot token for error notifications
+   ERROR_NOTIFY_GRP=  # Telegram group ID for error notifications
+
    # OxfordClub scraper settings
    OXFORDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfordClub
    OXFORDCLUB_TELEGRAM_GRP=  # Telegram group ID for OxfordClub
@@ -103,11 +107,11 @@ pip install -r requirements.txt
    # Grizzly Media scraper settings
    GRIZZLY_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Grizzly
    GRIZZLY_TELEGRAM_GRP=  # Telegram group ID for Grizzly
-   
+
    # Muddy Waters Media scraper settings
    MUDDY_WATERS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Muddy Waters
    MUDDY_WATERS_TELEGRAM_GRP=  # Telegram group ID for Muddy Waters
-   
+
    # Altucher ticker scraper settings
    ALTUCHER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Altucher
    ALTUCHER_TELEGRAM_GRP=  # Telegram group ID for Altucher
@@ -325,6 +329,9 @@ ticker_scraper/
 ├── log/                          # Folder for log files
 ├── utils/                        # Utility functions
 │   ├── __init__.py
+│   ├── bypass_cloudflare.py      # Bypasser cloudflare captchas
+│   ├── error_notifier.py         # Notify critilca error to telegram
+│   ├── gpt_ticker_extractor.py   # Extract ticker from Image or Text
 │   ├── logger.py                 # Logger utility
 │   ├── telegram_sender.py        # Telegram sending utility
 │   ├── time_utils.py             # Time utility functions
