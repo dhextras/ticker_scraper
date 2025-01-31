@@ -277,7 +277,6 @@ def main():
     except Exception as e:
         log_message(f"Critical error in main: {e}", "CRITICAL")
         sys.exit(1)
-    # TODO: Add finnaly here and send the message to notify dev as well also in errors
 
 
 if __name__ == "__main__":

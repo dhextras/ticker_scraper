@@ -371,7 +371,7 @@ async def process_article(article, uid, session_token, fetch_time):
             current_time = datetime.now(pytz.utc).astimezone(article_timezone)
             log_message(
                 f"Time difference: {(current_time - published_date).total_seconds():.2f} seconds",
-                "ERROR",
+                "INFO",
             )
             message = (
                 f"<b>New Article Alert!</b>\n"
