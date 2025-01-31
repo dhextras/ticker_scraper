@@ -1,15 +1,16 @@
 import asyncio
 import json
 import os
+import random
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 from time import time
 
+import aiohttp
 import bs4
 import pytz
-import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -28,13 +29,33 @@ CHECK_INTERVAL = 0.2  # seconds
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "investorplace_protfolio_csv.json"
 JSON_URL = "https://investorplace.com/acceleratedprofits/wp-json/wp/v2/pages/5738"
+PROXY_FILE = "cred/proxies.json"
 
 # Global variables to store previous alerts
 previous_alerts = []
 
 
+def load_proxies():
+    try:
+        with open(PROXY_FILE, "r") as f:
+            data = json.load(f)
+            proxies = data.get("investor_place", [])
+            if not proxies:
+                log_message("No proxies found in config", "CRITICAL")
+                sys.exit(1)
+            return proxies
+    except FileNotFoundError:
+        log_message(f"Proxy file not found: {PROXY_FILE}", "CRITICAL")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        log_message(f"Invalid JSON in proxy file: {PROXY_FILE}", "CRITICAL")
+        sys.exit(1)
+    except Exception as e:
+        log_message(f"Error loading proxies: {e}", "CRITICAL")
+        sys.exit(1)
+
+
 def load_saved_alerts():
-    """Load previously saved alerts from disk"""
     try:
         DATA_DIR.mkdir(exist_ok=True)
         if ALERTS_FILE.exists():
@@ -48,7 +69,6 @@ def load_saved_alerts():
 
 
 def save_alerts(data):
-    """Save alerts to disk"""
     try:
         DATA_DIR.mkdir(exist_ok=True)
         with open(ALERTS_FILE, "w") as f:
@@ -58,12 +78,7 @@ def save_alerts(data):
 
 
 def extract_new_tickers(old_alerts, new_alerts):
-    """
-    Extract tickers that been either added or removed from old alerts
-    Returns list of tuples: (action, ticker)
-    """
     tickers = []
-
     try:
         old_symbols = [alert["symbol"] for alert in old_alerts]
         new_symbols = [alert["symbol"] for alert in new_alerts]
@@ -84,10 +99,9 @@ def extract_new_tickers(old_alerts, new_alerts):
 def process_raw_data(html):
     try:
         soup = bs4.BeautifulSoup(html, "html.parser")
-
-        # Find all rows & Extarct values based on index
         rows = soup.find_all("tr", class_=re.compile(r"js-stock-\d+"))
         extracted_data = []
+
         for row in rows:
             columns = row.find_all("td")
             if columns:
@@ -116,33 +130,32 @@ def process_raw_data(html):
         return []
 
 
-async def fetch_csv_alerts(url):
-    """Fetch and parse CSV data from InvestorPlace"""
+async def fetch_csv_alerts(session, proxy):
     try:
         headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
+        proxy_url = f"http://{proxy}" if proxy else None
 
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("content", {}).get("rendered", None)
-
-        return None
+        async with session.get(
+            JSON_URL, headers=headers, proxy=proxy_url, timeout=5
+        ) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get("content", {}).get("rendered", None)
+            return None
 
     except Exception as e:
-        log_message(f"Error fetching CSV data: {e}", "ERROR")
+        log_message(f"Error fetching CSV data with proxy {proxy}: {e}", "ERROR")
         return None
 
 
-async def process_alert():
-    """Check for new alerts and send to Telegram if found"""
+async def process_alert(session, proxy):
     global previous_alerts
 
     try:
         start = time()
-        raw_html = await fetch_csv_alerts(JSON_URL)
+        raw_html = await fetch_csv_alerts(session, proxy)
         log_message(f"fetch_csv_alerts took {(time() - start):.2f} seconds")
+
         if raw_html is None:
             return
 
@@ -190,27 +203,29 @@ async def run_scraper():
     global previous_alerts
     previous_alerts = load_saved_alerts()
 
-    while True:
-        await sleep_until_market_open()
-        log_message("Market is open. Starting to check for new posts...")
+    proxies = load_proxies()
+    log_message(f"Loaded {len(proxies)} proxies")
 
-        # Get market times
-        _, _, market_close_time = get_next_market_times()
-
+    async with aiohttp.ClientSession() as session:
         while True:
-            current_time = datetime.now(pytz.timezone("America/New_York"))
-            if current_time > market_close_time:
-                log_message("Market is closed. Waiting for next market open...")
-                break
+            await sleep_until_market_open()
+            log_message("Market is open. Starting to check for new posts...")
+            _, _, market_close_time = get_next_market_times()
 
-            log_message("Checking for new alerts...")
-            try:
-                await process_alert()
+            while True:
+                current_time = datetime.now(pytz.timezone("America/New_York"))
+                if current_time > market_close_time:
+                    log_message("Market is closed. Waiting for next market open...")
+                    break
 
-            except Exception as e:
-                log_message(f"Error in scraper loop: {e}", "ERROR")
+                log_message("Checking for new alerts...")
+                proxy = random.choice(proxies)
+                try:
+                    await process_alert(session, proxy)
+                except Exception as e:
+                    log_message(f"Error in scraper loop: {e}", "ERROR")
 
-            await asyncio.sleep(CHECK_INTERVAL)
+                await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
