@@ -1,9 +1,11 @@
 import io
 import ssl
+from datetime import datetime
 
 import aiohttp
+import pytz
 
-from utils.logger import log_message
+from utils.base_logger import setup_logger
 
 
 async def send_telegram_message(
@@ -51,5 +53,10 @@ async def send_telegram_message(
             return True
 
     except Exception as e:
-        log_message(f"Error sending message to telegram: {e}", "ERROR")
+        message = f"Error sending message to telegram: {e}"
+        timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3]
+        logger = setup_logger()
+        getattr(logger, "critical")(f"[{timestamp}] {message}")
         return None

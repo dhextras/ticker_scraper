@@ -12,6 +12,13 @@ load_dotenv()
 ERROR_NOTIFY_BOT_TOKEN = os.getenv("ERROR_NOTIFY_BOT_TOKEN")
 ERROR_NOTIFY_GRP = os.getenv("ERROR_NOTIFY_GRP")
 
+LEVEL_EMOJIS = {
+    "DEBUG": "🔍",
+    "WARNING": "ℹ️",
+    "ERROR": "❌",
+    "CRITICAL": "🔥",
+}
+
 
 async def send_error_notification(message, level="WARNING"):
     if not all([ERROR_NOTIFY_BOT_TOKEN, ERROR_NOTIFY_GRP]):
@@ -28,18 +35,24 @@ async def send_error_notification(message, level="WARNING"):
 
     log_file = os.path.join("log", date, script_name, f"{day}.log")
 
-    alert_message = f"⚠️ <b>ERROR NOTIFICATION - {level}</b> ⚠️\n\n"
+    # Trim message if it contains newlines or exceeds 300 chars
+    if "\n" in message:
+        message = message.split("\n")[0] + ".."
+    elif len(message) > 300:
+        message = message[:300] + "..."
+
+    emoji = LEVEL_EMOJIS.get(level.upper(), "ℹ️")
+    alert_message = f"{emoji} <b>Error Notifier -  {level.upper()}</b> {emoji}\n\n"
     alert_message += f"<b>Script:</b> {script_name}\n"
     alert_message += f"<b>Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     alert_message += f"<b>Message:</b> {message}\n"
-    alert_message += f"\n\n<b><i>Last 15 lines of logs attached below...</i></b>"
+    alert_message += f"\n<b><i>Last 15 lines of logs attached below...</i></b>"
 
     if os.path.exists(log_file):
         with open(log_file, "r") as f:
             lines = f.readlines()
             last_15_lines = lines[-15:] if len(lines) >= 15 else lines
             log_content = "".join(last_15_lines)
-
         await send_telegram_message(
             alert_message,
             ERROR_NOTIFY_BOT_TOKEN,
