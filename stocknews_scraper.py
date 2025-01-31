@@ -19,7 +19,7 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-SITEMAP_URL = "https://app.stocks.news/blog-sitemap.xml?page=1"
+SITEMAP_URL = "https://app.stocks.news/blog-sitemap.xml"
 CHECK_INTERVAL = 1
 SEARCH_WORD = "NASDAQ"
 PROCESSED_JSON_FILE = "data/stocknews_processed_urls.json"
