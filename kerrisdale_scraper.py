@@ -100,7 +100,8 @@ async def extract_ticker_from_pdf(session, url):
 
                             break
 
-                log_message(f"No ticker found in PDF: {url}", "WARNING")
+                if ticker is None:
+                    log_message(f"No ticker found in PDF: {url}", "WARNING")
             else:
                 log_message(f"Failed to fetch PDF: HTTP {response.status}", "ERROR")
 
