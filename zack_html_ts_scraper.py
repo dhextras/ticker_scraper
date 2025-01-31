@@ -444,7 +444,7 @@ async def run_scraper():
             try:
                 success = await process_batch(proxies)
                 if not success:
-                    log_message("Some services failed to process", "WARNING")
+                    log_message("Some services failed to process", "INFO")
 
                 log_message(
                     f"Scan cycle completed in {time() - start_time:.2f} seconds"
