@@ -20,13 +20,14 @@ LEVEL_EMOJIS = {
 }
 
 
-async def send_error_notification(message, level="WARNING"):
+async def send_error_notification(message, level="WARNING", main_script=None):
     if not all([ERROR_NOTIFY_BOT_TOKEN, ERROR_NOTIFY_GRP]):
         raise ValueError(
             "Missing required environment variables for error notifications"
         )
 
-    main_script = inspect.stack()[-1].filename
+    if main_script is None:
+        main_script = inspect.stack()[-1].filename
     script_name = os.path.splitext(os.path.basename(main_script))[0]
 
     current_time = datetime.now(pytz.timezone("US/Eastern"))
