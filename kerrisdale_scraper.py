@@ -64,6 +64,9 @@ async def fetch_json(session):
 
 
 async def extract_ticker_from_pdf(session, url):
+    ticker = None
+    action = "Sell"
+
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -78,22 +81,33 @@ async def extract_ticker_from_pdf(session, url):
 
                 # Look for capitalized words after brackets
                 bracket_pattern = r"\((.*?)\)"
-                matches = re.findall(bracket_pattern, first_page)
+                bracket_matches = re.findall(bracket_pattern, first_page)
 
-                if matches:
+                if bracket_matches:
                     # Take the first all-caps word after a bracket
-                    for match in matches:
+                    for match in bracket_matches:
                         if match.isupper():
-                            return match
+                            ticker = match
+
+                            # If ticker found, check if its long or short
+                            action_pattern = r"We are (.*?) shares of"
+                            action_matches = re.search(action_pattern, first_page)
+                            if (
+                                action_matches
+                                and action_matches.group(1).lower().strip() == "long"
+                            ):
+                                action = "Buy"
+
+                            break
 
                 log_message(f"No ticker found in PDF: {url}", "WARNING")
-                return None
             else:
                 log_message(f"Failed to fetch PDF: HTTP {response.status}", "ERROR")
-                return None
+
+            return ticker, action
     except Exception as e:
         log_message(f"Error processing PDF {url}: {e}", "ERROR")
-        return None
+        return ticker, action
 
 
 async def send_posts_to_telegram(urls):
@@ -108,7 +122,7 @@ async def send_posts_to_telegram(urls):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
+async def send_to_telegram(url, ticker_obj: TickerAnalysis | str, action="Sell"):
     timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
 
     message = f"<b>New Kerrisdale Ticker found</b>\n\n"
@@ -117,6 +131,7 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
 
     if isinstance(ticker_obj, str):
         ticker = ticker_obj
+        message += f"<b>Action:</b> {action}\n"
         message += f"<b>Ticker:</b> {ticker_obj}\n"
     else:
         ticker = ticker_obj.ticker
@@ -127,7 +142,7 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
     await send_ws_message(
         {
             "name": "Kerrisdale Capital",
-            "type": "Sell",
+            "type": action,
             "ticker": ticker,
             "sender": "kerrisdale",
             "target": "CSS",
@@ -170,9 +185,11 @@ async def run_scraper():
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
-                            ticker = await extract_ticker_from_pdf(session, url)
+                            ticker, action = await extract_ticker_from_pdf(session, url)
                             if ticker:
-                                await send_to_telegram(url, ticker_obj=ticker)
+                                await send_to_telegram(
+                                    url, ticker_obj=ticker, action=action
+                                )
                         elif url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                             ticker_object = await analyze_image_for_ticker(url)
                             if ticker_object and ticker_object.found:
