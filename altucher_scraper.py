@@ -263,6 +263,8 @@ async def run_scraper():
                 if all_new_urls:
                     processed_urls.update(all_new_urls)
                     save_processed_urls(processed_urls)
+                else:
+                    log_message("No new articles found.", "INFO")
 
                 await asyncio.sleep(CHECK_INTERVAL)
 
