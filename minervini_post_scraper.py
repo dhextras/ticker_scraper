@@ -1,6 +1,9 @@
 import asyncio
 import json
 import os
+import random
+import time
+import uuid
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -49,6 +52,35 @@ def load_tokens() -> Optional[Dict]:
         return None
 
 
+def get_random_headers():
+    """Generate random headers for requests"""
+    return {
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "X-Requested-With": str(uuid.uuid4()),
+        "X-Request-Time": str(int(time.time())),
+    }
+
+
+def get_random_cache_buster():
+    """Generate random cache busting url variable for requests"""
+    cache_busters = [
+        ("cache_timestamp", lambda: int(time.time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time.time())),
+        ("ran_time", lambda: int(time.time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time.time()))),
+    ]
+
+    variable, value_generator = random.choice(cache_busters)
+    return variable, value_generator()
+
+
 def format_time(time_str: str) -> str:
     dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
     ny_time = dt.astimezone(pytz.timezone("America/New_York"))
@@ -83,12 +115,17 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
         log_message("Token isn't available...", "WARNING")
         return
 
-    processed_ids = load_processed_ids()
     log_message("Fetching for new posts...", "INFO")
+
+    processed_ids = load_processed_ids()
+    random_headers = get_random_headers()
+    random_variable, random_value = get_random_cache_buster()
+
     current_date = datetime.now(pytz.timezone("America/New_York"))
-    params = {"date": current_date.strftime("%Y-%m-%d")}
+    params = {"date": current_date.strftime("%Y-%m-%d"), random_variable: random_value}
 
     headers = {
+        **random_headers,
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "x-csrftoken": tokens["csrftoken"],
     }
@@ -97,7 +134,10 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
 
     try:
         async with session.get(
-            BASE_URL, params=params, headers=headers, cookies=cookies
+            BASE_URL,
+            params=params,
+            headers=headers,
+            cookies=cookies,
         ) as response:
             if response.status != 200:
                 await send_alert(f"Unexpected status code: {response.status}")
@@ -137,7 +177,7 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
 async def run_scraper():
     async with aiohttp.ClientSession() as session:
         while True:
-            await sleep_until_market_open()
+            # await sleep_until_market_open()
             log_message("Market is open. Starting to check for posts...")
             _, _, market_close_time = get_next_market_times()
 
