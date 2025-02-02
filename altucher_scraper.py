@@ -1,12 +1,13 @@
 import asyncio
 import json
 import os
+import random
 import re
 import sys
 from datetime import datetime
 
+import aiohttp
 import pytz
-import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -28,6 +29,7 @@ PROCESSED_URLS_FILE = "data/paradigm_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ALTUCHER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ALTUCHER_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
+PROXY_FILE = "cred/proxies.json"
 
 subscriptions = [
     {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT"},
@@ -37,6 +39,26 @@ subscriptions = [
 ]
 
 os.makedirs("data", exist_ok=True)
+
+
+def load_proxies():
+    try:
+        with open(PROXY_FILE, "r") as f:
+            data = json.load(f)
+            proxies = data.get("altucher", [])
+            if not proxies:
+                log_message("No proxies found in config", "CRITICAL")
+                sys.exit(1)
+            return proxies
+    except FileNotFoundError:
+        log_message(f"Proxy file not found: {PROXY_FILE}", "CRITICAL")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        log_message(f"Invalid JSON in proxy file: {PROXY_FILE}", "CRITICAL")
+        sys.exit(1)
+    except Exception as e:
+        log_message(f"Error loading proxies: {e}", "CRITICAL")
+        sys.exit(1)
 
 
 def load_processed_urls():
@@ -53,29 +75,14 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-def login(session):
-    try:
-        payload = {"username": USERNAME, "password": PASSWORD}
-        response = session.post(LOGIN_URL, data=payload)
-        if response.status_code == 200:
-            log_message("Login successful", "INFO")
-            return session
-        else:
-            log_message(f"Login failed: HTTP {response.status_code}", "ERROR")
-            return None
-    except Exception as e:
-        log_message(f"Error during login: {e}", "ERROR")
-        return None
-
-
-async def fetch_articles(session, subscription_name, subscription_id):
+async def fetch_articles(session, subscription_name, subscription_id, proxy):
     try:
         params = {
             "include": 2,
             "order": "-fields.postDate",
             "fields.articleCategory.sys.id": "630ga2Gfm1hh4L2mHMkBHS",
             "fields.subscription.sys.id": subscription_id,
-            "fields.postDate[gte]": "1999-12-31T18:00:00.000Z",
+            "fields.postDate[gte]": "2020-12-31T18:00:00.000Z",
             "fields.postDate[lte]": "2030-12-31T10:22:51.880Z",
             "skip": 0,
             "limit": 10,
@@ -87,27 +94,35 @@ async def fetch_articles(session, subscription_name, subscription_id):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         }
 
-        response = session.get(JSON_URL, params=params, headers=headers)
-        if response.status_code == 200:
-            raw_data = response.json()
-            processed_data = []
-            log_message(
-                f"Fetched {len(raw_data)} {subscription_name.upper()} articles", "INFO"
-            )
+        proxy_url = f"http://{proxy}" if proxy else None
 
-            for stocRecs in raw_data:
-                stocRecs["subscription_name"] = subscription_name
-                processed_data.append(stocRecs)
+        async with session.get(
+            JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=1
+        ) as response:
+            if response.status == 200:
+                raw_data = await response.json()
+                processed_data = []
+                log_message(
+                    f"Fetched {len(raw_data)} {subscription_name.upper()} articles using proxy {proxy}",
+                    "INFO",
+                )
 
-            return processed_data
-        else:
-            log_message(
-                f"Failed to fetch {subscription_name} articles: HTTP {response.status_code}",
-                "ERROR",
-            )
-            return []
+                for stocRecs in raw_data:
+                    stocRecs["subscription_name"] = subscription_name
+                    processed_data.append(stocRecs)
+
+                return processed_data
+            else:
+                log_message(
+                    f"Failed to fetch {subscription_name} articles with proxy {proxy}: HTTP {response.status}",
+                    "ERROR",
+                )
+                return []
     except Exception as e:
-        log_message(f"Error fetching {subscription_name} articles: {e}", "ERROR")
+        log_message(
+            f"Error fetching {subscription_name} articles with proxy {proxy}: {e}",
+            "ERROR",
+        )
         return []
 
 
@@ -132,7 +147,6 @@ async def process_articles(articles):
                             "subscription_name": article["subscription_name"],
                         }
                     )
-
     return buy_recommendations
 
 
@@ -149,12 +163,22 @@ async def send_matches_to_telegram(buy_recs):
         sub_name = rec["subscription_name"].upper()
         url = f"https://my.paradigmpressgroup.com/article/{rec['url']}"
 
+        post_time = datetime.fromisoformat(postDate.replace("Z", "+00:00"))
+
+        post_time_us = post_time.astimezone(pytz.timezone("America/New_York")).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+        current_time_us = datetime.now(pytz.timezone("America/New_York")).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+
         message = f"<b>New Buy Recommendation - {sub_name}</b>\n\n"
         message += f"<b>Stock Symbol:</b> {ticker}\n"
         message += f"<b>Stock Name:</b> {name}\n"
         message += f"<b>Action Desc:</b> {actionDesc}\n"
         message += f"<b>URL:</b> {url}\n"
-        message += f"<b>Post Time:</b> {postDate}\n"
+        message += f"<b>Post Time:</b> {post_time_us}\n"
+        message += f"<b>Current Time:</b> {current_time_us}\n"
 
         await send_ws_message(
             {
@@ -172,54 +196,75 @@ async def send_matches_to_telegram(buy_recs):
         )
 
 
+async def process_subscription(session, subscription, proxy, processed_urls):
+    articles = await fetch_articles(
+        session, subscription["name"], subscription["id"], proxy
+    )
+
+    new_articles = [
+        article
+        for article in articles
+        if article.get("slug") and article["slug"] not in processed_urls
+    ]
+    new_urls = {article["slug"] for article in articles if article.get("slug")}
+
+    if new_articles:
+        log_message(
+            f"Found {len(new_articles)} new articles to process for {subscription['name']}.",
+            "INFO",
+        )
+
+        # FIXME: remove this later when we properly handled drafts
+        date = datetime.now().strftime("%Y_%m_%s")
+        with open(f"data/delete_{date}.json", "w") as f:
+            json.dump(new_articles, f, indent=2)
+
+        buy_recs = await process_articles(new_articles)
+        await send_matches_to_telegram(buy_recs)
+        return new_urls
+    return set()
+
+
 async def run_scraper():
     processed_urls = load_processed_urls()
+    proxies = load_proxies()
 
-    session = requests.Session()
-    session = login(session)
-
-    if not session:
-        return
-
-    while True:
-        await sleep_until_market_open()
-        log_message("Market is open. Starting to check for new articles...")
-        _, _, market_close_time = get_next_market_times()
-
+    async with aiohttp.ClientSession() as session:
         while True:
-            current_time = datetime.now(pytz.timezone("America/New_York"))
+            await sleep_until_market_open()
+            log_message("Market is open. Starting to check for new articles...")
+            _, _, market_close_time = get_next_market_times()
 
-            if current_time > market_close_time:
-                log_message("Market is closed. Waiting for next market open...")
-                break
+            while True:
+                current_time = datetime.now(pytz.timezone("America/New_York"))
+                if current_time > market_close_time:
+                    log_message("Market is closed. Waiting for next market open...")
+                    break
 
-            articles = []
-            for subscription in subscriptions:
-                articles += await fetch_articles(
-                    session, subscription["name"], subscription["id"]
-                )
+                # Randomly select different proxies for each subscription
+                available_proxies = proxies.copy()
+                tasks = []
 
-            new_articles = [
-                article
-                for article in articles
-                if article.get("slug") and article["slug"] not in processed_urls
-            ]
-            new_urls = [article["slug"] for article in articles]
+                for subscription in subscriptions:
+                    if not available_proxies:
+                        available_proxies = proxies.copy()
+                    proxy = random.choice(available_proxies)
+                    available_proxies.remove(proxy)
 
-            if new_articles:
-                log_message(
-                    f"Found {len(new_articles)} new articles to process.", "INFO"
-                )
+                    tasks.append(
+                        process_subscription(
+                            session, subscription, proxy, processed_urls
+                        )
+                    )
 
-                buy_recs = await process_articles(new_articles)
-                await send_matches_to_telegram(buy_recs)
+                new_urls_list = await asyncio.gather(*tasks)
+                all_new_urls = set().union(*new_urls_list)
 
-                processed_urls.update(new_urls)
-                save_processed_urls(new_urls)
-            else:
-                log_message("No new articles found.", "INFO")
+                if all_new_urls:
+                    processed_urls.update(all_new_urls)
+                    save_processed_urls(processed_urls)
 
-            await asyncio.sleep(CHECK_INTERVAL)
+                await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
