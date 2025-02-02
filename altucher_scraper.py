@@ -97,7 +97,7 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
         proxy_url = f"http://{proxy}" if proxy else None
 
         async with session.get(
-            JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=1
+            JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=5
         ) as response:
             if response.status == 200:
                 raw_data = await response.json()
