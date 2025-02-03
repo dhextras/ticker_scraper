@@ -444,10 +444,10 @@ async def main():
 
             while datetime.now(pytz.timezone("America/New_York")) <= market_close_time:
                 tasks = []
-                for i in range(min(3, len(valid_accounts))):
+                for i in range(min(2, len(valid_accounts))):
                     # Have 0.5 delay between each request
                     if i > 0:
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.5)
 
                     email, password = valid_accounts[i]
                     proxy = proxy_manager.get_next_proxy()
