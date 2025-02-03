@@ -28,6 +28,7 @@ ACCESS_TOKEN_FILE = "data/wolfpack_access_token.json"
 TELEGRAM_BOT_TOKEN = os.getenv("WPR_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("WPR_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
+TARGET_INT_ID = 2798  # Change this if needed
 
 os.makedirs("data", exist_ok=True)
 
@@ -92,14 +93,14 @@ def load_access_token():
     try:
         with open(ACCESS_TOKEN_FILE, "r") as f:
             data = json.load(f)
-            return data.get("svSession")
+            return data.get("svSession"), data.get("authorization")
     except FileNotFoundError:
-        return None
+        return None, None
 
 
-def save_access_token(token):
+def save_access_token(token, auth):
     with open(ACCESS_TOKEN_FILE, "w") as f:
-        json.dump({"svSession": token}, f)
+        json.dump({"svSession": token, "authorization": auth}, f)
 
 
 async def get_access_token(session):
@@ -107,14 +108,32 @@ async def get_access_token(session):
         async with session.get(f"{API_URL}/v1/access-tokens") as response:
             if response.status == 200:
                 data = await response.json()
-                save_access_token(data["svSession"])
-                return data["svSession"]
+                sv_session = data["svSession"]
+
+                # Find the target app and extract authorization
+                auth_token = None
+                for app in data.get("apps", {}).values():
+                    if app.get("intId") == TARGET_INT_ID:
+                        auth_token = app.get("instance")
+                        break
+
+                if auth_token:
+                    save_access_token(sv_session, auth_token)
+                    return sv_session, auth_token
+                else:
+                    log_message("Failed to find target app in response", "ERROR")
+                    return None, None
     except Exception as e:
         log_message(f"Error getting access token: {e}", "ERROR")
-    return None
+    return None, None
 
 
-async def get_research_pdfs(session, cookies):
+async def get_research_pdfs(session, cookies, auth_token):
+    headers = {
+        "authorization": auth_token,
+        "content-type": "application/json",
+    }
+
     query_data = {
         "urlParams": {
             "gridAppId": "7cbc7368-fc7b-490b-83d7-0bdd71473ecd",
@@ -170,10 +189,15 @@ async def get_research_pdfs(session, cookies):
 
     try:
         async with session.get(
-            f"{API_URL}/dynamic-pages-router/v1/pages?{encoded_data}", cookies=cookies
+            f"{API_URL}/dynamic-pages-router/v1/pages?{encoded_data}",
+            cookies=cookies,
+            headers=headers,
         ) as response:
             if response.status == 200:
                 return await response.json()
+            if response.status == 304:
+                log_message(f"Got cached version, try to bust it", "ERROR")
+                return "304"
     except Exception as e:
         log_message(f"Error fetching research PDFs: {e}", "ERROR")
     return None
@@ -241,24 +265,30 @@ async def run_scraper():
 
                 log_message("Checking for new articles...")
 
-                access_token = load_access_token()
-                if not access_token:
+                sv_session, auth_token = load_access_token()
+                if not sv_session or not auth_token:
                     log_message(
                         "Access Token not available trying to regenerate", "WARNING"
                     )
-                    access_token = await get_access_token(session)
-                    if not access_token:
+                    sv_session, auth_token = await get_access_token(session)
+                    if not sv_session or not auth_token:
                         log_message("Failed to get access token", "ERROR")
                         await asyncio.sleep(CHECK_INTERVAL)
                         continue
 
-                result = await get_research_pdfs(session, {"svSession": access_token})
+                result = await get_research_pdfs(
+                    session, {"svSession": sv_session}, auth_token
+                )
+
+                if result == "304":
+                    continue
 
                 if not result or result.get("result", {}).get("status") != 200:
                     log_message(
-                        "Access Token not available trying to regenerate", "WARNING"
+                        "Access Token not available trying to regenerate or fetching failed",
+                        "WARNING",
                     )
-                    access_token = await get_access_token(session)
+                    sv_session, auth_token = await get_access_token(session)
                     continue
 
                 items = result.get("result", {}).get("data", {}).get("items", [])
