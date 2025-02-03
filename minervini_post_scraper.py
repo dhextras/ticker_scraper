@@ -19,7 +19,7 @@ from utils.time_utils import get_next_market_times, sleep_until_market_open
 load_dotenv()
 
 # Constants
-CHECK_INTERVAL = 3
+CHECK_INTERVAL = 1
 TELEGRAM_BOT_TOKEN = os.getenv("MINERVINI_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MINERVINI_TELEGRAM_GRP")
 TOKENS_FILE = "data/minervini_access_token.json"
