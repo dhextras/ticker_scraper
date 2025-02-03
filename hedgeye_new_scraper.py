@@ -121,6 +121,22 @@ def get_random_cache_buster():
     return f"{variable}={value_generator()}"
 
 
+async def get_public_ip(proxy: Optional[str]) -> str:
+    """Get public IP address using the proxy"""
+    ip_check_url = "https://api.ipify.org?format=text"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                ip_check_url, proxy=f"http://{proxy}" if proxy else None
+            ) as response:
+                if response.status == 200:
+                    ip = await response.text()
+                    return ip.strip()
+                return f"Code: {response.status}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
 def login(driver, email, password) -> Optional[Dict[str, str]]:
     login_url = "https://accounts.hedgeye.com/users/sign_in"
     driver.get(login_url)
@@ -271,16 +287,23 @@ async def fetch_alert_details(
         created_at_utc = soup.select_one("time[datetime]")["datetime"]
         created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
         created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
+        current_time_edt = datetime.now(pytz.timezone("America/New_York"))
 
         return {
             "title": alert_title,
             "price": alert_price,
             "created_at": created_at_edt,
+            "current_time": current_time_edt,
             "fetch_time": time.time() - start_time,
         }
 
     except asyncio.TimeoutError:
-        log_message(f"Fetch alert timeout with proxy: {proxy}", "WARNING")
+        public_ip = await get_public_ip(proxy)
+        log_message(
+            f"Fetch alert took more then 2 seconds with ip: {public_ip}, Gotta fix this ASAP",
+            "CRITICAL",
+        )
+
         return None
     except Exception as e:
         if "Rate limited" in str(e):
@@ -308,6 +331,14 @@ async def process_account(
 
         async with aiohttp.ClientSession() as session:
             alert_details = await fetch_alert_details(session, cookies, proxy)
+            if alert_details is None:
+                return
+
+            log_message(
+                f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {email}, {proxy}",
+                "INFO",
+            )
+
             if not alert_details:
                 return
 
@@ -360,6 +391,13 @@ async def process_account(
                             f,
                             indent=2,
                         )
+
+            if alert_details["fetch_time"] > 1.5:
+                public_ip = await get_public_ip(proxy)
+                log_message(
+                    f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
+                    "WARNING",
+                )
 
     except Exception as e:
         if "Rate limited" in str(e):

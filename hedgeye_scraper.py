@@ -476,7 +476,7 @@ async def fetch_alert_details(session, proxy_raw):
     except asyncio.TimeoutError as e:
         public_ip = await get_public_ip(proxy)
         log_message(
-            f"Fetch alert took more then 2 seconds with ip: {public_ip}, Gotta fix this ASAP: {str(e)}",
+            f"Fetch alert took more then 2 seconds with ip: {public_ip}, Gotta fix this ASAP",
             "CRITICAL",
         )
         return None
