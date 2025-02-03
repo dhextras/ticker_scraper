@@ -5,7 +5,7 @@ import random
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 import aiohttp
 import pytz
@@ -103,6 +103,52 @@ class ProxyManager:
         if os.path.exists(RATE_LIMIT_PROXY_FILE):
             os.remove(RATE_LIMIT_PROXY_FILE)
         log_message("All proxy rate limits cleared", "INFO")
+
+
+class AccountManager:
+    def __init__(self, accounts: List[Tuple[str, str]]):
+        self.accounts = accounts
+        self.rate_limited: Set[str] = self._load_rate_limited()
+        self.currently_running: Set[str] = set()
+        self.lock = asyncio.Lock()
+
+    def _load_rate_limited(self) -> Set[str]:
+        if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
+            with open(RATE_LIMIT_ACCOUNTS_FILE, "r") as f:
+                return set(json.load(f))
+        return set()
+
+    def _save_rate_limited(self):
+        with open(RATE_LIMIT_ACCOUNTS_FILE, "w") as f:
+            json.dump(list(self.rate_limited), f)
+
+    async def get_available_accounts(self, count: int) -> List[Tuple[str, str]]:
+        async with self.lock:
+            available = [
+                acc
+                for acc in self.accounts
+                if acc[0] not in self.rate_limited
+                and acc[0] not in self.currently_running
+            ]
+            selected = random.sample(available, min(count, len(available)))
+            self.currently_running.update(email for email, _ in selected)
+            return selected
+
+    async def release_account(self, email: str):
+        async with self.lock:
+            if email in self.currently_running:
+                self.currently_running.remove(email)
+
+    def mark_rate_limited(self, email: str):
+        self.rate_limited.add(email)
+        self._save_rate_limited()
+
+    def clear_rate_limits(self):
+        self.rate_limited.clear()
+        self.currently_running.clear()
+        if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
+            os.remove(RATE_LIMIT_ACCOUNTS_FILE)
+        log_message("All account rate limits cleared", "INFO")
 
 
 def get_random_cache_buster():
@@ -411,6 +457,56 @@ async def process_account(
         log_message(f"Error processing account {email}: {str(e)}", "ERROR")
 
 
+async def process_accounts_continuously(
+    account_manager: AccountManager,
+    proxy_manager: ProxyManager,
+    last_alert_lock: asyncio.Lock,
+):
+    while True:
+        try:
+            accounts = await account_manager.get_available_accounts(2)
+            if not accounts:
+                # If no accounts available, wait briefly and try again
+                await asyncio.sleep(0.5)
+                continue
+
+            for i, (email, password) in enumerate(accounts):
+                if i > 0:
+                    await asyncio.sleep(0.6)
+
+                proxy = proxy_manager.get_next_proxy()
+                asyncio.create_task(
+                    process_account_with_release(
+                        email,
+                        password,
+                        proxy,
+                        proxy_manager,
+                        last_alert_lock,
+                        account_manager,
+                    )
+                )
+
+            await asyncio.sleep(0.1)
+
+        except Exception as e:
+            log_message(f"Error in process_accounts_continuously: {str(e)}", "ERROR")
+            await asyncio.sleep(1)
+
+
+async def process_account_with_release(
+    email: str,
+    password: str,
+    proxy: str,
+    proxy_manager: ProxyManager,
+    last_alert_lock: asyncio.Lock,
+    account_manager: AccountManager,
+):
+    try:
+        await process_account(email, password, proxy, proxy_manager, last_alert_lock)
+    finally:
+        await account_manager.release_account(email)
+
+
 async def main():
     if not all(
         [
@@ -443,31 +539,34 @@ async def main():
 
         last_alert_lock = asyncio.Lock()
         proxy_manager = ProxyManager(proxies)
+        account_manager = AccountManager(valid_accounts)
 
         while True:
             await sleep_until_market_open()
             _, _, market_close_time = get_next_market_times()
 
+            process_task = asyncio.create_task(
+                process_accounts_continuously(
+                    account_manager, proxy_manager, last_alert_lock
+                )
+            )
+
             while datetime.now(pytz.timezone("America/New_York")) <= market_close_time:
-                tasks = []
-                for i in range(min(2, len(valid_accounts))):
-                    # Have 0.5 delay between each request
-                    if i > 0:
-                        await asyncio.sleep(0.5)
+                # 10 sec sleep between checking to avoid overheat in the server
+                await asyncio.sleep(10)
 
-                    email, password = valid_accounts[i]
-                    proxy = proxy_manager.get_next_proxy()
-                    task = asyncio.create_task(
-                        process_account(
-                            email, password, proxy, proxy_manager, last_alert_lock
-                        )
-                    )
-                    tasks.append(task)
-
-                await asyncio.gather(*tasks)
-                await asyncio.sleep(1.1)
+            # Cancel the processing task
+            process_task.cancel()
+            try:
+                await process_task
+            except asyncio.CancelledError:
+                pass
 
             log_message("Market closed. Waiting for next market open...", "INFO")
+
+            # Clear rate limits at end of day
+            proxy_manager.clear_rate_limits()
+            account_manager.clear_rate_limits()
 
     except Exception as e:
         log_message(f"Critical error: {str(e)}", "CRITICAL")
