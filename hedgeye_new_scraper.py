@@ -373,6 +373,7 @@ async def process_account(
                         f"Title: {alert_details['title']}\n"
                         f"Price: {alert_details['price']}\n"
                         f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                        f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
                         f"Fetch Time: {alert_details['fetch_time']:.2f}s"
                     )
                     await send_telegram_message(
@@ -391,6 +392,11 @@ async def process_account(
                             f,
                             indent=2,
                         )
+
+                    log_message(
+                        f"New alert Sent to telegram: {alert_details['title']}",
+                        "INFO",
+                    )
 
             if alert_details["fetch_time"] > 1.5:
                 public_ip = await get_public_ip(proxy)
