@@ -307,10 +307,14 @@ async def process_rec_article(article):
         if (
             current_time - published_date
         ).total_seconds() < 86400:  # Within last 24 hours
-            product_name = PRODUCT_NAMES.get(
-                article["product"]["productId"], "Unknown Product"
-            )
+            product_name = PRODUCT_NAMES.get(article["product"]["productId"], "Unknown")
             article_url = article["url"]
+
+            # FIXME: Remove this after confirming
+            if product_name != "Unknown":
+                date = datetime.now().strftime("%Y_%m_%s")
+                with open(f"data/motley_remove_{date}.json", "w") as f:
+                    json.dump(article, f)
 
             tickers = await extract_tickers(article)
 
