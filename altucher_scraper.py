@@ -118,6 +118,12 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
                     "ERROR",
                 )
                 return []
+    except asyncio.TimeoutError:
+        log_message(
+            f"Took more then 5 sec to fetch {subscription_name} with proxy: {proxy}",
+            "WARNING",
+        )
+        return []
     except Exception as e:
         log_message(
             f"Error fetching {subscription_name} articles with proxy {proxy}: {e}",
