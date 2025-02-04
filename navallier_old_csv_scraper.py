@@ -126,7 +126,10 @@ def process_raw_data(html):
 
         return extracted_data
     except Exception as e:
-        log_message(f"Failed to process raw html data:\n{e}", "ERROR")
+        log_message(
+            f"Failed to process raw html data:\n{e}\n\nhtml content: {html[:3000]}\n\n...",
+            "ERROR",
+        )
         return []
 
 
