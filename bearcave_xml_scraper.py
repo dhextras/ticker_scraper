@@ -101,7 +101,7 @@ async def fetch_xml_feed(session, raw_proxy=None):
             f"{XML_FEED_URL}?{random_cache_buster}",
             headers=headers,
             proxy=proxy,
-            timeout=2,
+            timeout=5,
         ) as response:
             if response.status == 200:
                 content = await response.text()
