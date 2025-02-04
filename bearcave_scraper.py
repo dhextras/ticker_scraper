@@ -130,7 +130,7 @@ async def fetch_json(session, raw_proxy=None):
             f"{JSON_URL}?limit=10&{random_cache_buster}",
             headers=headers,
             proxy=proxy,
-            timeout=5,  # FIXME: Try to bring it down to 0.2 or 0.1 seconds later down the line when we have the proper proxy
+            timeout=1,  # FIXME: Try to bring it down to 0.2 or 0.1 seconds later down the line when we have the proper proxy
         ) as response:
             if response.status == 200:
                 data = await response.json()
@@ -140,7 +140,7 @@ async def fetch_json(session, raw_proxy=None):
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
                 return []
     except asyncio.TimeoutError:
-        log_message(f"Took more then 5 sec to fetch with proxy: {raw_proxy}", "WARNING")
+        log_message(f"Took more then 1 sec to fetch with proxy: {raw_proxy}", "WARNING")
         return []
     except Exception as e:
         log_message(f"Error fetching JSON with proxy {raw_proxy}: {e}", "ERROR")
