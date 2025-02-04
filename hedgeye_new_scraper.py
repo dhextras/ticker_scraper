@@ -347,7 +347,7 @@ async def fetch_alert_details(
         public_ip = await get_public_ip(proxy)
         log_message(
             f"Fetch alert took more then 2 seconds with ip: {public_ip}, Gotta fix this ASAP",
-            "CRITICAL",
+            "WARNING",
         )
 
         return None
@@ -359,7 +359,12 @@ async def fetch_alert_details(
 
 
 async def process_account(
-    email: str, password: str, proxy: str, proxy_manager, last_alert_lock: asyncio.Lock
+    email: str,
+    password: str,
+    proxy: str,
+    proxy_manager,
+    account_manager,
+    last_alert_lock: asyncio.Lock,
 ):
     try:
         cookies = load_cookies(email)
@@ -454,6 +459,7 @@ async def process_account(
     except Exception as e:
         if "Rate limited" in str(e):
             proxy_manager.mark_rate_limited(proxy)
+            account_manager.mark_rate_limited(proxy)
         log_message(f"Error processing account {email}: {str(e)}", "ERROR")
 
 
@@ -501,7 +507,9 @@ async def process_account_with_release(
     account_manager: AccountManager,
 ):
     try:
-        await process_account(email, password, proxy, proxy_manager, last_alert_lock)
+        await process_account(
+            email, password, proxy, proxy_manager, account_manager, last_alert_lock
+        )
     finally:
         await account_manager.release_account(email)
 
