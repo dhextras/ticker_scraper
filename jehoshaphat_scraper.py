@@ -97,10 +97,6 @@ async def fetch_json(session, cookies):
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
                 return data, None
             elif response.status == 403:
-                log_message(
-                    "CF_CLEARANCE expired trying to revalidate it while fetching json",
-                    "ERROR",
-                )
                 cookies = load_cookies(frash=True)
                 if not cookies:
                     raise Exception("CF_CLEARANCE Failed: Post")
@@ -220,7 +216,7 @@ async def run_scraper():
                 cookies = pos_cookies if pos_cookies is not None else cookies
 
                 if not posts:
-                    log_message("Failed to fetch posts or no posts returned", "ERROR")
+                    log_message("Failed to fetch posts or no posts returned", "WARNING")
                     await asyncio.sleep(CHECK_INTERVAL)
                     continue
 
