@@ -130,7 +130,7 @@ async def fetch_json(session, raw_proxy=None):
             f"{JSON_URL}?limit=10&{random_cache_buster}",
             headers=headers,
             proxy=proxy,
-            timeout=1,  # FIXME: Try to bring it down to 0.2 or 0.1 seconds later down the line when we have the proper proxy
+            timeout=2,  # FIXME: Try to bring it down to 0.2 or 0.1 seconds later down the line when we have the proper proxy
         ) as response:
             if response.status == 200:
                 data = await response.json()
