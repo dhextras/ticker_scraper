@@ -127,7 +127,7 @@ def process_raw_data(html):
         return extracted_data
     except Exception as e:
         log_message(
-            f"Failed to process raw html data:\n{e}\n\nhtml content: {html[:3000]}\n\n...",
+            f"Failed to process raw html data error:\n{e}\n\nhtml content: {html[:3000]}\n\n...",
             "ERROR",
         )
         return []
@@ -147,7 +147,7 @@ async def fetch_csv_alerts(session, proxy):
             return None
     except asyncio.TimeoutError:
         log_message(f"Took more then 5 sec to fetch with proxy: {proxy}", "WARNING")
-        return []
+        return None
     except Exception as e:
         log_message(f"Error fetching CSV data with proxy {proxy}: {e}", "ERROR")
         return None
