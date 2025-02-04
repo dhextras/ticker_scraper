@@ -26,6 +26,8 @@ async def send_error_notification(message, level="WARNING", main_script=None):
             "Missing required environment variables for error notifications"
         )
 
+    file_needed = True if level.upper() in ["ERROR", "CRITICAL"] else False
+
     if main_script is None:
         main_script = inspect.stack()[-1].filename
     script_name = os.path.splitext(os.path.basename(main_script))[0]
@@ -47,9 +49,11 @@ async def send_error_notification(message, level="WARNING", main_script=None):
     alert_message += f"<b>Script:</b> {script_name}\n"
     alert_message += f"<b>Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     alert_message += f"<b>Message:</b> {message}\n"
-    alert_message += f"\n<b><i>Last 15 lines of logs attached below...</i></b>"
 
-    if os.path.exists(log_file):
+    if file_needed:
+        alert_message += f"\n<b><i>Last 15 lines of the logs attached below...</i></b>"
+
+    if file_needed and os.path.exists(log_file):
         with open(log_file, "r") as f:
             lines = f.readlines()
             last_15_lines = lines[-15:] if len(lines) >= 15 else lines
@@ -59,7 +63,7 @@ async def send_error_notification(message, level="WARNING", main_script=None):
             ERROR_NOTIFY_BOT_TOKEN,
             ERROR_NOTIFY_GRP,
             file_content=log_content,
-            filename=f"last_15_lines_of-{script_name}-{date.replace('/', '_')}_{day}.log",
+            filename=f"{script_name}-{date.replace('/', '_')}_{day}.log",
         )
     else:
         await send_telegram_message(
