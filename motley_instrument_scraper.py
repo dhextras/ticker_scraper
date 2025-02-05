@@ -42,7 +42,7 @@ os.makedirs("data", exist_ok=True)
 # Global variables
 previous_articles = []
 last_request_time = 0
-MIN_REQUEST_INTERVAL = 1
+MIN_REQUEST_INTERVAL = 2
 PRODUCT_NAMES = {
     1081: "Stock Advisor",
     1069: "Rule Breakers",
@@ -107,20 +107,6 @@ async def get_api_session(driver):
         return None
 
 
-def get_browser_session(driver):
-    """Get browser session data (cookies and localStorage)"""
-    try:
-        cookies = driver.get_cookies()
-        local_storage = driver.execute_script("return window.localStorage;")
-        return {
-            "cookies": cookies,
-            "localStorage": local_storage,
-        }
-    except Exception as e:
-        log_message(f"Error getting browser session: {e}", "ERROR")
-        return None
-
-
 async def get_new_session_token():
     options = Options()
     options.add_argument("--headless")  # Comment out for first-time setup
@@ -173,14 +159,6 @@ async def get_new_session_token():
         return None
     finally:
         driver.quit()
-
-
-def create_session_with_cookies(cookies):
-    """Create aiohttp ClientSession with saved cookies"""
-    session = aiohttp.ClientSession()
-    for cookie in cookies:
-        session.cookie_jar.update_cookies({cookie["name"]: cookie["value"]})
-    return session
 
 
 async def fetch_latest_articles(session_data):
