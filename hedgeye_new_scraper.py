@@ -556,7 +556,7 @@ async def main():
 
         while True:
             await sleep_until_market_open()
-            _, _, market_close_time = get_next_market_times()
+            _, _, market_close_time = get_next_market_times(end=15)
 
             process_task = asyncio.create_task(
                 process_accounts_continuously(
