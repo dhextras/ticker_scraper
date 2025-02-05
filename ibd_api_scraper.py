@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -144,16 +145,21 @@ async def send_to_telegram(trade):
     message += f"<b>Created:</b> {created_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
 
-    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Trade alert sent to Telegram: {trade['stockSymbol']}", "INFO")
+    await send_ws_message(
+        {
+            "name": "IBD SwingTrader",
+            "type": "Buy",
+            "ticker": trade["stockSymbol"],
+            "sender": "ibd_swing",
+            "target": "CSS",
+        },
+        WS_SERVER_URL,
+    )
 
-    # TODO: Websocket implementation
-    # await send_ws_message({
-    #     "name": "IBD SwingTrader",
-    #     "type": "Buy" if not trade["isShort"] else "Sell",
-    #     "ticker": trade["stockSymbol"],
-    #     "sender": "ibd",
-    # }, WS_SERVER_URL)
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    log_message(
+        f"Trade alert sent to Telegram & Websocket: {trade['stockSymbol']}", "INFO"
+    )
 
 
 async def run_scraper():
