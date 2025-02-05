@@ -4,6 +4,7 @@ import os
 import random
 import sys
 import time
+import uuid
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -80,6 +81,17 @@ def save_processed_urls(urls):
     with open(PROCESSED_URLS_FILE, "w") as f:
         json.dump(list(urls), f, indent=2)
     log_message("Processed URLs saved.", "INFO")
+
+
+def get_random_cache_buster():
+    cache_busters = [
+        ("timestamp", lambda: int(time.time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time.time())),
+        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+    ]
+    variable, value_generator = random.choice(cache_busters)
+    return f"{variable}={value_generator()}"
 
 
 async def get_api_session(driver):
@@ -177,12 +189,9 @@ async def fetch_latest_articles(session_data):
     await rate_limiter.acquire()
     timestamp = int(time.time() * 10000)
     cache_uuid = uuid4()
+    cache_buster = get_random_cache_buster()
 
-    base_url = (
-        # TODO: ADD timestamp later in case we need to make it faster
-        # f"https://api.fool.com/premium-graphql-proxy/graphql?cache-timestap={timestamp}"
-        "https://api.fool.com/premium-graphql-proxy/graphql"
-    )
+    base_url = f"https://api.fool.com/premium-graphql-proxy/graphql?{cache_buster}"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {session_data['accessToken']}",
@@ -194,8 +203,8 @@ async def fetch_latest_articles(session_data):
     }
 
     query = """
-        query GetLatestUniqueArticles($limit: Int) {
-            contents(limit: $limit) {
+        query GetLatestUniqueArticles($limit: Int!, $productIds: [Int!]!) {
+            contents(productIds: $productIds, limit: $limit) {
             product {
                 productId
             }
@@ -216,28 +225,10 @@ async def fetch_latest_articles(session_data):
     params = {
         "operationName": "GetLatestUniqueArticles",
         "query": query,
-        "variables": json.dumps({"limit": 10}),
+        "variables": json.dumps(
+            {"limit": 10, "productIds": list(PRODUCT_NAMES.keys())}
+        ),
     }
-
-    # FIXME: IF the above method works after few days of observation remove these
-    # variables = {
-    #     "limit": 10,
-    #     "offset": 0,
-    #     "productIds": PRODUCT_NAMES.keys(),
-    # }
-
-    # extensions = {
-    #     "persistedQuery": {
-    #         "version": 1,
-    #         "sha256Hash": FOOL_GRAPHQL_HASH,
-    #     }
-    # }
-
-    # params = {
-    #     "operationName": "GetNewestRecsArticles",
-    #     "variables": json.dumps(variables),
-    #     "extensions": json.dumps(extensions),
-    # }
 
     async with aiohttp.ClientSession() as session:
         try:
@@ -410,7 +401,7 @@ async def run_alert_monitor():
 
     while True:
         try:
-            await sleep_until_market_open()
+            # await sleep_until_market_open()
             log_message("Market is open. Starting to check for new articles...")
 
             _, _, market_close_time = get_next_market_times()
