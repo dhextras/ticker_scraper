@@ -91,16 +91,6 @@ async def fetch_trades(session, creds):
 
 
 async def send_to_telegram(trade):
-    current_time = datetime.now(pytz.timezone("US/Eastern"))
-    created_time = datetime.fromisoformat(trade["created"].replace("Z", "+00:00"))
-
-    message = f"<b>New IBD SwingTrader History Alert!</b>\n\n"
-    message += f"<b>ID:</b> {trade['id']}\n"
-    message += f"<b>Symbol:</b> {trade['stockSymbol']}\n"
-    message += f"<b>Company:</b> {trade['companyName']}\n"
-    message += f"<b>Created:</b> {created_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-
     await send_ws_message(
         {
             "name": "IBD SwingTrader - H",
@@ -111,6 +101,16 @@ async def send_to_telegram(trade):
         },
         WS_SERVER_URL,
     )
+
+    current_time = datetime.now(pytz.timezone("US/Eastern"))
+    created_time = datetime.fromisoformat(trade["created"].replace("Z", "+00:00"))
+
+    message = f"<b>New IBD SwingTrader History Alert!</b>\n\n"
+    message += f"<b>ID:</b> {trade['id']}\n"
+    message += f"<b>Symbol:</b> {trade['stockSymbol']}\n"
+    message += f"<b>Company:</b> {trade['companyName']}\n"
+    message += f"<b>Created:</b> {created_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+    message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(
