@@ -15,7 +15,7 @@ from utils.time_utils import get_next_market_times, sleep_until_market_open
 load_dotenv()
 
 # Constants
-CHECK_INTERVAL = 20
+CHECK_INTERVAL = 15
 PROCESSED_TRADES_FILE = "data/ibd_processed_trades.json"
 TOKENS_FILE = "data/ibd_tokens.json"
 CRED_FILE = "cred/ibd_creds.json"
@@ -136,13 +136,12 @@ async def fetch_trades(session, creds, token):
 async def send_to_telegram(trade):
     current_time = datetime.now(pytz.timezone("US/Eastern"))
     created_time = datetime.fromisoformat(trade["created"].replace("Z", "+00:00"))
-    updated_time = datetime.fromisoformat(trade["updated"].replace("Z", "+00:00"))
 
     message = f"<b>New IBD SwingTrader Alert!</b>\n\n"
+    message += f"<b>ID:</b> {trade['id']}\n"
     message += f"<b>Symbol:</b> {trade['stockSymbol']}\n"
     message += f"<b>Company:</b> {trade['companyName']}\n"
     message += f"<b>Created:</b> {created_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    message += f"<b>Updated:</b> {updated_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
