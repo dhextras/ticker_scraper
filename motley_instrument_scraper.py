@@ -156,13 +156,11 @@ async def get_new_session_token():
             log_message("Failed to login, waiting for manual login....", "WARNING")
             time.sleep(5)
 
-        browser_session = get_browser_session(driver)
         api_session = await get_api_session(driver)
 
-        if browser_session and api_session:
+        if api_session:
             session_data = {
-                **browser_session,
-                **api_session,
+                "accessToken": api_session.get("accessToken", None),
                 "expires": (datetime.now(pytz.UTC) + timedelta(days=1)).isoformat(),
             }
             save_session_credentials(session_data)
@@ -399,7 +397,7 @@ async def run_alert_monitor():
 
     while True:
         try:
-            # await sleep_until_market_open()
+            await sleep_until_market_open()
             log_message("Market is open. Starting to check for new articles...")
 
             _, _, market_close_time = get_next_market_times()
