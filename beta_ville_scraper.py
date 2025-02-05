@@ -82,6 +82,7 @@ def fetch_betaville_posts() -> List[BetavillePost]:
 
     try:
         driver = setup_driver()
+        driver.set_page_load_timeout(1200)
         driver.get(BETAVILLE_URL)
         # Wait for content to load
         WebDriverWait(driver, 10).until(
