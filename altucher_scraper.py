@@ -100,18 +100,25 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
             JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=5
         ) as response:
             if response.status == 200:
-                raw_data = await response.json()
-                processed_data = []
-                log_message(
-                    f"Fetched {len(raw_data)} {subscription_name.upper()} articles using proxy {proxy}",
-                    "INFO",
-                )
+                try:
+                    raw_data = await response.json()
+                    processed_data = []
+                    log_message(
+                        f"Fetched {len(raw_data)} {subscription_name.upper()} articles using proxy {proxy}",
+                        "INFO",
+                    )
 
-                for stocRecs in raw_data:
-                    stocRecs["subscription_name"] = subscription_name
-                    processed_data.append(stocRecs)
+                    for stocRecs in raw_data:
+                        stocRecs["subscription_name"] = subscription_name
+                        processed_data.append(stocRecs)
 
-                return processed_data
+                    return processed_data
+                except:
+                    log_message(
+                        f"Failed to extract data for {subscription_name} articles. raw text:\n\n{response.text}",
+                        "ERROR",
+                    )
+                    return []
             else:
                 log_message(
                     f"Failed to fetch {subscription_name} articles with proxy {proxy}: HTTP {response.status}",
