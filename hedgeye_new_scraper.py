@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import time
 import uuid
 from datetime import datetime
@@ -410,11 +411,16 @@ async def process_account(
                         )
                     )
 
+                    ticker_match = re.search(
+                        r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+                    )
+                    ticker = ticker_match.group(0) if ticker_match else "-"
+
                     await send_ws_message(
                         {
                             "name": "Hedgeye",
                             "type": signal_type,
-                            "ticker": "-",
+                            "ticker": ticker,
                             "sender": "hedgeye",
                         },
                         WS_SERVER_URL,
