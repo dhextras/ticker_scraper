@@ -91,7 +91,7 @@ async def fetch_trade(session, creds, trade_id):
 async def send_alerts(trade):
     await send_ws_message(
         {
-            "name": "IBD SwingTrader - Id",
+            "name": "IBD SwingTrader - ID",
             "type": "Buy",
             "ticker": trade["stockSymbol"],
             "sender": "ibd_swing",
@@ -103,7 +103,7 @@ async def send_alerts(trade):
     current_time = datetime.now(pytz.timezone("US/Eastern"))
     created_time = datetime.fromisoformat(trade["created"].replace("Z", "+00:00"))
 
-    message = f"<b>New IBD SwingTrader Alert!</b>\n\n"
+    message = f"<b>New IBD SwingTrader Alert - ID!</b>\n\n"
     message += f"<b>ID:</b> {trade['id']}\n"
     message += f"<b>Symbol:</b> {trade['stockSymbol']}\n"
     message += f"<b>Company:</b> {trade['companyName']}\n"
