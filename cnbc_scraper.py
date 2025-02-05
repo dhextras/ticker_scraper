@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import urllib.parse
+import uuid
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -290,12 +291,30 @@ def get_ticker(data):
     return None, None
 
 
+def get_random_cache_buster():
+    """Generate random cache busting url variable for requests"""
+    cache_busters = [
+        ("timestamp_uniq", lambda: int(time.time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time.time())),
+        ("ran_time", lambda: int(time.time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time.time()))),
+    ]
+
+    variable, value_generator = random.choice(cache_busters)
+    return (variable, value_generator())
+
+
 async def fetch_latest_assets() -> List[Dict]:
     """Fetch latest alerts from CNBC Investing Club"""
     try:
         base_url = "https://webql-redesign.cnbcfm.com/graphql"
         timestamp = int(time.time() * 10000)
         cache_uuid = uuid4()
+        cache_buster = get_random_cache_buster()
 
         variables = {
             "id": "15838187",
@@ -316,8 +335,9 @@ async def fetch_latest_assets() -> List[Dict]:
             "operationName": "getAssetList",
             "variables": json.dumps(variables),
             "extensions": json.dumps(extensions),
-            "cache-timestamp": str(timestamp),
-            "cache-uuid": str(cache_uuid),
+            "buster-timestamp": str(timestamp),
+            "cache-uuid-buster": str(cache_uuid),
+            cache_buster[0]: str(cache_buster[1]),
         }
 
         headers = {
