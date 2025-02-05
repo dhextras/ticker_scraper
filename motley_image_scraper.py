@@ -41,7 +41,7 @@ os.makedirs("data", exist_ok=True)
 # Global variables
 previous_images = []
 last_request_time = 0
-MIN_REQUEST_INTERVAL = 2
+MIN_REQUEST_INTERVAL = 1
 PRODUCT_NAMES = {
     1081: "Stock Advisor",
     1069: "Rule Breakers",
