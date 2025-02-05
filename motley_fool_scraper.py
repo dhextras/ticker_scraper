@@ -178,6 +178,7 @@ async def fetch_latest_articles(session_data):
         "cache-uuid": str(cache_uuid),
     }
 
+    # FIXME: Later add the images here and see if it fast or not if needed only other wise just leave the other script be
     query = """
         query GetLatestUniqueArticles($limit: Int!, $productIds: [Int!]!) {
             contents(productIds: $productIds, limit: $limit) {
