@@ -179,7 +179,7 @@ async def run_scraper():
         while True:
             await sleep_until_market_open()
             log_message("Market is open. Starting to check for posts...")
-            _, _, market_close_time = get_next_market_times(end=17)
+            _, _, market_close_time = get_next_market_times(end=15)
 
             while True:
                 current_time = datetime.now(pytz.timezone("America/New_York"))
