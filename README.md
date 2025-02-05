@@ -183,6 +183,10 @@ pip install -r requirements.txt
    # Miner vini scraper settings
    MINERVINI_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Miner Vini
    MINERVINI_TELEGRAM_GRP=  # Telegram group ID for Miner Vini
+
+   # IBD Swing Trader scraper settings
+   IBD_TELEGRAM_BOT_TOKEN= # Telegram toke for IBD
+   IBD_TELEGRAM_GRP= # Telegram Group for IBD
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -264,6 +268,7 @@ python <script_name>.py
 - **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
 - **Wolfpack:** `wolfpack_scraper.py`, `wolfpack_xml_scraper.py`
 - **MinerVini:** `minervini_live_scraper.py`, `minervini_post_scraper.py`
+- **IBD Swing Trader:** `ibd_api_scraper.py`, `ibd_websocket_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`
@@ -359,6 +364,8 @@ ticker_scraper/
 ├── hindenburg_scraper.py         # Hindenburg pdf & image ticker scraper
 ├── hunterbrook_scraper.py        # Hunterbrook Research pdf & image ticker scraper
 ├── hunterbrook_post_scraper.py   # Hunterbrook Post ticker scraper
+├── ibd_api_scraper.py            # Ibd Swing trader api method scraper
+├── ibd_websocket_scraper.py      # Ibd Swing trader websocket method scraper
 ├── iceberg_scraper.py            # Iceberg Research pdf & image ticker scraper
 ├── jehoshaphat_scraper.py        # Jehoshaphat pdf & image ticker scraper
 ├── kerrisdale_scraper.py         # Kerrisdale pdf & image ticker scraper
