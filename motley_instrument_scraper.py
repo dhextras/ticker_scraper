@@ -42,7 +42,6 @@ os.makedirs("data", exist_ok=True)
 # Global variables
 previous_articles = []
 last_request_time = 0
-MIN_REQUEST_INTERVAL = 1
 PRODUCT_NAMES = {
     1081: "Stock Advisor",
     1069: "Rule Breakers",
@@ -84,14 +83,20 @@ def save_processed_urls(urls):
 
 
 def get_random_cache_buster():
+    """Generate random cache busting url variable for requests"""
     cache_busters = [
-        ("timestamp", lambda: int(time.time() * 10000)),
+        ("cache_timestamp", lambda: int(time.time() * 10000)),
         ("request_uuid", lambda: str(uuid.uuid4())),
         ("cache_time", lambda: int(time.time())),
+        ("ran_time", lambda: int(time.time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
         ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time.time()))),
     ]
+
     variable, value_generator = random.choice(cache_busters)
-    return f"{variable}={value_generator()}"
+    return variable, value_generator()
 
 
 async def get_api_session(driver):
@@ -104,6 +109,18 @@ async def get_api_session(driver):
         return json.loads(json_data)
     except Exception as e:
         log_message(f"Error getting API session token: {e}", "ERROR")
+        return None
+
+
+async def get_session_cookie(driver):
+    try:
+        cookies = driver.get_cookies()
+        for cookie in cookies:
+            if cookie["name"] == "__Secure-authjs.session-token":
+                return cookie["value"]
+        return None
+    except Exception as e:
+        log_message(f"Error getting session cookie: {e}", "ERROR")
         return None
 
 
@@ -143,10 +160,12 @@ async def get_new_session_token():
             time.sleep(5)
 
         api_session = await get_api_session(driver)
+        session_token = await get_session_cookie(driver)
 
-        if api_session:
+        if api_session and session_token:
             session_data = {
                 "accessToken": api_session.get("accessToken", None),
+                "session_token": session_token,
                 "expires": (datetime.now(pytz.UTC) + timedelta(days=1)).isoformat(),
             }
             save_session_credentials(session_data)
