@@ -296,7 +296,7 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
 
         # Small delay between batches
         if i + 3 < len(accounts):
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.8)
 
     return valid_accounts
 
@@ -313,7 +313,9 @@ async def fetch_alert_details(
             url,
             cookies=cookies,
             proxy=f"http://{proxy}" if proxy else None,
-            timeout=aiohttp.ClientTimeout(total=2),
+            timeout=aiohttp.ClientTimeout(
+                total=3
+            ),  # FIXME: Later try to bring this down to 1 or 2
         ) as response:
             if response.status == 429:
                 raise Exception("Rate limited")
@@ -347,7 +349,7 @@ async def fetch_alert_details(
     except asyncio.TimeoutError:
         public_ip = await get_public_ip(proxy)
         log_message(
-            f"Fetch alert took more then 2 seconds with ip: {public_ip}, Gotta fix this ASAP",
+            f"Fetch alert took more then 3 seconds with ip: {public_ip}, Gotta fix this ASAP",
             "WARNING",
         )
 
@@ -455,7 +457,8 @@ async def process_account(
                         "INFO",
                     )
 
-            if alert_details["fetch_time"] > 1.5:
+            # FIXME: Also try to bring this into 1 sec if not move on to different proxy provider
+            if alert_details["fetch_time"] > 2:
                 public_ip = await get_public_ip(proxy)
                 log_message(
                     f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
@@ -479,11 +482,11 @@ async def process_accounts_continuously(
             accounts = await account_manager.get_available_accounts(2)
             if not accounts:
                 # If no accounts available, wait briefly and try again
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.4)
                 continue
 
             for i, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.9)
+                await asyncio.sleep(0.8)
 
                 proxy = proxy_manager.get_next_proxy()
                 asyncio.create_task(
