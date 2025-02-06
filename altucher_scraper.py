@@ -114,8 +114,16 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
 
                     return processed_data
                 except:
+                    response_text = await response.text()
+                    if "loading" in response_text or "spinner" in response_text:
+                        log_message(
+                            f"Failed to fully load the page for {subscription_name}, with proxy: {proxy}",
+                            "WARNING",
+                        )
+                        return []
+
                     log_message(
-                        f"Failed to extract data for {subscription_name} articles. raw text:\n\n{await response.text()}",
+                        f"Failed to extract data for {subscription_name} articles with proxy: {proxy}. raw text:\n\n{response_text}",
                         "ERROR",
                     )
                     return []
@@ -228,7 +236,7 @@ async def process_subscription(session, subscription, proxy, processed_urls):
         )
 
         # FIXME: remove this later when we properly handled drafts
-        date = datetime.now().strftime("%Y_%m_%s")
+        date = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
         with open(f"data/delete_{date}.json", "w") as f:
             json.dump(new_articles, f, indent=2)
 
