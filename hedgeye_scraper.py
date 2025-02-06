@@ -816,7 +816,7 @@ async def monitor_feeds_async():
                 if not market_is_open:
                     proxy_manager.clear_rate_limits()
                     account_manager.clear_rate_limits()
-                    log_message("Market is open, starting monitoring...", "INFO")
+                    log_message("Market is open, starting monitoring...", "DEBUG")
                     market_is_open = True
 
                 try:
