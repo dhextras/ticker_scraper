@@ -304,7 +304,7 @@ async def monitor_feeds():
 
             elif market_open_time <= current_time_edt <= market_close_time:
                 if not market_is_open:
-                    log_message("Market is open, starting monitoring...", "INFO")
+                    log_message("Market is open, starting monitoring...", "DEBUG")
                     market_is_open = True
 
                 try:
@@ -410,7 +410,9 @@ async def monitor_feeds():
                 if current_driver:
                     current_driver.quit()
                     current_driver = None
-                log_message("Market is closed. Waiting for next market open...")
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
                 await sleep_until_market_open()
 
     except Exception as e:

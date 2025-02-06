@@ -375,14 +375,18 @@ async def run_alert_monitor():
     while True:
         try:
             await sleep_until_market_open()
-            log_message("Market is open. Starting to check for new articles...")
+            log_message(
+                "Market is open. Starting to check for new articles...", "DEBUG"
+            )
 
             _, _, market_close_time = get_next_market_times()
 
             while True:
                 current_time = datetime.now(pytz.timezone("America/New_York"))
                 if current_time > market_close_time:
-                    log_message("Market is closed. Waiting for next market open...")
+                    log_message(
+                        "Market is closed. Waiting for next market open...", "DEBUG"
+                    )
                     break
 
                 if datetime.fromisoformat(

@@ -130,13 +130,15 @@ async def run_scraper():
 
         while True:
             await sleep_until_market_open(start=8, end=15)
-            log_message("Market is open. Starting to check for new trades...")
+            log_message("Market is open. Starting to check for new trades...", "DEBUG")
             _, _, market_close_time = get_next_market_times(start=8, end=15)
 
             while True:
                 current_time = datetime.now(pytz.timezone("America/New_York"))
                 if current_time > market_close_time:
-                    log_message("Market is closed. Waiting for next market open...")
+                    log_message(
+                        "Market is closed. Waiting for next market open...", "DEBUG"
+                    )
                     break
 
                 trades_data = await fetch_trades(session, creds)

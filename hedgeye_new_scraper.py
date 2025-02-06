@@ -556,7 +556,7 @@ async def main():
 
         while True:
             await sleep_until_market_open(start=8, end=15)
-            log_message("Market is open. Starting to check for posts...")
+            log_message("Market is open. Starting to check for posts...", "DEBUG")
             _, _, market_close_time = get_next_market_times(start=8, end=15)
 
             process_task = asyncio.create_task(
@@ -576,7 +576,7 @@ async def main():
             except asyncio.CancelledError:
                 pass
 
-            log_message("Market closed. Waiting for next market open...", "INFO")
+            log_message("Market is closed. Waiting for next market open...", "DEBUG")
 
             # Clear rate limits at end of day
             proxy_manager.clear_rate_limits()

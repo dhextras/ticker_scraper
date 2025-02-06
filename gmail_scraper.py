@@ -177,14 +177,16 @@ async def run_gmail_scraper():
 
     while True:
         await sleep_until_market_open()
-        log_message("Market is open. Starting to check for new emails...")
+        log_message("Market is open. Starting to check for new emails...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
         while True:
             current_time = datetime.now(pytz.timezone("America/New_York"))
 
             if current_time > market_close_time:
-                log_message("Market is closed. Waiting for next market open...")
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
                 break
 
             try:
