@@ -8,6 +8,7 @@ from datetime import datetime
 
 import aiohttp
 import pytz
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -156,18 +157,36 @@ async def process_articles(articles):
             or title.startswith("flash buy:")
             or title.startswith("new trade alert:")
         ):
-            for stock_rec in article.get("stockRecommendations", []):
-                if stock_rec["action"].lower() == "buy":
-                    buy_recommendations.append(
-                        {
-                            "ticker": stock_rec["tickerSymbol"],
-                            "name": stock_rec["stockName"],
-                            "actionDesc": stock_rec["actionDescription"],
-                            "postDate": article["cfUpdatedAt"],
-                            "url": article["slug"],
-                            "subscription_name": article["subscription_name"],
-                        }
-                    )
+            if "stockRecommendations" in article:
+                for stock_rec in article.get("stockRecommendations", []):
+                    if stock_rec["action"].lower() == "buy":
+                        buy_recommendations.append(
+                            {
+                                "ticker": stock_rec["tickerSymbol"],
+                                "name": stock_rec["stockName"],
+                                "actionDesc": stock_rec["actionDescription"],
+                                "postDate": article["cfUpdatedAt"],
+                                "url": article["slug"],
+                                "subscription_name": article["subscription_name"],
+                            }
+                        )
+            else:
+                soup = BeautifulSoup(article["content"], "html.parser")
+                action = soup.find("p", class_="buy")
+                if action:
+                    match = re.search(r"\(([A-Z]+)\)", action.text)
+                    if match:
+                        buy_recommendations.append(
+                            {
+                                "ticker": match.group(1),
+                                "name": "---Empty---",
+                                "actionDesc": "---Empty---",
+                                "postDate": article["cfUpdatedAt"],
+                                "url": article["slug"],
+                                "subscription_name": article["subscription_name"],
+                            }
+                        )
+
     return buy_recommendations
 
 
