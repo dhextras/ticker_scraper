@@ -16,7 +16,7 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-CHECK_INTERVAL = 15
+CHECK_INTERVAL = 20
 PROCESSED_TRADES_FILE = "data/ibd_processed_trades.json"
 TOKENS_FILE = "data/ibd_tokens.json"
 CRED_FILE = "cred/ibd_creds.json"
@@ -141,7 +141,7 @@ async def send_to_telegram(trade):
             "type": "Buy",
             "ticker": trade["stockSymbol"],
             "sender": "ibd_swing",
-            "target": "CSS",
+            # "target": "CSS", # FIXME: remove later if we fully decided to send to both websocket
         },
         WS_SERVER_URL,
     )

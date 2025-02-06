@@ -16,7 +16,7 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-CHECK_INTERVAL = 1
+CHECK_INTERVAL = 0.5
 DEFAULT_STARTING_ID = 2400  # Default starting ID - change it later if needed
 LAST_ID_FILE = "data/ibd_last_processed_id.json"
 CRED_FILE = "cred/ibd_creds.json"

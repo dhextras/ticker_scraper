@@ -16,7 +16,7 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-CHECK_INTERVAL = 1
+CHECK_INTERVAL = 2
 PROCESSED_TRADES_FILE = "data/ibd_processed_history_trades.json"
 CRED_FILE = "cred/ibd_creds.json"
 TELEGRAM_BOT_TOKEN = os.getenv("IBD_TELEGRAM_BOT_TOKEN")
