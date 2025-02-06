@@ -299,7 +299,7 @@ async def process_rec_article(article):
 
             # FIXME: Remove this after confirming
             if product_name != "Unknown":
-                date = datetime.now().strftime("%Y_%m_%s")
+                date = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
                 with open(f"data/motley_remove_{date}.json", "w") as f:
                     json.dump(article, f)
 
