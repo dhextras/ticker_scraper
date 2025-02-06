@@ -101,7 +101,7 @@ async def fetch_xml_feed(session, raw_proxy=None):
             f"{XML_FEED_URL}?{random_cache_buster}",
             headers=headers,
             proxy=proxy,
-            timeout=1,
+            timeout=3,
         ) as response:
             if response.status == 200:
                 content = await response.text()
@@ -133,7 +133,7 @@ async def fetch_xml_feed(session, raw_proxy=None):
                 log_message(f"Failed to fetch XML: HTTP {response.status}", "ERROR")
                 return []
     except asyncio.TimeoutError:
-        log_message(f"Took more then 1 sec to fetch with proxy: {raw_proxy}", "WARNING")
+        log_message(f"Took more then 3 sec to fetch with proxy: {raw_proxy}", "WARNING")
         return []
     except Exception as e:
         log_message(f"Error fetching XML with proxy {raw_proxy}: {e}", "ERROR")
