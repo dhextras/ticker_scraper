@@ -297,22 +297,21 @@ async def process_rec_article(article):
                     ]
                 )
 
-                # TODO: Dont send to websocket for now
-                # for (
-                #     action,
-                #     ticker,
-                #     _,
-                # ) in tickers:
-                #     await send_ws_message(
-                #         {
-                #             "name": product_name,
-                #             "type": action,
-                #             "ticker": ticker,
-                #             "sender": "motley_fool",
-                #             "target": "CSS",
-                #         },
-                #         WS_SERVER_URL,
-                #     )
+                for (
+                    action,
+                    ticker,
+                    _,
+                ) in tickers:
+                    await send_ws_message(
+                        {
+                            "name": f"{product_name} - Instrument",
+                            "type": action,
+                            "ticker": ticker,
+                            "sender": "motley_fool",
+                            "target": "CSS",
+                        },
+                        WS_SERVER_URL,
+                    )
 
                 message += f"<b>Tickers:</b>\n{ticker_text}\n"
 
