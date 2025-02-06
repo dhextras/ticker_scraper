@@ -115,7 +115,7 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
                     return processed_data
                 except:
                     log_message(
-                        f"Failed to extract data for {subscription_name} articles. raw text:\n\n{response.text()}",
+                        f"Failed to extract data for {subscription_name} articles. raw text:\n\n{await response.text()}",
                         "ERROR",
                     )
                     return []

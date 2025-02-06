@@ -141,7 +141,7 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
         ) as response:
             if response.status != 200:
                 await send_alert(f"Unexpected status code: {response.status}")
-                log_message(f"Unexpected response: {response.text()}", "ERROR")
+                log_message(f"Unexpected response: {await response.text()}", "ERROR")
                 return
 
             data = await response.json()
