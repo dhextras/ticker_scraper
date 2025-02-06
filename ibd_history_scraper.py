@@ -129,9 +129,9 @@ async def run_scraper():
     async with aiohttp.ClientSession() as session:
 
         while True:
-            await sleep_until_market_open()
+            await sleep_until_market_open(start=8, end=15)
             log_message("Market is open. Starting to check for new trades...")
-            _, _, market_close_time = get_next_market_times(end=15)
+            _, _, market_close_time = get_next_market_times(start=8, end=15)
 
             while True:
                 current_time = datetime.now(pytz.timezone("America/New_York"))

@@ -410,6 +410,7 @@ async def monitor_feeds():
                 if current_driver:
                     current_driver.quit()
                     current_driver = None
+                log_message("Market is closed. Waiting for next market open...")
                 await sleep_until_market_open()
 
     except Exception as e:

@@ -842,6 +842,7 @@ async def monitor_feeds_async():
             else:
                 logged_in = False
                 market_is_open = False
+                log_message("Market is closed. Waiting for next market open...")
                 await sleep_until_market_open()
 
     except Exception as e:
