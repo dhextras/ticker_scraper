@@ -25,8 +25,10 @@ def get_next_market_times(start=6, end=19):
     return pre_market_login_time, market_open_time, market_close_time
 
 
-async def sleep_until_market_open():
-    pre_market_login_time, market_open_time, _ = get_next_market_times()
+async def sleep_until_market_open(start=6, end=19):
+    pre_market_login_time, market_open_time, _ = get_next_market_times(
+        start=start, end=end
+    )
     current_time = datetime.now(pytz.timezone("America/New_York"))
 
     log_message(f"Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}", "INFO")
