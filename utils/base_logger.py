@@ -53,7 +53,7 @@ def setup_logger(log_file=None):
 
     # Console handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_formatter = ColoredFormatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
