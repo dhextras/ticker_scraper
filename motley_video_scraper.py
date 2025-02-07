@@ -80,7 +80,6 @@ def save_processed_urls(processed_data):
 
 
 def get_random_cache_buster():
-    """Generate random cache busting url variable for requests"""
     cache_busters = [
         ("cache_timestamp", lambda: int(time.time() * 10000)),
         ("request_uuid", lambda: str(uuid.uuid4())),
@@ -93,7 +92,7 @@ def get_random_cache_buster():
     ]
 
     variable, value_generator = random.choice(cache_busters)
-    return variable, value_generator()
+    return f"{variable}={value_generator()}"
 
 
 async def get_api_session(driver):

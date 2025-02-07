@@ -88,11 +88,16 @@ def save_processed_urls(urls):
 
 def get_random_cache_buster():
     cache_busters = [
-        ("timestamp", lambda: int(time.time() * 10000)),
+        ("cache_timestamp", lambda: int(time.time() * 10000)),
         ("request_uuid", lambda: str(uuid.uuid4())),
         ("cache_time", lambda: int(time.time())),
+        ("ran_time", lambda: int(time.time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
         ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time.time()))),
     ]
+
     variable, value_generator = random.choice(cache_busters)
     return f"{variable}={value_generator()}"
 
@@ -348,7 +353,7 @@ async def run_recommendation_monitor():
                         raise Exception("Failed to refresh session token")
 
                 await check_for_new_recommendations(session_data)
-                await asyncio.sleep(1)
+                await asyncio.sleep(5)  # Remove later
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
