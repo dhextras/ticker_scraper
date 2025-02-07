@@ -27,11 +27,9 @@ load_dotenv()
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("FOOL_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("FOOL_SCRAPER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 FOOL_USERNAME = os.getenv("FOOL_USERNAME")
 FOOL_PASSWORD = os.getenv("FOOL_PASSWORD")
 FOOL_API_KEY = os.getenv("FOOL_API_KEY")
-FOOL_GRAPHQL_HASH = os.getenv("FOOL_GRAPHQL_HASH")
 CREDS_PATH = "cred/fool_session.json"
 PROCESSED_URLS_FILE = "data/motley_image_processed_urls.json"
 
@@ -360,11 +358,9 @@ def main():
         [
             TELEGRAM_BOT_TOKEN,
             TELEGRAM_CHAT_ID,
-            WS_SERVER_URL,
             FOOL_USERNAME,
             FOOL_PASSWORD,
             FOOL_API_KEY,
-            FOOL_GRAPHQL_HASH,
             CREDS_PATH,
         ]
     ):
