@@ -265,66 +265,75 @@ def save_session_credentials(creds):
 
 
 async def process_new_recommendations(instrument, stored_data):
-    instrument_id = str(instrument["instrumentId"])
-    symbol = instrument["symbol"]
-    name = instrument["name"]
+    try:
+        instrument_id = str(instrument["instrumentId"])
+        symbol = instrument["symbol"]
+        name = instrument["name"]
 
-    # FIXME: Add up filtering for the new alert here or after fetching if needed
-    if instrument_id not in stored_data:
-        stored_data[instrument_id] = []
+        # FIXME: Add up filtering for the new alert here or after fetching if needed
+        if instrument_id not in stored_data:
+            stored_data[instrument_id] = []
 
-    current_time = datetime.now(pytz.UTC)
-    stored_urls = {rec["url"] for rec in stored_data[instrument_id]}
+        current_time = datetime.now(pytz.UTC)
+        stored_urls = {rec["url"] for rec in stored_data[instrument_id]}
 
-    for recommendation in instrument["accessibleFoolRecommendations"]:
-        content = recommendation["content"]
-        url = content["url"]
+        for recommendation in instrument["accessibleFoolRecommendations"]:
+            content = recommendation["content"]
+            url = content["url"]
 
-        if url not in stored_urls:
-            product_id = content["productId"]
-            publish_at = datetime.fromisoformat(
-                content["publishAt"].replace("Z", "+00:00")
-            )
-            published_formatted = str(publish_at.strftime("%Y-%m-%d %H:%M:%S %Z"))
+            if url not in stored_urls:
+                product_id = content["productId"]
+                publish_at = datetime.fromisoformat(
+                    content["publishAt"].replace("Z", "+00:00")
+                )
+                published_formatted = str(publish_at.strftime("%Y-%m-%d %H:%M:%S %Z"))
 
-            action_date = recommendation["actionDate"]
+                action_date = recommendation["actionDate"]
 
-            stored_data[instrument_id].append(
-                {
-                    "url": url,
-                    "productId": product_id,
-                    "publishAt": published_formatted,
-                    "actionDate": action_date,
-                }
-            )
+                stored_data[instrument_id].append(
+                    {
+                        "url": url,
+                        "productId": product_id,
+                        "publishAt": published_formatted,
+                        "actionDate": action_date,
+                    }
+                )
 
-            product_name = PRODUCT_NAMES.get(product_id, "Unknown")
+                product_name = PRODUCT_NAMES.get(product_id, "Unknown")
 
-            message = (
-                f"<b>New {product_name} Accessible Recommendation!</b>\n"
-                f"<b>Company:</b> {name} ({symbol})\n"
-                f"<b>Action Date:</b> {action_date}\n"
-                f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                f"<b>Published Date:</b> {published_formatted}\n"
-                f"<b>URL:</b> {url}\n"
-            )
+                message = (
+                    f"<b>New {product_name} Accessible Recommendation!</b>\n"
+                    f"<b>Company:</b> {name} ({symbol})\n"
+                    f"<b>Action Date:</b> {action_date}\n"
+                    f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                    f"<b>Published Date:</b> {published_formatted}\n"
+                    f"<b>URL:</b> {url}\n"
+                )
 
-            await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+                await send_telegram_message(
+                    message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+                )
 
-            await send_ws_message(
-                {
-                    "name": f"{product_name} - Accessible Rec",
-                    "type": "Buy",
-                    "ticker": symbol,
-                    "sender": "motley_fool",
-                    "target": "CSS",
-                },
-                WS_SERVER_URL,
-            )
+                await send_ws_message(
+                    {
+                        "name": f"{product_name} - Accessible Rec",
+                        "type": "Buy",
+                        "ticker": symbol,
+                        "sender": "motley_fool",
+                        "target": "CSS",
+                    },
+                    WS_SERVER_URL,
+                )
 
-            log_message(f"New recommendation found for {symbol}, url: {url}", "INFO")
+                log_message(
+                    f"New recommendation found for {symbol}, url: {url}", "INFO"
+                )
 
-    return stored_data
+        return stored_data
+    except:
+        log_message(
+            f"Error trying process instrument:\n\n{instrument}\n\nerror message: \n\n"
+        )
 
 
 async def check_for_new_recommendations(ids, session_data):
