@@ -84,7 +84,8 @@ async def fetch_alerts(session, creds):
             headers=headers,
         ) as response:
             if response.status == 200:
-                return await response.json()
+                data = await response.json()
+                return data.get("Obj")
             elif response.status == 429:
                 log_message(f"Too Many requests, slow down...", "ERROR")
                 await asyncio.sleep(CHECK_INTERVAL * 5)
@@ -115,7 +116,7 @@ async def send_to_telegram(alert):
     message = f"<b>New IBD Leaderboard Recent actions!</b>\n\n"
     message += f"<b>Id:</b> {alert['Id']}\n"
     message += f"<b>Symbol:</b> {alert['Symbol']}\n"
-    message += f"<b>Company:</b> {alert['CompanyName']}\n"
+    message += f"<b>Company:</b> {alert['CoName']}\n"
     message += f"<b>Action:</b> {trade_type}\n"
     message += f"<b>ARFlag:</b> {alert.get('ARFlag')}\n"
     message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
@@ -149,6 +150,7 @@ async def run_scraper():
                     break
 
                 alerts_data = await fetch_alerts(session, creds)
+                print(len(alerts_data))
                 if alerts_data:
                     new_alerts = [
                         alert
