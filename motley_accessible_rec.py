@@ -341,7 +341,7 @@ async def check_for_new_recommendations(ids, session_data):
             "INFO",
         )
 
-        if instruments:
+        if instruments is not None and len(instruments) > 0:
             for instrument in instruments:
                 stored_data = await process_new_recommendations(instrument, stored_data)
 
