@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import pytz
 
 from utils.logger import log_message
-from utils.time_utils import get_current_time
 
 
 def get_current_time():
