@@ -125,6 +125,7 @@ async def fetch_flash_alerts(session, proxy) -> List:
             if response.status == 200:
                 data = await response.json()
                 return data
+            log_message(f"Error fetching alerts: {response.status}", "WARNING")
             return []
     except asyncio.TimeoutError:
         log_message(f"Took more then 5 sec to fetch with proxy: {proxy}", "WARNING")

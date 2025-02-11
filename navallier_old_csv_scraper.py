@@ -144,6 +144,7 @@ async def fetch_csv_alerts(session, proxy):
             if response.status == 200:
                 data = await response.json()
                 return data.get("content", {}).get("rendered", None)
+            log_message(f"Error fetching alerts: {response.status}", "Warning")
             return None
     except asyncio.TimeoutError:
         log_message(f"Took more then 5 sec to fetch with proxy: {proxy}", "WARNING")
