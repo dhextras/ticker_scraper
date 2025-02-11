@@ -150,7 +150,6 @@ async def run_scraper():
                     break
 
                 alerts_data = await fetch_alerts(session, creds)
-                print(len(alerts_data))
                 if alerts_data:
                     new_alerts = [
                         alert
