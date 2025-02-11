@@ -428,7 +428,7 @@ async def run_alert_monitor():
                 prev_articles, _ = await check_for_new_alerts(
                     prev_articles, session_data
                 )
-                await asyncio.sleep(1)  # Remove in the future if it becomes slow
+                await asyncio.sleep(3)  # Remove in the future if it becomes slow
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
