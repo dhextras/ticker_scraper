@@ -334,9 +334,9 @@ async def process_new_recommendations(instrument, stored_data):
                 )
 
         return stored_data
-    except:
+    except Exception as e:
         log_message(
-            f"Error trying process instrument:\n\n{instrument}\n\nerror message: \n\n"
+            f"Error trying process instrument:\n\n{instrument}\n\nerror message:{e}\n\n"
         )
 
 
