@@ -73,7 +73,7 @@ async def send_telegram_message(
 
         except Exception as e:
             message = f"Error sending message to telegram: {e}"
-            timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
+            timestamp = datetime.now(pytz.timezone("America/Chicago")).strftime(
                 "%Y-%m-%d %H:%M:%S.%f"
             )[:-3]
             logger = setup_logger()

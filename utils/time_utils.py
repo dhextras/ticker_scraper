@@ -4,11 +4,16 @@ from datetime import datetime, timedelta
 import pytz
 
 from utils.logger import log_message
+from utils.time_utils import get_current_time
+
+
+def get_current_time():
+    return datetime.now(pytz.timezone("America/Chicago"))
 
 
 def get_next_market_times(start=6, end=19):
     """Calculates the next market open and close times, adjusts to the next day if already past market close."""
-    current_time_edt = datetime.now(pytz.timezone("America/New_York"))
+    current_time_edt = get_current_time()
     market_open_time = current_time_edt.replace(
         hour=start, minute=0, second=0, microsecond=0
     )
@@ -29,7 +34,7 @@ async def sleep_until_market_open(start=6, end=19):
     pre_market_login_time, market_open_time, _ = get_next_market_times(
         start=start, end=end
     )
-    current_time = datetime.now(pytz.timezone("America/New_York"))
+    current_time = get_current_time()
 
     log_message(f"Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}", "INFO")
     log_message(

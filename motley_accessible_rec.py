@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import aiohttp
-import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from selenium.webdriver.chrome.options import Options
@@ -20,7 +19,11 @@ from seleniumrequests import Chrome
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -166,7 +169,7 @@ async def get_new_session_token():
             session_data = {
                 "accessToken": api_session.get("accessToken", None),
                 "session_token": session_token,
-                "expires": (datetime.now(pytz.UTC) + timedelta(days=1)).isoformat(),
+                "expires": (get_current_time() + timedelta(days=1)).isoformat(),
             }
             save_session_credentials(session_data)
             return session_data
@@ -246,9 +249,10 @@ def load_session_credentials():
         if os.path.exists(CREDS_PATH):
             with open(CREDS_PATH, "r") as f:
                 creds = json.load(f)
-                if datetime.fromisoformat(
-                    creds["expires"].replace("Z", "+00:00")
-                ) > datetime.now(pytz.UTC):
+                if (
+                    datetime.fromisoformat(creds["expires"].replace("Z", "+00:00"))
+                    > get_current_time()
+                ):
                     return creds
     except Exception as e:
         log_message(f"Error loading credentials: {e}", "ERROR")
@@ -274,7 +278,7 @@ async def process_new_recommendations(instrument, stored_data):
         if instrument_id not in stored_data:
             stored_data[instrument_id] = []
 
-        current_time = datetime.now(pytz.UTC)
+        current_time = get_current_time()
         stored_urls = {rec["url"] for rec in stored_data[instrument_id]}
 
         for recommendation in instrument["accessibleFoolRecommendations"]:
@@ -380,16 +384,19 @@ async def run_monitor():
             _, _, market_close_time = get_next_market_times()
 
             while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
+                current_time = get_current_time()
                 if current_time > market_close_time:
                     log_message(
                         "Market is closed. Waiting for next market open...", "DEBUG"
                     )
                     break
 
-                if datetime.fromisoformat(
-                    session_data["expires"].replace("Z", "+00:00")
-                ) < datetime.now(pytz.UTC):
+                if (
+                    datetime.fromisoformat(
+                        session_data["expires"].replace("Z", "+00:00")
+                    )
+                    < get_current_time()
+                ):
                     session_data = await get_new_session_token()
                     if not session_data:
                         raise Exception("Failed to refresh session token")

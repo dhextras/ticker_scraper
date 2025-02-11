@@ -5,19 +5,21 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
 import aiohttp
-import pytz
 from dotenv import load_dotenv
 from pdfminer.high_level import extract_text
 
 from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -166,7 +168,7 @@ async def extract_ticker_from_pdf(session, url, cookies):
 
 
 async def send_posts_to_telegram(urls):
-    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
     joined_urls = "\n  ".join(urls)
 
     message = f"<b>New Muddy Waters medias found</b>\n\n"
@@ -178,7 +180,7 @@ async def send_posts_to_telegram(urls):
 
 
 async def send_to_telegram(url, ticker):
-    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
     message = f"<b>New Muddy Waters Ticker found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
@@ -214,7 +216,7 @@ async def run_scraper():
             _, _, market_close_time = get_next_market_times()
 
             while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
+                current_time = get_current_time()
 
                 if current_time > market_close_time:
                     log_message(

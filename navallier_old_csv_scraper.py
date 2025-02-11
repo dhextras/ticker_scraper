@@ -4,18 +4,19 @@ import os
 import random
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 from time import time
 
 import bs4
-import pytz
-import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -172,7 +173,7 @@ async def process_alert(proxy):
         if not csv_alerts or len(csv_alerts) <= 0:
             return
 
-        current_time = datetime.now(pytz.utc)
+        current_time = get_current_time()
 
         tickers = extract_new_tickers(previous_alerts, csv_alerts)
         if tickers:
@@ -221,7 +222,7 @@ async def run_scraper():
         _, _, market_close_time = get_next_market_times()
 
         while True:
-            current_time = datetime.now(pytz.timezone("America/New_York"))
+            current_time = get_current_time()
             if current_time > market_close_time:
                 log_message(
                     "Market is closed. Waiting for next market open...", "DEBUG"

@@ -3,19 +3,21 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 from time import time
 from typing import Optional
 
 import aiohttp
-import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -188,7 +190,7 @@ async def run_scraper():
         _, _, market_close_time = get_next_market_times()
 
         while True:
-            current_time = datetime.now(pytz.timezone("America/New_York"))
+            current_time = get_current_time()
             if current_time > market_close_time:
                 log_message(
                     "Market is closed. Waiting for next market open...", "DEBUG"
@@ -207,7 +209,7 @@ async def run_scraper():
                 if raw_html:
                     commentary = process_commentary(raw_html)
                     if commentary:
-                        current_time = datetime.now(pytz.utc)
+                        current_time = get_current_time()
 
                         ticker_info = ""
                         if commentary["ticker"] and commentary["action"]:

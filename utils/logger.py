@@ -9,7 +9,7 @@ from utils.error_notifier import send_error_notification
 
 
 def log_message(message, level="INFO"):
-    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
+    timestamp = datetime.now(pytz.timezone("America/Chicago")).strftime(
         "%Y-%m-%d %H:%M:%S.%f"
     )[:-3]
     logger = setup_logger()

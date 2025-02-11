@@ -13,7 +13,11 @@ from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -205,12 +209,10 @@ async def send_matches_to_telegram(buy_recs):
 
         post_time = datetime.fromisoformat(postDate.replace("Z", "+00:00"))
 
-        post_time_us = post_time.astimezone(pytz.timezone("America/New_York")).strftime(
+        post_time_us = post_time.astimezone(pytz.timezone("America/Chicago")).strftime(
             "%Y-%m-%d %H:%M:%S %Z"
         )
-        current_time_us = datetime.now(pytz.timezone("America/New_York")).strftime(
-            "%Y-%m-%d %H:%M:%S %Z"
-        )
+        current_time_us = get_current_time().strftime("%Y-%m-%d %H:%M:%S %Z")
 
         message = f"<b>New Buy Recommendation - {sub_name}</b>\n\n"
         message += f"<b>Stock Symbol:</b> {ticker}\n"
@@ -255,7 +257,7 @@ async def process_subscription(session, subscription, proxy, processed_urls):
         )
 
         # FIXME: remove this later when we properly handled drafts
-        date = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
+        date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S_%f")
         with open(f"data/delete_{date}.json", "w") as f:
             json.dump(new_articles, f, indent=2)
 
@@ -278,7 +280,7 @@ async def run_scraper():
             _, _, market_close_time = get_next_market_times()
 
             while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
+                current_time = get_current_time()
                 if current_time > market_close_time:
                     log_message(
                         "Market is closed. Waiting for next market open...", "DEBUG"

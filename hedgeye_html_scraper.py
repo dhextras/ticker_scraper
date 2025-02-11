@@ -22,7 +22,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -75,7 +79,7 @@ class ProxyManager:
             json.dump(rate_limited, f)
 
     def get_next_proxy(self) -> Optional[str]:
-        current_time = datetime.now()
+        current_time = get_current_time()
 
         # Remove expired rate limits (30 minutes)
         expired_proxies = [
@@ -105,7 +109,7 @@ class ProxyManager:
         return proxy
 
     def mark_rate_limited(self, proxy: str):
-        self.rate_limited[proxy] = datetime.now()
+        self.rate_limited[proxy] = get_current_time()
         self._save_rate_limited()
         log_message(f"Marked proxy {proxy} as rate limited", "WARNING")
 
@@ -225,13 +229,13 @@ def fetch_alert_details(driver):
             return None
         alert_price = alert_price.get_text(strip=True)
 
-        current_time_edt = datetime.now(pytz.utc).astimezone(
-            pytz.timezone("America/New_York")
+        current_time_edt = get_current_time().astimezone(
+            pytz.timezone("America/Chicago")
         )
 
         created_at_utc = soup.select_one("time[datetime]")["datetime"]
         created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
+        created_at_edt = created_at.astimezone(pytz.timezone("America/Chicago"))
 
         return {
             "title": alert_title,
@@ -265,7 +269,7 @@ async def monitor_feeds():
             pre_market_login_time, market_open_time, market_close_time = (
                 get_next_market_times()
             )
-            current_time_edt = datetime.now(pytz.timezone("America/New_York"))
+            current_time_edt = get_current_time()
 
             if pre_market_login_time <= current_time_edt < market_open_time:
                 if current_driver is None:

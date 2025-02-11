@@ -14,7 +14,11 @@ from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 
 load_dotenv()
 
@@ -83,7 +87,7 @@ def get_random_cache_buster():
 
 def format_time(time_str: str) -> str:
     dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-    ny_time = dt.astimezone(pytz.timezone("America/New_York"))
+    ny_time = dt.astimezone(pytz.timezone("America/Chicago"))
     return ny_time.strftime("%Y-%m-%d %H:%M:%S EDT")
 
 
@@ -93,7 +97,7 @@ async def send_alert(msg: str):
 
 
 async def process_post(post: Dict) -> str:
-    current_time = datetime.now(pytz.timezone("America/New_York"))
+    current_time = get_current_time()
     soup = BeautifulSoup(post["content"], "html.parser")
     formatted_content = soup.get_text(separator="\n", strip=True)
 
@@ -121,7 +125,7 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
     random_headers = get_random_headers()
     random_variable, random_value = get_random_cache_buster()
 
-    current_date = datetime.now(pytz.timezone("America/New_York"))
+    current_date = get_current_time()
     params = {"date": current_date.strftime("%Y-%m-%d"), random_variable: random_value}
 
     headers = {
@@ -182,7 +186,7 @@ async def run_scraper():
             _, _, market_close_time = get_next_market_times(start=8, end=15)
 
             while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
+                current_time = get_current_time()
 
                 if current_time > market_close_time:
                     log_message(

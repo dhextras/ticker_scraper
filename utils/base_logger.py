@@ -3,6 +3,8 @@ import logging
 import os
 from datetime import datetime
 
+import pytz
+
 
 class ColoredFormatter(logging.Formatter):
     COLORS = {
@@ -25,12 +27,13 @@ def setup_logger(log_file=None):
     script_name = os.path.splitext(os.path.basename(main_script))[0]
     logger_name = os.path.splitext(os.path.basename(caller_script))[0]
 
-    date = datetime.now().strftime("%Y/%m")
+    date = datetime.now(pytz.timezone("America/Chicago")).strftime("%Y/%m")
     folder_name = os.path.join("log", date, script_name)
     os.makedirs(folder_name, exist_ok=True)
 
     log_file = log_file or os.path.join(
-        folder_name, f"{datetime.now().strftime('%d')}.log"
+        folder_name,
+        f"{datetime.now(pytz.timezone("America/Chicago")).now().strftime('%d')}.log",
     )
 
     logger = logging.getLogger(logger_name)

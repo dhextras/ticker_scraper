@@ -27,7 +27,11 @@ from seleniumrequests import Chrome
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -179,7 +183,7 @@ class ProxyManager:
             json.dump(rate_limited, f)
 
     def get_next_proxy(self) -> str:
-        current_time = datetime.now()
+        current_time = get_current_time()
 
         expired_proxies = [
             proxy
@@ -207,7 +211,7 @@ class ProxyManager:
         return proxy
 
     def mark_rate_limited(self, proxy: str):
-        self.rate_limited[proxy] = datetime.now()
+        self.rate_limited[proxy] = get_current_time()
         self._save_rate_limited()
 
     def clear_rate_limits(self):
@@ -384,11 +388,9 @@ def archive_alert_parser(articles, fetch_time, current_time):
 
             date_format = "%m/%d/%y %I:%M %p EST"
             created_at = datetime.strptime(date_text, date_format)
-            created_at_utc = created_at.astimezone(pytz.utc)
+            created_at_utc = created_at.astimezone(pytz.timezone("America/Chicago"))
 
-            created_at_edt = created_at_utc.astimezone(
-                pytz.timezone("America/New_York")
-            )
+            created_at_edt = created_at_utc.astimezone(pytz.timezone("America/Chicago"))
 
             result.append(
                 {
@@ -421,7 +423,7 @@ async def fetch_alert_details(session, proxy_raw):
         temp_headers["cache-uuid"] = str(cache_uuid)
 
         start_time = time.time()
-        # today = datetime.now().strftime("%Y-%m-%d")
+        # today = get_current_time().now().strftime("%Y-%m-%d")
         async with aiohttp.ClientSession() as aio_session:
             async with aio_session.get(
                 f"https://app.hedgeye.com/feed_items/all?with_category=22-real-time-alerts&timstamp={str(timestamp + 10)}",
@@ -452,10 +454,10 @@ async def fetch_alert_details(session, proxy_raw):
 
         created_at_utc = soup.select_one("time[datetime]")["datetime"]
         created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
+        created_at_edt = created_at.astimezone(pytz.timezone("America/Chicago"))
 
-        current_time_edt = datetime.now(pytz.utc).astimezone(
-            pytz.timezone("America/New_York")
+        current_time_edt = get_current_time().astimezone(
+            pytz.timezone("America/Chicago")
         )
         fetch_time = time.time() - start_time
 
@@ -742,7 +744,7 @@ async def monitor_feeds_async():
             pre_market_login_time, market_open_time, market_close_time = (
                 get_next_market_times()
             )
-            current_time_edt = datetime.now(pytz.timezone("America/New_York"))
+            current_time_edt = get_current_time()
 
             if (
                 pre_market_login_time <= current_time_edt < market_open_time

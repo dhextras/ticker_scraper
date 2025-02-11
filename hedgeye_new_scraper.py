@@ -21,7 +21,11 @@ from seleniumrequests import Chrome
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -68,7 +72,7 @@ class ProxyManager:
             json.dump(rate_limited, f)
 
     def get_next_proxy(self) -> str:
-        current_time = datetime.now()
+        current_time = get_current_time()
 
         expired_proxies = [
             proxy
@@ -96,7 +100,7 @@ class ProxyManager:
         return proxy
 
     def mark_rate_limited(self, proxy: str):
-        self.rate_limited[proxy] = datetime.now()
+        self.rate_limited[proxy] = get_current_time()
         self._save_rate_limited()
 
     def clear_rate_limits(self):
@@ -335,8 +339,8 @@ async def fetch_alert_details(
 
         created_at_utc = soup.select_one("time[datetime]")["datetime"]
         created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        created_at_edt = created_at.astimezone(pytz.timezone("America/New_York"))
-        current_time_edt = datetime.now(pytz.timezone("America/New_York"))
+        created_at_edt = created_at.astimezone(pytz.timezone("America/Chicago"))
+        current_time_edt = get_current_time()
 
         return {
             "title": alert_title,
@@ -568,7 +572,7 @@ async def main():
                 )
             )
 
-            while datetime.now(pytz.timezone("America/New_York")) <= market_close_time:
+            while get_current_time() <= market_close_time:
                 # 10 sec sleep between checking to avoid overheat in the server
                 await asyncio.sleep(10)
 

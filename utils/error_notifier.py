@@ -32,7 +32,7 @@ async def send_error_notification(message, level="WARNING", main_script=None):
         main_script = inspect.stack()[-1].filename
     script_name = os.path.splitext(os.path.basename(main_script))[0]
 
-    current_time = datetime.now(pytz.timezone("US/Eastern"))
+    current_time = datetime.now(pytz.timezone("America/Chicago"))
     date = current_time.strftime("%Y/%m")
     day = current_time.strftime("%d")
 

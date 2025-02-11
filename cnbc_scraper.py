@@ -14,7 +14,6 @@ from typing import Dict, List, Set
 from uuid import uuid4
 
 import aiohttp
-import pytz
 import requests
 import undetected_chromedriver as uc
 from dotenv import load_dotenv
@@ -26,7 +25,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -388,7 +391,7 @@ async def process_article(article, uid, session_token, fetch_time):
                     WS_SERVER_URL,
                 )
 
-            current_time = datetime.now(pytz.utc).astimezone(article_timezone)
+            current_time = get_current_time().astimezone(article_timezone)
             log_message(
                 f"Time difference: {(current_time - published_date).total_seconds():.2f} seconds",
                 "INFO",
@@ -466,7 +469,7 @@ async def run_alert_monitor(uid, session_token):
 
             # Main market hours loop
             while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
+                current_time = get_current_time()
                 if current_time > market_close_time:
                     log_message(
                         "Market is closed. Waiting for next market open...", "DEBUG"

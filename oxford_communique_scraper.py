@@ -4,17 +4,19 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from uuid import uuid4
 
-import pytz
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -142,9 +144,7 @@ async def fetch_and_process_archive(session):
 
 
 async def send_to_telegram_and_ws(article_data, tickers_data):
-    timestamp = datetime.now(pytz.timezone("US/Eastern")).strftime(
-        "%Y-%m-%d %H:%M:%S.%f"
-    )
+    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     # Prepare ticker lists for proper message
     buy_tickers = [
@@ -193,7 +193,7 @@ async def run_scraper():
         _, _, market_close_time = get_next_market_times()
 
         while True:
-            current_time = datetime.now(pytz.timezone("America/New_York"))
+            current_time = get_current_time()
 
             if current_time > market_close_time:
                 log_message(

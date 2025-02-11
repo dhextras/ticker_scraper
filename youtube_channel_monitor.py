@@ -5,13 +5,16 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-import pytz
 import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import get_next_market_times, sleep_until_market_open
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 
 load_dotenv()
 
@@ -67,7 +70,7 @@ class YouTubeMonitor:
             json.dump(self.processed_videos, f, indent=2)
 
     def get_next_available_api_key(self):
-        current_time = datetime.now(pytz.UTC)
+        current_time = get_current_time()
 
         # Clean up expired restrictions
         for key in list(self.api_usage.keys()):
@@ -88,12 +91,12 @@ class YouTubeMonitor:
         return None
 
     def mark_api_key_exceeded(self, api_key):
-        tomorrow = datetime.now(pytz.UTC).replace(
+        tomorrow = get_current_time().replace(
             hour=8, minute=0, second=0, microsecond=0
         ) + timedelta(days=1)
 
         self.api_usage[api_key] = {
-            "exceeded_time": datetime.now(pytz.UTC).isoformat(),
+            "exceeded_time": get_current_time().isoformat(),
             "reset_time": tomorrow.isoformat(),
         }
         self.save_api_usage()
@@ -126,7 +129,7 @@ class YouTubeMonitor:
                 publish_datetime = datetime.fromisoformat(
                     publish_time.replace("Z", "+00:00")
                 )
-                time_difference = datetime.now().astimezone() - publish_datetime
+                time_difference = get_current_time().astimezone() - publish_datetime
 
                 if time_difference.total_seconds() <= 86400:  # Within 24 hours
                     recent_videos.append(video)
@@ -171,7 +174,7 @@ async def run_youtube_monitor():
         _, _, market_close_time = get_next_market_times()
 
         while True:
-            current_time = datetime.now(pytz.timezone("America/New_York"))
+            current_time = get_current_time()
 
             if current_time > market_close_time:
                 log_message(
