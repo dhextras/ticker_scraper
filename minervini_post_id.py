@@ -25,8 +25,8 @@ TOKENS_FILE = "data/minervini_access_token.json"
 BASE_URL = "https://mpa.minervini.com/api/streams/1/posts/"
 TELEGRAM_BOT_TOKEN = os.getenv("MINERVINI_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MINERVINI_TELEGRAM_GRP")
-MAX_EMPTY_CHECKS = 7
-LOOKAHEAD_IDS = 1
+MAX_EMPTY_CHECKS = 5
+LOOKAHEAD_IDS = 2
 
 os.makedirs("data", exist_ok=True)
 
@@ -57,6 +57,11 @@ def save_last_id(last_id):
 
 async def send_alert(msg: str):
     alert = f"🚨 ALERT: {msg}\nPlease check the server immediately!"
+    await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+
+async def send_message(msg: str):
+    alert = f"🚨 MESSAGE: {msg}"
     await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
@@ -122,6 +127,9 @@ async def check_lookahead_ids(session, tokens, current_id):
 
         if post_data:
             log_message(f"Found post at lookahead ID: {lookahead_id}", "INFO")
+            await send_message(
+                f"Found post at lookahead ID: {lookahead_id}, thus skipping id: {current_id}\nLater check too see if this id get used or not\n{BASE_URL}{current_id}/"
+            )
             return lookahead_id
 
     return None
