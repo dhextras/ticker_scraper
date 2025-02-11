@@ -388,14 +388,14 @@ def archive_alert_parser(articles, fetch_time, current_time):
 
             date_format = "%m/%d/%y %I:%M %p EST"
             created_at = datetime.strptime(date_text, date_format)
-            created_at_utc = created_at.astimezone(pytz.timezone("America/Chicago"))
+            created_at_cst = created_at.astimezone(pytz.timezone("America/Chicago"))
 
-            created_at_edt = created_at_utc.astimezone(pytz.timezone("America/Chicago"))
+            created_at_cst = created_at_cst.astimezone(pytz.timezone("America/Chicago"))
 
             result.append(
                 {
                     "title": title,
-                    "created_at": created_at_edt,
+                    "created_at": created_at_cst,
                     "current_time": current_time,
                     "fetch_time": fetch_time,
                 }
@@ -452,11 +452,11 @@ async def fetch_alert_details(session, proxy_raw):
             return None
         alert_price = alert_price.get_text(strip=True)
 
-        created_at_utc = soup.select_one("time[datetime]")["datetime"]
-        created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        created_at_edt = created_at.astimezone(pytz.timezone("America/Chicago"))
+        created_at_cst = soup.select_one("time[datetime]")["datetime"]
+        created_at = datetime.fromisoformat(created_at_cst.replace("Z", "+00:00"))
+        created_at_cst = created_at.astimezone(pytz.timezone("America/Chicago"))
 
-        current_time_edt = get_current_time().astimezone(
+        current_time_cst = get_current_time().astimezone(
             pytz.timezone("America/Chicago")
         )
         fetch_time = time.time() - start_time
@@ -464,14 +464,14 @@ async def fetch_alert_details(session, proxy_raw):
         return {
             "title": alert_title,
             "price": alert_price,
-            "created_at": created_at_edt,
-            "current_time": current_time_edt,
+            "created_at": created_at_cst,
+            "current_time": current_time_cst,
             "fetch_time": fetch_time,
         }
 
         # Method 2: https://app.hedgeye.com/research_archives
         # articles = soup.find_all("div", class_="thumbnail-article__details")
-        # results = archive_alert_parser(articles, fetch_time, current_time_edt)
+        # results = archive_alert_parser(articles, fetch_time, current_time_cst)
         #
         # return results
 
@@ -744,10 +744,10 @@ async def monitor_feeds_async():
             pre_market_login_time, market_open_time, market_close_time = (
                 get_next_market_times()
             )
-            current_time_edt = get_current_time()
+            current_time_cst = get_current_time()
 
             if (
-                pre_market_login_time <= current_time_edt < market_open_time
+                pre_market_login_time <= current_time_cst < market_open_time
                 or first_time_ever
             ):
                 first_time_ever = False
@@ -814,7 +814,7 @@ async def monitor_feeds_async():
                     )
                     logged_in = True
 
-            elif market_open_time <= current_time_edt <= market_close_time:
+            elif market_open_time <= current_time_cst <= market_close_time:
                 if not market_is_open:
                     proxy_manager.clear_rate_limits()
                     account_manager.clear_rate_limits()

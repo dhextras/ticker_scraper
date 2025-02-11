@@ -5,7 +5,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request

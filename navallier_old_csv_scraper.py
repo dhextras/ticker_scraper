@@ -8,6 +8,7 @@ from pathlib import Path
 from time import time
 
 import bs4
+import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message

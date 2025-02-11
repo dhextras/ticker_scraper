@@ -13,16 +13,16 @@ def get_current_time():
 
 def get_next_market_times(start=6, end=19):
     """Calculates the next market open and close times, adjusts to the next day if already past market close."""
-    current_time_edt = get_current_time()
-    market_open_time = current_time_edt.replace(
+    current_time_cst = get_current_time()
+    market_open_time = current_time_cst.replace(
         hour=start, minute=0, second=0, microsecond=0
     )
-    market_close_time = current_time_edt.replace(
+    market_close_time = current_time_cst.replace(
         hour=end, minute=0, second=0, microsecond=0
     )
 
     # If current time is past the close time, set the open/close times for the next day
-    if current_time_edt > market_close_time:
+    if current_time_cst > market_close_time:
         market_open_time += timedelta(days=1)
         market_close_time += timedelta(days=1)
 

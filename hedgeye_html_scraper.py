@@ -229,19 +229,19 @@ def fetch_alert_details(driver):
             return None
         alert_price = alert_price.get_text(strip=True)
 
-        current_time_edt = get_current_time().astimezone(
+        current_time_cst = get_current_time().astimezone(
             pytz.timezone("America/Chicago")
         )
 
-        created_at_utc = soup.select_one("time[datetime]")["datetime"]
-        created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        created_at_edt = created_at.astimezone(pytz.timezone("America/Chicago"))
+        created_at_cst = soup.select_one("time[datetime]")["datetime"]
+        created_at = datetime.fromisoformat(created_at_cst.replace("Z", "+00:00"))
+        created_at_cst = created_at.astimezone(pytz.timezone("America/Chicago"))
 
         return {
             "title": alert_title,
             "price": alert_price,
-            "created_at": created_at_edt,
-            "current_time": current_time_edt,
+            "created_at": created_at_cst,
+            "current_time": current_time_cst,
         }
 
     except Exception as e:
@@ -269,9 +269,9 @@ async def monitor_feeds():
             pre_market_login_time, market_open_time, market_close_time = (
                 get_next_market_times()
             )
-            current_time_edt = get_current_time()
+            current_time_cst = get_current_time()
 
-            if pre_market_login_time <= current_time_edt < market_open_time:
+            if pre_market_login_time <= current_time_cst < market_open_time:
                 if current_driver is None:
                     log_message("Setting up new driver and logging in...", "INFO")
                     current_proxy = proxy_manager.get_next_proxy()
@@ -306,7 +306,7 @@ async def monitor_feeds():
                             await asyncio.sleep(60)
                             continue
 
-            elif market_open_time <= current_time_edt <= market_close_time:
+            elif market_open_time <= current_time_cst <= market_close_time:
                 if not market_is_open:
                     log_message("Market is open, starting monitoring...", "DEBUG")
                     market_is_open = True

@@ -337,16 +337,16 @@ async def fetch_alert_details(
             return None
         alert_price = alert_price.get_text(strip=True)
 
-        created_at_utc = soup.select_one("time[datetime]")["datetime"]
-        created_at = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
-        created_at_edt = created_at.astimezone(pytz.timezone("America/Chicago"))
-        current_time_edt = get_current_time()
+        created_at_cst = soup.select_one("time[datetime]")["datetime"]
+        created_at = datetime.fromisoformat(created_at_cst.replace("Z", "+00:00"))
+        created_at_cst = created_at.astimezone(pytz.timezone("America/Chicago"))
+        current_time_cst = get_current_time()
 
         return {
             "title": alert_title,
             "price": alert_price,
-            "created_at": created_at_edt,
-            "current_time": current_time_edt,
+            "created_at": created_at_cst,
+            "current_time": current_time_cst,
             "fetch_time": time.time() - start_time,
         }
 
