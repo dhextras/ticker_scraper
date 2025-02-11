@@ -8,9 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from time import time
 
-import aiohttp
 import bs4
 import pytz
+import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -133,20 +133,23 @@ def process_raw_data(html):
         return []
 
 
-async def fetch_csv_alerts(session, proxy):
+def fetch_csv_alerts(proxy):
     try:
         headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
-        proxy_url = f"http://{proxy}" if proxy else None
+        proxies = (
+            {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
+        )
 
-        async with session.get(
-            JSON_URL, headers=headers, proxy=proxy_url, timeout=5
-        ) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data.get("content", {}).get("rendered", None)
-            log_message(f"Error fetching alerts: {response.status}", "Warning")
-            return None
-    except asyncio.TimeoutError:
+        response = requests.get(JSON_URL, headers=headers, proxies=proxies, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("content", {}).get("rendered", None)
+
+        log_message(f"Error fetching alerts: {response.status_code}", "Warning")
+        return None
+
+    except requests.Timeout:
         log_message(f"Took more then 5 sec to fetch with proxy: {proxy}", "WARNING")
         return None
     except Exception as e:
@@ -154,12 +157,12 @@ async def fetch_csv_alerts(session, proxy):
         return None
 
 
-async def process_alert(session, proxy):
+async def process_alert(proxy):
     global previous_alerts
 
     try:
         start = time()
-        raw_html = await fetch_csv_alerts(session, proxy)
+        raw_html = fetch_csv_alerts(proxy)
         log_message(f"fetch_csv_alerts took {(time() - start):.2f} seconds")
 
         if raw_html is None:
@@ -212,28 +215,27 @@ async def run_scraper():
     proxies = load_proxies()
     log_message(f"Loaded {len(proxies)} proxies")
 
-    async with aiohttp.ClientSession() as session:
+    while True:
+        await sleep_until_market_open()
+        log_message("Market is open. Starting to check for new posts...", "DEBUG")
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
-            log_message("Market is open. Starting to check for new posts...", "DEBUG")
-            _, _, market_close_time = get_next_market_times()
+            current_time = datetime.now(pytz.timezone("America/New_York"))
+            if current_time > market_close_time:
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
+                break
 
-            while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    break
+            log_message("Checking for new alerts...")
+            proxy = random.choice(proxies)
+            try:
+                await process_alert(proxy)
+            except Exception as e:
+                log_message(f"Error in scraper loop: {e}", "ERROR")
 
-                log_message("Checking for new alerts...")
-                proxy = random.choice(proxies)
-                try:
-                    await process_alert(session, proxy)
-                except Exception as e:
-                    log_message(f"Error in scraper loop: {e}", "ERROR")
-
-                await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():

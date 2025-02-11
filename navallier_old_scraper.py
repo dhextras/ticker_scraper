@@ -9,8 +9,8 @@ from pathlib import Path
 from time import time
 from typing import List, Set
 
-import aiohttp
 import pytz
+import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -113,21 +113,23 @@ def extract_tickers(title):
     return tickers
 
 
-async def fetch_flash_alerts(session, proxy) -> List:
+def fetch_flash_alerts(proxy) -> List:
     """Fetch and parse article data from InvestorPlace"""
     try:
         headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
-        proxy_url = f"http://{proxy}" if proxy else None
+        proxies = (
+            {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
+        )
 
-        async with session.get(
-            JSON_URL, headers=headers, proxy=proxy_url, timeout=5
-        ) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data
-            log_message(f"Error fetching alerts: {response.status}", "WARNING")
-            return []
-    except asyncio.TimeoutError:
+        response = requests.get(JSON_URL, headers=headers, proxies=proxies, timeout=5)
+
+        if response.status_code == 200:
+            return response.json()
+
+        log_message(f"Error fetching alerts: {response.status_code}", "WARNING")
+        return []
+
+    except requests.Timeout:
         log_message(f"Took more then 5 sec to fetch with proxy: {proxy}", "WARNING")
         return []
     except Exception as e:
@@ -135,13 +137,13 @@ async def fetch_flash_alerts(session, proxy) -> List:
         return []
 
 
-async def process_alert(session, proxy) -> None:
+async def process_alert(proxy) -> None:
     """Check for new alerts and send to Telegram if found"""
     global previous_alerts
 
     try:
         start = time()
-        flash_alerts = await fetch_flash_alerts(session, proxy)
+        flash_alerts = fetch_flash_alerts(proxy)
         log_message(f"fetch_article_data took {(time() - start):.2f} seconds")
 
         if not flash_alerts or len(flash_alerts) <= 0:
@@ -224,28 +226,27 @@ async def run_scraper():
     proxies = load_proxies()
     log_message(f"Loaded {len(proxies)} proxies")
 
-    async with aiohttp.ClientSession() as session:
+    while True:
+        await sleep_until_market_open()
+        log_message("Market is open. Starting to check for new posts...", "DEBUG")
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
-            log_message("Market is open. Starting to check for new posts...", "DEBUG")
-            _, _, market_close_time = get_next_market_times()
+            current_time = datetime.now(pytz.timezone("America/New_York"))
+            if current_time > market_close_time:
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
+                break
 
-            while True:
-                current_time = datetime.now(pytz.timezone("America/New_York"))
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    break
+            log_message("Checking for new alerts...")
+            proxy = random.choice(proxies)
+            try:
+                await process_alert(proxy)
+            except Exception as e:
+                log_message(f"Error in scraper loop: {e}", "ERROR")
 
-                log_message("Checking for new alerts...")
-                proxy = random.choice(proxies)
-                try:
-                    await process_alert(session, proxy)
-                except Exception as e:
-                    log_message(f"Error in scraper loop: {e}", "ERROR")
-
-                await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
