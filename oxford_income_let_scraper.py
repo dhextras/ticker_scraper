@@ -133,16 +133,16 @@ async def send_to_telegram_and_ws(article_data, url, ticker):
     if ticker:
         message += f"\n<b>Extracted Ticker:</b> {ticker}"
 
-        # TODO: Don't send to websocket until we verify it
-        # await send_ws_message(
-        #     {
-        #         "name": "OXFORD Income Letter",
-        #         "type": "Alert",
-        #         "ticker": ticker,
-        #         "sender": "oxfordclub",
-        #     },
-        #     WS_SERVER_URL,
-        # )
+        await send_ws_message(
+            {
+                "name": "OXFORD Income Letter",
+                "type": "Alert",
+                "ticker": ticker,
+                "sender": "oxfordclub",
+                "traget": "CSS",
+            },
+            WS_SERVER_URL,
+        )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
