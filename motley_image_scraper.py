@@ -351,7 +351,7 @@ async def run_alert_monitor():
                         raise Exception("Failed to refresh session token")
 
                 prev_images, _ = await check_for_new_images(prev_images, session_data)
-                await asyncio.sleep(1)  # Remove in the future if it becomes slow
+                await asyncio.sleep(9)  # Remove in the future if it becomes slow
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
