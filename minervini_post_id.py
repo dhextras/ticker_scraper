@@ -25,6 +25,8 @@ TOKENS_FILE = "data/minervini_access_token.json"
 BASE_URL = "https://mpa.minervini.com/api/streams/1/posts/"
 TELEGRAM_BOT_TOKEN = os.getenv("MINERVINI_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MINERVINI_TELEGRAM_GRP")
+MAX_EMPTY_CHECKS = 7
+LOOKAHEAD_IDS = 1
 
 os.makedirs("data", exist_ok=True)
 
@@ -113,6 +115,18 @@ async def send_post_alert(post):
     log_message(f"Post alert sent to Telegram: ID {post['id']}", "INFO")
 
 
+async def check_lookahead_ids(session, tokens, current_id):
+    for offset in range(1, LOOKAHEAD_IDS + 1):
+        lookahead_id = current_id + offset
+        post_data = await fetch_post(session, tokens, lookahead_id)
+
+        if post_data:
+            log_message(f"Found post at lookahead ID: {lookahead_id}", "INFO")
+            return lookahead_id
+
+    return None
+
+
 async def run_scraper():
     tokens = load_tokens()
     if not tokens:
@@ -120,6 +134,7 @@ async def run_scraper():
         return
 
     current_id = load_last_id()
+    empty_checks = 0
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -141,9 +156,35 @@ async def run_scraper():
                     await send_post_alert(post_data)
                     save_last_id(current_id)
                     current_id += 1
+                    empty_checks = 0
                     log_message(f"Moving to next ID: {current_id}", "INFO")
                 else:
-                    log_message(f"No post found for ID: {current_id}", "INFO")
+                    empty_checks += 1
+                    log_message(
+                        f"No post found for ID: {current_id}, empty check count: {empty_checks}",
+                        "INFO",
+                    )
+
+                    if empty_checks >= MAX_EMPTY_CHECKS:
+                        log_message(
+                            "Maximum empty checks reached, checking lookahead IDs",
+                            "INFO",
+                        )
+                        new_id = await check_lookahead_ids(session, tokens, current_id)
+
+                        if new_id:
+                            current_id = new_id
+                            empty_checks = 0
+                            log_message(
+                                f"Switching to new ID found in lookahead: {current_id}",
+                                "INFO",
+                            )
+                        else:
+                            empty_checks = 0
+                            log_message(
+                                "No posts found in lookahead, resetting empty checks",
+                                "INFO",
+                            )
 
                 await asyncio.sleep(CHECK_INTERVAL)
 
