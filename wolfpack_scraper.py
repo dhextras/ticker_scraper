@@ -237,7 +237,7 @@ async def send_to_telegram_and_ws(article_data):
     await send_ws_message(
         {
             "name": "Wolfpack Article - API",
-            "type": "Buy",
+            "type": "Sell",
             "ticker": article_data["ticker"],
             "sender": "wolfpack",
             "target": "CSS",
