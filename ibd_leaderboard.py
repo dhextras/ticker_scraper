@@ -102,16 +102,16 @@ async def fetch_alerts(session, creds):
 async def send_to_telegram(alert):
     trade_type = get_trade_type(alert.get("ARFlag"))
 
-    await send_ws_message(
-        {
-            "name": "IBD Leaderboard - RA",
-            "type": trade_type,
-            "ticker": alert["Symbol"],
-            "sender": "ibd_leaderboard",
-            "target": "CSS",
-        },
-        WS_SERVER_URL,
-    )
+    # await send_ws_message(
+    #     {
+    #         "name": "IBD Leaderboard - RA",
+    #         "type": trade_type,
+    #         "ticker": alert["Symbol"],
+    #         "sender": "ibd_leaderboard",
+    #         "target": "CSS",
+    #     },
+    #     WS_SERVER_URL,
+    # )
 
     current_time = get_current_time()
 
