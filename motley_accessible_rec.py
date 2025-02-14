@@ -88,6 +88,8 @@ def save_instrument_data(data):
     if data:
         with open(INSTRUMENT_DATA_FILE, "w") as f:
             json.dump(data, f, indent=2)
+    else:
+        log_message("Found invalid data check the server", "CRITICAL")
 
 
 def get_random_cache_buster():
