@@ -85,8 +85,9 @@ def load_instrument_data():
 
 
 def save_instrument_data(data):
-    with open(INSTRUMENT_DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    if data:
+        with open(INSTRUMENT_DATA_FILE, "w") as f:
+            json.dump(data, f, indent=2)
 
 
 def get_random_cache_buster():
