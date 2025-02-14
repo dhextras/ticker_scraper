@@ -20,7 +20,7 @@ from utils.websocket_sender import send_ws_message
 load_dotenv()
 
 # Constants
-AUTHOR_URL = "https://app.stocks.news/blog/author/stocks-news"
+AUTHOR_URL = "https://app.stocks.news/blogs"
 CHECK_INTERVAL = 1
 SEARCH_WORD = "NASDAQ"
 PROCESSED_JSON_FILE = "data/stocknews_html_processed_urls.json"
@@ -42,8 +42,8 @@ async def fetch_blog_posts(session):
         for blog_block in soup.find_all("div", class_="element-1"):
             link = blog_block.find("a")
             title = (
-                blog_block.find("h2").text.strip()
-                if blog_block.find("h2")
+                blog_block.find("h4").text.strip()
+                if blog_block.find("h4")
                 else "No title"
             )
 
