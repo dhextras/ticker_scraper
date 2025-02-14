@@ -94,16 +94,16 @@ async def fetch_trades(session, creds):
 
 
 async def send_to_telegram(trade):
-    await send_ws_message(
-        {
-            "name": "IBD SwingTrader - H",
-            "type": "Buy",
-            "ticker": trade["stockSymbol"],
-            "sender": "ibd_swing",
-            "target": "CSS",
-        },
-        WS_SERVER_URL,
-    )
+    # await send_ws_message(
+    #     {
+    #         "name": "IBD SwingTrader - H",
+    #         "type": "Buy",
+    #         "ticker": trade["stockSymbol"],
+    #         "sender": "ibd_swing",
+    #         "target": "CSS",
+    #     },
+    #     WS_SERVER_URL,
+    # )
 
     current_time = get_current_time()
     created_time = datetime.fromisoformat(trade["created"].replace("Z", "+00:00"))

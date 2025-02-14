@@ -144,7 +144,7 @@ async def send_to_telegram(trade):
             "type": "Buy",
             "ticker": trade["stockSymbol"],
             "sender": "ibd_swing",
-            # "target": "CSS", # FIXME: remove later if we fully decided to send to both websocket
+            "target": "TSS",
         },
         WS_SERVER_URL,
     )
