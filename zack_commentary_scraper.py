@@ -41,7 +41,7 @@ session_lock = asyncio.Lock()
 
 def extract_ticker(title, content):
     if title == "We're Buying and Selling Today":
-        buy_section = re.search(r"(Buy.*?Today)", content)
+        buy_section = re.search(r"(Buy .*? Today)", content)
         if buy_section:
             match = re.search(r"\(([A-Z]+)\)", content[buy_section.start() :])
             if match:
