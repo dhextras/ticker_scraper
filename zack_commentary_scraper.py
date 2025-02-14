@@ -46,6 +46,12 @@ def extract_ticker(title, content):
             return match.group(1), "Buy"
     elif "Adding" in title:
         return title.split()[1].strip(), "Buy"
+    elif title == "We're Buying and Selling Today":
+        buy_section = re.search(r"(Buy.*?Today)", content)
+        if buy_section:
+            match = re.search(r"\(([A-Z]+)\)", content)
+            if match:
+                return match.group(1), "Buy"
 
     # TODO: Later also process sell alerts
 
