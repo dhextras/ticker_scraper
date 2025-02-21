@@ -209,11 +209,15 @@ async def get_article_data(article_id, uid, session_token):
         "extensions": json.dumps(extensions),
     }
 
+    headers = {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    }
+
     encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(encoded_url) as response:
+            async with session.get(encoded_url, headers=headers) as response:
                 if response.status == 200:
                     response_json = await response.json()
 
