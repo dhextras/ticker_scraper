@@ -193,6 +193,7 @@ async def fetch_latest_images(session_data):
         "pragma": "no-cache",
         "cache-timestamp": str(timestamp),
         "cache-uuid": str(cache_uuid),
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
     }
 
     # FIXME: Later add the product ids and see if it also returns it at the same time if so try moving the script into the image section

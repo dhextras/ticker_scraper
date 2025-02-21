@@ -200,6 +200,7 @@ async def check_recommendation_url(session, product_id, date, session_data, know
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "dnt": "1",
+        "apikey": FOOL_API_KEY,
         "priority": "u=0, i",
         "sec-fetch-site": "same-origin",
         "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",

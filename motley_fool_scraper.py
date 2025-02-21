@@ -197,6 +197,7 @@ async def fetch_latest_articles(session_data):
         "pragma": "no-cache",
         "cache-timestamp": str(timestamp),
         "cache-uuid": str(cache_uuid),
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
     }
 
     # FIXME: Later add the images here and see if it fast or not if needed only other wise just leave the other script be
