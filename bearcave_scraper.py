@@ -28,7 +28,6 @@ JSON_URL = "https://thebearcave.substack.com/api/v1/posts"
 CHECK_INTERVAL = 0.05  # seconds
 PROCESSED_URLS_FILE = "data/bearcave_processed_urls.json"
 PROXY_FILE = "cred/proxies.json"
-DRAFT_POSTS_FILE = "data/delete_bearcave_draft_posts.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
@@ -75,23 +74,6 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-def save_draft_post(post_id, post_data):
-    """Save draft post data for future reference"""
-    try:
-        existing_data = {}
-        if os.path.exists(DRAFT_POSTS_FILE):
-            with open(DRAFT_POSTS_FILE, "r") as f:
-                existing_data = json.load(f)
-
-        existing_data[post_id] = post_data
-
-        with open(DRAFT_POSTS_FILE, "w") as f:
-            json.dump(existing_data, f, indent=2)
-        log_message(f"Draft post {post_id} saved.", "INFO")
-    except Exception as e:
-        log_message(f"Error saving draft post: {e}", "ERROR")
-
-
 def get_random_headers():
     """Generate random headers for requests"""
     return {
@@ -124,7 +106,6 @@ def get_random_cache_buster():
 
 async def fetch_json(session, raw_proxy=None):
     """Fetch JSON data with proxy support and custom headers"""
-
     headers = get_random_headers()
     random_cache_buster = get_random_cache_buster()
     proxy = raw_proxy if raw_proxy is None else f"http://{raw_proxy}"
@@ -134,7 +115,7 @@ async def fetch_json(session, raw_proxy=None):
             f"{JSON_URL}?limit=10&{random_cache_buster}",
             headers=headers,
             proxy=proxy,
-            timeout=3,  # FIXME: Try to bring it down to 0.2 or 0.1 seconds later down the line when we have the proper proxy
+            timeout=1,  # FIXME: Try to bring it down to 0.2 or 0.1 seconds later down the line when we have the proper proxy
         ) as response:
             if response.status == 200:
                 data = await response.json()
@@ -144,7 +125,7 @@ async def fetch_json(session, raw_proxy=None):
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
                 return []
     except asyncio.TimeoutError:
-        log_message(f"Took more then 3 sec to fetch with proxy: {raw_proxy}", "WARNING")
+        log_message(f"Took more then 1 sec to fetch with proxy: {raw_proxy}", "WARNING")
         return []
     except Exception as e:
         log_message(f"Error fetching JSON with proxy {raw_proxy}: {e}", "ERROR")
@@ -166,17 +147,41 @@ def extract_ticker(title):
     return None
 
 
+def get_post_title(post):
+    """Get the most appropriate title from the post data"""
+    title = post.get("title", "")
+    social_title = post.get("social_title", "")
+
+    if not isinstance(title, str) or not title.strip():
+        return (
+            social_title
+            if social_title
+            else "No title found in either title/social_title"
+        )
+    return title
+
+
 async def send_to_telegram(post_data, ticker=None):
     current_time = get_current_time()
     post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
     post_date_est = post_date.astimezone(pytz.timezone("US/Eastern"))
+    update_date = datetime.fromisoformat(post_data["updated_at"].replace("Z", "+00:00"))
+    update_date_est = update_date.astimezone(pytz.timezone("US/Eastern"))
 
-    message = f"<b>New Bear Cave Article!</b>\n\n"
+    is_draft = is_draft_post(post_data.get("canonical_url", ""))
+    title = post_data.get("title", "")
+    social_title = post_data.get("social_title", "")
+
+    message = f"<b>{'[DRAFT] ' if is_draft else ''}New Bear Cave Article!</b>\n\n"
     message += (
         f"<b>Published Date:</b> {post_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
+    message += (
+        f"<b>Updated Date:</b> {update_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+    )
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    message += f"<b>Title:</b> {post_data['title']}\n"
+    message += f"<b>Title:</b> {title}\n"
+    message += f"<b>Social Title:</b> {social_title}\n"
     message += f"<b>URL:</b> {post_data['canonical_url']}\n"
 
     if ticker:
@@ -236,17 +241,10 @@ async def run_scraper():
                     log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
                     for post in new_posts:
-                        if not "title" in post:
-                            post["title"] = "No title found"
-
-                        ticker = extract_ticker(post["title"])
+                        title = get_post_title(post)
+                        ticker = extract_ticker(title)
                         await send_to_telegram(post, ticker)
                         processed_urls.add(post["canonical_url"])
-
-                        if is_draft_post(post.get("canonical_url", "")):
-                            post_id = post["canonical_url"].split("/")[-1]
-                            save_draft_post(post_id, post)
-                            # TODO: Later try to traceroute the url to see if you can get something out
 
                     save_processed_urls(processed_urls)
                 else:

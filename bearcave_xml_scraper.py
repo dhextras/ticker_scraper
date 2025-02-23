@@ -95,6 +95,21 @@ def get_random_cache_buster():
     return f"{variable}={value_generator()}"
 
 
+def is_draft_post(url):
+    """Check if the URL is a draft post"""
+    return "/publish/post/" in url
+
+
+def get_post_title(post):
+    """Get the most appropriate title from the post data"""
+    title = post.get("title", "")
+    social_title = post.get("social_title", "")
+
+    if not isinstance(title, str) or not title.strip():
+        return social_title if social_title else "No title found"
+    return title
+
+
 async def fetch_xml_feed(session, raw_proxy=None):
     headers = get_random_headers()
     random_cache_buster = get_random_cache_buster()
@@ -105,26 +120,41 @@ async def fetch_xml_feed(session, raw_proxy=None):
             f"{XML_FEED_URL}?{random_cache_buster}",
             headers=headers,
             proxy=proxy,
-            timeout=3,
+            timeout=1,
         ) as response:
             if response.status == 200:
                 content = await response.text()
                 soup = BeautifulSoup(content, "xml")
                 posts = []
                 for item in soup.find_all("item"):
-                    title = item.find("title").text.strip()
-                    title = re.sub(
-                        r"^\s*\[\[CDATA\[(.*?)\]\]\s*$", r"\1", title, flags=re.DOTALL
+                    title = item.find("title")
+                    title_text = title.text.strip() if title else ""
+                    title_text = re.sub(
+                        r"^\s*\[\[CDATA\[(.*?)\]\]\s*$",
+                        r"\1",
+                        title_text,
+                        flags=re.DOTALL,
                     )
+
+                    social_title = item.find("social_title")
+                    social_title_text = (
+                        social_title.text.strip() if social_title else ""
+                    )
+
                     pub_date_str = item.find("pubDate").text.strip()
                     pub_date = datetime.strptime(
                         pub_date_str, "%a, %d %b %Y %H:%M:%S %Z"
                     )
                     pub_date_iso = pub_date.isoformat() + "Z"
+
+                    link = item.find("link")
+                    url = link.text.strip() if link else ""
+
                     posts.append(
                         {
-                            "title": title,
-                            "canonical_url": item.find("link").text.strip(),
+                            "title": title_text,
+                            "social_title": social_title_text,
+                            "canonical_url": url,
                             "post_date": pub_date_iso,
                         }
                     )
@@ -137,7 +167,7 @@ async def fetch_xml_feed(session, raw_proxy=None):
                 log_message(f"Failed to fetch XML: HTTP {response.status}", "ERROR")
                 return []
     except asyncio.TimeoutError:
-        log_message(f"Took more then 3 sec to fetch with proxy: {raw_proxy}", "WARNING")
+        log_message(f"Took more then 1 sec to fetch with proxy: {raw_proxy}", "WARNING")
         return []
     except Exception as e:
         log_message(f"Error fetching XML with proxy {raw_proxy}: {e}", "ERROR")
@@ -158,13 +188,23 @@ async def send_to_telegram(post_data, ticker=None):
     current_time = get_current_time()
     post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
     post_date_est = post_date.astimezone(pytz.timezone("US/Eastern"))
+    update_date = datetime.fromisoformat(post_data["updated_at"].replace("Z", "+00:00"))
+    update_date_est = update_date.astimezone(pytz.timezone("US/Eastern"))
 
-    message = f"<b>New Bear Cave Article - XML!</b>\n\n"
+    is_draft = is_draft_post(post_data.get("canonical_url", ""))
+    title = post_data.get("title", "")
+    social_title = post_data.get("social_title", "")
+
+    message = f"<b>{'[DRAFT] ' if is_draft else ''}New Bear Cave Article - XML!</b>\n\n"
     message += (
         f"<b>Published Date:</b> {post_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
+    message += (
+        f"<b>Updated Date:</b> {update_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+    )
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    message += f"<b>Title:</b> {post_data['title']}\n"
+    message += f"<b>Title:</b> {title}\n"
+    message += f"<b>Social Title:</b> {social_title}\n"
     message += f"<b>URL:</b> {post_data['canonical_url']}\n"
 
     if ticker:
@@ -222,9 +262,8 @@ async def run_scraper():
                 if new_posts:
                     log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
                     for post in new_posts:
-                        if not "title" in post:
-                            post["title"] = "No title found"
-                        ticker = extract_ticker(post["title"])
+                        title = get_post_title(post)
+                        ticker = extract_ticker(title)
                         await send_to_telegram(post, ticker)
                         processed_urls.add(post["canonical_url"])
                     save_processed_urls(processed_urls)
