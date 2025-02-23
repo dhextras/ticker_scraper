@@ -188,8 +188,6 @@ async def send_to_telegram(post_data, ticker=None):
     current_time = get_current_time()
     post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
     post_date_est = post_date.astimezone(pytz.timezone("US/Eastern"))
-    update_date = datetime.fromisoformat(post_data["updated_at"].replace("Z", "+00:00"))
-    update_date_est = update_date.astimezone(pytz.timezone("US/Eastern"))
 
     is_draft = is_draft_post(post_data.get("canonical_url", ""))
     title = post_data.get("title", "")
@@ -198,9 +196,6 @@ async def send_to_telegram(post_data, ticker=None):
     message = f"<b>{'[DRAFT] ' if is_draft else ''}New Bear Cave Article - XML!</b>\n\n"
     message += (
         f"<b>Published Date:</b> {post_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    )
-    message += (
-        f"<b>Updated Date:</b> {update_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Title:</b> {title}\n"
