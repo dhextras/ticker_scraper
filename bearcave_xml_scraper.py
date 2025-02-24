@@ -100,16 +100,6 @@ def is_draft_post(url):
     return "/publish/post/" in url
 
 
-def get_post_title(post):
-    """Get the most appropriate title from the post data"""
-    title = post.get("title", "")
-    social_title = post.get("social_title", "")
-
-    if not isinstance(title, str) or not title.strip():
-        return social_title if social_title else "No title found"
-    return title
-
-
 async def fetch_xml_feed(session, raw_proxy=None):
     headers = get_random_headers()
     random_cache_buster = get_random_cache_buster()
@@ -136,11 +126,6 @@ async def fetch_xml_feed(session, raw_proxy=None):
                         flags=re.DOTALL,
                     )
 
-                    social_title = item.find("social_title")
-                    social_title_text = (
-                        social_title.text.strip() if social_title else ""
-                    )
-
                     pub_date_str = item.find("pubDate").text.strip()
                     pub_date = datetime.strptime(
                         pub_date_str, "%a, %d %b %Y %H:%M:%S %Z"
@@ -150,10 +135,15 @@ async def fetch_xml_feed(session, raw_proxy=None):
                     link = item.find("link")
                     url = link.text.strip() if link else ""
 
+                    # FIXME: Remove this after confirming that this xml doesnt have the social title
+                    if is_draft_post(url):
+                        pub_time = datetime.strptime(pub_date_str, "%H_%M_%S")
+                        with open(f"data/delete_xml_{pub_time}.txt", "w") as f:
+                            f.write(str(item))
+
                     posts.append(
                         {
                             "title": title_text,
-                            "social_title": social_title_text,
                             "canonical_url": url,
                             "post_date": pub_date_iso,
                         }
@@ -191,7 +181,6 @@ async def send_to_telegram(post_data, ticker=None):
 
     is_draft = is_draft_post(post_data.get("canonical_url", ""))
     title = post_data.get("title", "")
-    social_title = post_data.get("social_title", "")
 
     message = f"<b>{'[DRAFT] ' if is_draft else ''}New Bear Cave Article - XML!</b>\n\n"
     message += (
@@ -199,7 +188,6 @@ async def send_to_telegram(post_data, ticker=None):
     )
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Title:</b> {title}\n"
-    message += f"<b>Social Title:</b> {social_title}\n"
     message += f"<b>URL:</b> {post_data['canonical_url']}\n"
 
     if ticker:
@@ -257,7 +245,7 @@ async def run_scraper():
                 if new_posts:
                     log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
                     for post in new_posts:
-                        title = get_post_title(post)
+                        title = post.get("title", "")
                         ticker = extract_ticker(title)
                         await send_to_telegram(post, ticker)
                         processed_urls.add(post["canonical_url"])
