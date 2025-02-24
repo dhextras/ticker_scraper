@@ -137,7 +137,10 @@ async def fetch_xml_feed(session, raw_proxy=None):
 
                     # FIXME: Remove this after confirming that this xml doesnt have the social title
                     if is_draft_post(url):
-                        pub_time = datetime.strptime(pub_date_str, "%H_%M_%S")
+                        pub_date = datetime.strptime(
+                            pub_date_str, "%a, %d %b %Y %H:%M:%S %Z"
+                        )
+                        pub_time = pub_date.strftime("%H_%M_%S")
                         with open(f"data/delete_xml_{pub_time}.txt", "w") as f:
                             f.write(str(item))
 
