@@ -25,7 +25,7 @@ load_dotenv()
 
 # Constants
 API_URL = "https://substack.com/api/v1/reader/posts"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 2  # seconds
 PROCESSED_URLS_FILE = "data/substack_reader_processed_urls.json"
 COOKIE_FILE = "cred/substack_cookies.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
@@ -144,8 +144,6 @@ async def send_to_telegram(post_data, ticker=None):
     current_time = get_current_time()
     post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
     post_date_est = post_date.astimezone(pytz.timezone("US/Eastern"))
-    update_date = datetime.fromisoformat(post_data["updated_at"].replace("Z", "+00:00"))
-    update_date_est = update_date.astimezone(pytz.timezone("US/Eastern"))
 
     is_draft = is_draft_post(post_data.get("canonical_url", ""))
     title = post_data.get("title", "")
@@ -154,9 +152,6 @@ async def send_to_telegram(post_data, ticker=None):
     message = f"<b>{'[DRAFT] ' if is_draft else ''}New Substack Reader Article!</b>\n\n"
     message += (
         f"<b>Published Date:</b> {post_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    )
-    message += (
-        f"<b>Updated Date:</b> {update_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Title:</b> {title}\n"

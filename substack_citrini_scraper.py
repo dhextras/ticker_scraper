@@ -23,7 +23,7 @@ load_dotenv()
 
 # Constants
 API_URL = "https://substack.com/api/v1/community/publications/836125/posts"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 2  # seconds
 PROCESSED_IDS_FILE = "data/substack_citrini_processed_ids.json"
 COOKIE_FILE = "cred/substack_cookies.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
