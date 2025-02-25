@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import sys
 import time
 import uuid
@@ -18,14 +19,14 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
 # Constants
-API_URL = "https://substack.com/api/v1/community/publications/836125/posts"
+API_URL = "https://substack.com/api/v1/reader/posts"
 CHECK_INTERVAL = 1  # seconds
-PROCESSED_IDS_FILE = "data/substack_citrini_processed_ids.json"
-COOKIE_FILE = "cred/substack_cookies.json"
+PROCESSED_URLS_FILE = "data/substack_reader_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
@@ -47,29 +48,18 @@ USER_AGENTS = [
 ]
 
 
-def load_cookies():
-    """Load substack.sid cookie from json file"""
+def load_processed_urls():
     try:
-        with open(COOKIE_FILE, "r") as f:
-            data = json.load(f)
-            return data.get("sid")
-    except Exception as e:
-        log_message(f"Error loading cookies: {e}", "ERROR")
-        return None
-
-
-def load_processed_ids():
-    try:
-        with open(PROCESSED_IDS_FILE, "r") as f:
+        with open(PROCESSED_URLS_FILE, "r") as f:
             return set(json.load(f))
     except FileNotFoundError:
         return set()
 
 
-def save_processed_ids(ids):
-    with open(PROCESSED_IDS_FILE, "w") as f:
-        json.dump(list(ids), f, indent=2)
-    log_message("Processed IDs saved.", "INFO")
+def save_processed_urls(urls):
+    with open(PROCESSED_URLS_FILE, "w") as f:
+        json.dump(list(urls), f, indent=2)
+    log_message("Processed URLs saved.", "INFO")
 
 
 def get_random_headers():
@@ -102,105 +92,101 @@ def get_random_cache_buster():
     return f"{variable}={value_generator()}"
 
 
-async def fetch_posts(session, sid=None):
-    """Fetch posts from Substack community API"""
-    if not sid:
-        log_message("No Substack SID cookie available", "ERROR")
-        return []
-
+async def fetch_json(session):
+    """Fetch JSON data with custom headers"""
     headers = get_random_headers()
     random_cache_buster = get_random_cache_buster()
-    cookies = {"substack.sid": sid}
 
     try:
         async with session.get(
-            f"{API_URL}?{random_cache_buster}",
+            f"{API_URL}?limit=10&{random_cache_buster}",
             headers=headers,
-            cookies=cookies,
         ) as response:
             if response.status == 200:
                 data = await response.json()
-                log_message(f"Fetched posts from Substack API", "INFO")
-
-                # Check if there are threads in the response
-                if "threads" not in data:
-                    log_message("No threads found in response", "WARNING")
-                    return []
-
-                return data["threads"]
+                log_message(f"Fetched posts from Reader API", "INFO")
+                return data.get("posts", [])
             else:
-                log_message(f"Failed to fetch posts: HTTP {response.status}", "ERROR")
+                log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
                 return []
-    except asyncio.TimeoutError:
-        log_message("Request to Substack API timed out", "WARNING")
-        return []
     except Exception as e:
-        log_message(f"Error fetching posts: {e}", "ERROR")
+        log_message(f"Error fetching JSON: {e}", "ERROR")
         return []
 
 
-def is_paywalled(post_data):
-    """Check if the post is paywalled"""
-    community_post = post_data.get("communityPost", {})
-
-    paywall_info = community_post.get("paywallInfo")
-    body = community_post.get("body")
-
-    return paywall_info is not None or body is None
+def is_draft_post(url):
+    """Check if the URL is a draft post"""
+    return "/publish/post/" in url
 
 
-def extract_media_urls(post_data):
-    """Extract media URLs from the post"""
-    community_post = post_data.get("communityPost", {})
-    media_assets = community_post.get("media_assets", [])
+def extract_ticker(title):
+    if title is not None and title.find("Problems at") != -1:
+        match = re.search(r"\((.*?)\)", title)
+        if match:
+            potential_ticker = match.group(1)
+            if potential_ticker.isupper():
+                return potential_ticker
+    return None
 
-    return [asset.get("url") for asset in media_assets if asset.get("url")]
+
+def get_post_title(post):
+    """Get the most appropriate title from the post data"""
+    title = post.get("title", "")
+    social_title = post.get("social_title", "")
+
+    if not isinstance(title, str) or not title.strip():
+        return (
+            social_title
+            if social_title
+            else "No title found in either title/social_title"
+        )
+    return title
 
 
-async def send_to_telegram(post_data):
-    """Send post information to Telegram"""
-    community_post = post_data.get("communityPost", {})
-
+async def send_to_telegram(post_data, ticker=None):
     current_time = get_current_time()
-    created_at = datetime.fromisoformat(
-        community_post.get("created_at", "").replace("Z", "+00:00")
+    post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
+    post_date_est = post_date.astimezone(pytz.timezone("US/Eastern"))
+    update_date = datetime.fromisoformat(post_data["updated_at"].replace("Z", "+00:00"))
+    update_date_est = update_date.astimezone(pytz.timezone("US/Eastern"))
+
+    is_draft = is_draft_post(post_data.get("canonical_url", ""))
+    title = post_data.get("title", "")
+    social_title = post_data.get("social_title", "")
+
+    message = f"<b>{'[DRAFT] ' if is_draft else ''}New Substack Reader Article!</b>\n\n"
+    message += (
+        f"<b>Published Date:</b> {post_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
-    created_at_est = created_at.astimezone(pytz.timezone("US/Eastern"))
-    updated_at = datetime.fromisoformat(
-        community_post.get("updated_at", "").replace("Z", "+00:00")
+    message += (
+        f"<b>Updated Date:</b> {update_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
-    updated_at_est = updated_at.astimezone(pytz.timezone("US/Eastern"))
+    message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+    message += f"<b>Title:</b> {title}\n"
+    message += f"<b>Social Title:</b> {social_title}\n"
+    message += f"<b>URL:</b> {post_data['canonical_url']}\n"
 
-    post_id = community_post.get("id", "Unknown")
-    body = community_post.get("body", "No content available")
-
-    user = post_data.get("user", {})
-    author_name = user.get("name", "Unknown")
-    media_urls = extract_media_urls(post_data)
-
-    message = f"<b>New Substack Post from {author_name}</b>\n\n"
-    message += f"<b>ID:</b> {post_id}\n"
-    message += f"<b>Created:</b> {created_at_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    message += f"<b>Updated:</b> {updated_at_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-    message += f"<b>Current:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n\n"
-    message += f"<b>Content:</b>\n{body}\n\n"
-
-    if media_urls:
-        message += "<b>Media:</b>\n"
-        for url in media_urls:
-            message += f"{url}\n"
+    if ticker:
+        message += f"<b>Ticker:</b> {ticker}\n"
+        await send_ws_message(
+            {
+                "name": "Substack Reader",
+                "type": "Sell",
+                "ticker": ticker,
+                "sender": "bearcave",
+            },
+            WS_SERVER_URL,
+        )
+        log_message(
+            f"Ticker sent to WebSocket: {ticker} - {post_data['canonical_url']}", "INFO"
+        )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Post sent to Telegram: {post_id}", "INFO")
+    log_message(f"Article sent to Telegram: {post_data['canonical_url']}", "INFO")
 
 
 async def run_scraper():
-    processed_ids = load_processed_ids()
-    sid = load_cookies()
-
-    if not sid:
-        log_message("No Substack SID cookie available. Exiting.", "CRITICAL")
-        return
+    processed_urls = load_processed_urls()
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -218,35 +204,25 @@ async def run_scraper():
                     break
 
                 log_message("Checking for new posts...")
-                posts = await fetch_posts(session, sid)
+                posts = await fetch_json(session)
 
-                new_posts = []
-                for post in posts:
-                    community_post = post.get("communityPost", {})
-                    post_id = community_post.get("id")
-
-                    if not post_id or post_id in processed_ids:
-                        continue
-
-                    if is_paywalled(post):
-                        log_message(f"Post {post_id} is paywalled, skipping", "WARNING")
-                        # Still mark as processed to avoid checking again
-                        processed_ids.add(post_id)
-                        continue
-
-                    new_posts.append(post)
+                new_posts = [
+                    post
+                    for post in posts
+                    if post.get("canonical_url")
+                    and post["canonical_url"] not in processed_urls
+                ]
 
                 if new_posts:
                     log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
                     for post in new_posts:
-                        community_post = post.get("communityPost", {})
-                        post_id = community_post.get("id")
+                        title = get_post_title(post)
+                        ticker = extract_ticker(title)
+                        await send_to_telegram(post, ticker)
+                        processed_urls.add(post["canonical_url"])
 
-                        await send_to_telegram(post)
-                        processed_ids.add(post_id)
-
-                    save_processed_ids(processed_ids)
+                    save_processed_urls(processed_urls)
                 else:
                     log_message("No new posts found.", "INFO")
 
