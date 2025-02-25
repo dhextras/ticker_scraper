@@ -8,8 +8,8 @@ import time
 import uuid
 from datetime import datetime
 
-import aiohttp
 import pytz
+import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -27,6 +27,7 @@ load_dotenv()
 API_URL = "https://substack.com/api/v1/reader/posts"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/substack_reader_processed_urls.json"
+COOKIE_FILE = "cred/substack_cookies.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
@@ -46,6 +47,17 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/91.0.4472.80 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
 ]
+
+
+def load_cookies():
+    """Load substack.sid cookie from json file"""
+    try:
+        with open(COOKIE_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("sid")
+    except Exception as e:
+        log_message(f"Error loading cookies: {e}", "ERROR")
+        return None
 
 
 def load_processed_urls():
@@ -75,40 +87,25 @@ def get_random_headers():
     }
 
 
-def get_random_cache_buster():
-    """Generate random cache busting url variable for requests"""
-    cache_busters = [
-        ("timestamp", lambda: int(time.time() * 10000)),
-        ("request_uuid", lambda: str(uuid.uuid4())),
-        ("cache_time", lambda: int(time.time())),
-        ("ran_time", lambda: int(time.time() * 1000)),
-        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
-        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
-        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
-        ("tist", lambda: str(int(time.time()))),
-    ]
-
-    variable, value_generator = random.choice(cache_busters)
-    return f"{variable}={value_generator()}"
-
-
-async def fetch_json(session):
+async def fetch_json(sid=None):
     """Fetch JSON data with custom headers"""
+    if not sid:
+        log_message("No Substack SID cookie available", "ERROR")
+        return []
+
     headers = get_random_headers()
-    random_cache_buster = get_random_cache_buster()
+    cookies = {"substack.sid": sid}
 
     try:
-        async with session.get(
-            f"{API_URL}?limit=10&{random_cache_buster}",
-            headers=headers,
-        ) as response:
-            if response.status == 200:
-                data = await response.json()
-                log_message(f"Fetched posts from Reader API", "INFO")
-                return data.get("posts", [])
-            else:
-                log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return []
+        response = requests.get(f"{API_URL}?limit=10", headers=headers, cookies=cookies)
+        if response.status_code == 200:
+            data = response.json()
+
+            log_message(f"Fetched posts from Reader API", "INFO")
+            return data.get("posts", [])
+        else:
+            log_message(f"Failed to fetch JSON: HTTP {response.status_code}", "ERROR")
+            return []
     except Exception as e:
         log_message(f"Error fetching JSON: {e}", "ERROR")
         return []
@@ -187,46 +184,50 @@ async def send_to_telegram(post_data, ticker=None):
 
 async def run_scraper():
     processed_urls = load_processed_urls()
+    sid = load_cookies()
 
-    async with aiohttp.ClientSession() as session:
+    if not sid:
+        log_message("No Substack SID cookie available. Exiting.", "CRITICAL")
+        return
+
+    while True:
+        await sleep_until_market_open()
+        log_message("Market is open. Starting to check for new posts...", "DEBUG")
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
-            log_message("Market is open. Starting to check for new posts...", "DEBUG")
-            _, _, market_close_time = get_next_market_times()
+            current_time = get_current_time()
 
-            while True:
-                current_time = get_current_time()
+            if current_time > market_close_time:
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
+                break
 
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    break
+            log_message("Checking for new posts...")
+            posts = await fetch_json(sid)
 
-                log_message("Checking for new posts...")
-                posts = await fetch_json(session)
+            new_posts = [
+                post
+                for post in posts
+                if post.get("canonical_url")
+                and post["canonical_url"] not in processed_urls
+            ]
 
-                new_posts = [
-                    post
-                    for post in posts
-                    if post.get("canonical_url")
-                    and post["canonical_url"] not in processed_urls
-                ]
+            if new_posts:
+                log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
-                if new_posts:
-                    log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
+                for post in new_posts:
+                    title = get_post_title(post)
+                    ticker = extract_ticker(title)
+                    await send_to_telegram(post, ticker)
+                    processed_urls.add(post["canonical_url"])
 
-                    for post in new_posts:
-                        title = get_post_title(post)
-                        ticker = extract_ticker(title)
-                        await send_to_telegram(post, ticker)
-                        processed_urls.add(post["canonical_url"])
+                save_processed_urls(processed_urls)
+            else:
+                log_message("No new posts found.", "INFO")
 
-                    save_processed_urls(processed_urls)
-                else:
-                    log_message("No new posts found.", "INFO")
-
-                await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():

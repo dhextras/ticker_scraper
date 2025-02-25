@@ -7,8 +7,8 @@ import time
 import uuid
 from datetime import datetime
 
-import aiohttp
 import pytz
+import requests
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -85,55 +85,34 @@ def get_random_headers():
     }
 
 
-def get_random_cache_buster():
-    """Generate random cache busting url variable for requests"""
-    cache_busters = [
-        ("timestamp", lambda: int(time.time() * 10000)),
-        ("request_uuid", lambda: str(uuid.uuid4())),
-        ("cache_time", lambda: int(time.time())),
-        ("ran_time", lambda: int(time.time() * 1000)),
-        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
-        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
-        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
-        ("tist", lambda: str(int(time.time()))),
-    ]
-
-    variable, value_generator = random.choice(cache_busters)
-    return f"{variable}={value_generator()}"
-
-
-async def fetch_posts(session, sid=None):
+async def fetch_posts(sid=None):
     """Fetch posts from Substack community API"""
     if not sid:
         log_message("No Substack SID cookie available", "ERROR")
         return []
 
     headers = get_random_headers()
-    random_cache_buster = get_random_cache_buster()
     cookies = {"substack.sid": sid}
 
     try:
-        async with session.get(
-            f"{API_URL}?{random_cache_buster}",
+        response = requests.get(
+            f"{API_URL}",
             headers=headers,
             cookies=cookies,
-        ) as response:
-            if response.status == 200:
-                data = await response.json()
-                log_message(f"Fetched posts from Substack API", "INFO")
+        )
+        if response.status_code == 200:
+            data = response.json()
+            log_message(f"Fetched posts from Substack API", "INFO")
 
-                # Check if there are threads in the response
-                if "threads" not in data:
-                    log_message("No threads found in response", "WARNING")
-                    return []
-
-                return data["threads"]
-            else:
-                log_message(f"Failed to fetch posts: HTTP {response.status}", "ERROR")
+            # Check if there are threads in the response
+            if "threads" not in data:
+                log_message("No threads found in response", "WARNING")
                 return []
-    except asyncio.TimeoutError:
-        log_message("Request to Substack API timed out", "WARNING")
-        return []
+
+            return data["threads"]
+        else:
+            log_message(f"Failed to fetch posts: HTTP {response.status_code}", "ERROR")
+            return []
     except Exception as e:
         log_message(f"Error fetching posts: {e}", "ERROR")
         return []
@@ -202,55 +181,54 @@ async def run_scraper():
         log_message("No Substack SID cookie available. Exiting.", "CRITICAL")
         return
 
-    async with aiohttp.ClientSession() as session:
+    while True:
+        await sleep_until_market_open()
+        log_message("Market is open. Starting to check for new posts...", "DEBUG")
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
-            log_message("Market is open. Starting to check for new posts...", "DEBUG")
-            _, _, market_close_time = get_next_market_times()
+            current_time = get_current_time()
 
-            while True:
-                current_time = get_current_time()
+            if current_time > market_close_time:
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
+                break
 
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    break
+            log_message("Checking for new posts...")
+            posts = await fetch_posts(sid)
 
-                log_message("Checking for new posts...")
-                posts = await fetch_posts(session, sid)
+            new_posts = []
+            for post in posts:
+                community_post = post.get("communityPost", {})
+                post_id = community_post.get("id")
 
-                new_posts = []
-                for post in posts:
+                if not post_id or post_id in processed_ids:
+                    continue
+
+                if is_paywalled(post):
+                    log_message(f"Post {post_id} is paywalled, skipping", "WARNING")
+                    # Still mark as processed to avoid checking again
+                    processed_ids.add(post_id)
+                    continue
+
+                new_posts.append(post)
+
+            if new_posts:
+                log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
+
+                for post in new_posts:
                     community_post = post.get("communityPost", {})
                     post_id = community_post.get("id")
 
-                    if not post_id or post_id in processed_ids:
-                        continue
+                    await send_to_telegram(post)
+                    processed_ids.add(post_id)
 
-                    if is_paywalled(post):
-                        log_message(f"Post {post_id} is paywalled, skipping", "WARNING")
-                        # Still mark as processed to avoid checking again
-                        processed_ids.add(post_id)
-                        continue
+                save_processed_ids(processed_ids)
+            else:
+                log_message("No new posts found.", "INFO")
 
-                    new_posts.append(post)
-
-                if new_posts:
-                    log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
-
-                    for post in new_posts:
-                        community_post = post.get("communityPost", {})
-                        post_id = community_post.get("id")
-
-                        await send_to_telegram(post)
-                        processed_ids.add(post_id)
-
-                    save_processed_ids(processed_ids)
-                else:
-                    log_message("No new posts found.", "INFO")
-
-                await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
