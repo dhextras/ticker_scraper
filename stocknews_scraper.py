@@ -147,7 +147,6 @@ async def process_new_entries(session, new_urls, processed_urls):
     contents = await asyncio.gather(*content_tasks)
 
     changed_entries = []
-
     for content_info in contents:
         url = content_info["url"]
         title = content_info.get("title", "")

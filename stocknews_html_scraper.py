@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -114,12 +115,21 @@ async def process_new_entries(session, new_entries, processed_urls):
     Returns:
         list: List of entries that have changed content but doesn't have a ticker in it
     """
+    # Get current date in various formats
+    now = datetime.now()
+    current_date_formats = [
+        now.strftime("%m/%d"),  # MM/DD
+        now.strftime("%m/%d/%Y"),  # MM/DD/YYYY
+        now.strftime("%m/%d/%y"),  # MM/DD/YY
+    ]
+
     content_tasks = [fetch_blog_content(session, entry["url"]) for entry in new_entries]
     contents = await asyncio.gather(*content_tasks)
 
     changed_entries = []
     for entry, content_info in zip(new_entries, contents):
         url = entry["url"]
+        title = content_info.get("title", "")
 
         if not content_info.get("content_snippet"):
             continue
@@ -130,22 +140,40 @@ async def process_new_entries(session, new_entries, processed_urls):
             or processed_urls[url].get("content_snippet") != current_snippet
         ):
             processed_urls[url] = {"content_snippet": current_snippet}
+            stock_symbol = None
 
-            # Check for NASDAQ match
-            if SEARCH_WORD in current_snippet:
-                match = re.search(r"NASDAQ:\s+([A-Z]+)", current_snippet, re.IGNORECASE)
-                if match:
-                    stock_symbol = match.group(1)
-                    log_message(f"Match found: {stock_symbol} in {url}", "INFO")
+            # Check if title contains today's date
+            has_current_date = any(
+                date_format in title for date_format in current_date_formats
+            )
 
-                    await send_match_to_telegram(
-                        url,
-                        stock_symbol,
-                        entry["title"],
+            if has_current_date:
+                nasdaq_ticker_match = re.search(
+                    r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)", title, re.IGNORECASE
+                )
+                if nasdaq_ticker_match:
+                    stock_symbol = nasdaq_ticker_match.group(1)
+                    log_message(
+                        f"Match found in title with NASDAQ/NYSE format: {stock_symbol} in {url}",
+                        "INFO",
                     )
-                    continue
 
-            changed_entries.append(entry)
+                # Only check content if a current date is in the title but no ticker was found there
+                if not stock_symbol and SEARCH_WORD in current_snippet:
+                    match = re.search(
+                        r"NASDAQ:\s+([A-Z]+)", current_snippet, re.IGNORECASE
+                    )
+                    if match:
+                        stock_symbol = match.group(1)
+                        log_message(
+                            f"Match found in content: {stock_symbol} in {url}", "INFO"
+                        )
+
+            if stock_symbol:
+                await send_match_to_telegram(url, stock_symbol, title)
+                continue
+
+            changed_entries.append({"url": url, "title": title})
 
     return changed_entries
 
