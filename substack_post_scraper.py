@@ -25,7 +25,7 @@ load_dotenv()
 
 # Constants
 API_URL = "https://substack.com/api/v1/reader/posts"
-CHECK_INTERVAL = 2  # seconds
+CHECK_INTERVAL = 3  # seconds
 PROCESSED_URLS_FILE = "data/substack_reader_processed_urls.json"
 COOKIE_FILE = "cred/substack_cookies.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
@@ -162,7 +162,7 @@ async def send_to_telegram(post_data, ticker=None):
         message += f"<b>Ticker:</b> {ticker}\n"
         await send_ws_message(
             {
-                "name": "Substack Reader",
+                "name": "Bearcave - Reader",
                 "type": "Sell",
                 "ticker": ticker,
                 "sender": "bearcave",
