@@ -149,7 +149,7 @@ async def send_to_telegram(post_data, ticker=None):
     title = post_data.get("title", "")
     social_title = post_data.get("social_title", "")
 
-    message = f"<b>{'[DRAFT] ' if is_draft else ''}New Substack Reader Article!</b>\n\n"
+    message = f"<b>{'[DRAFT] ' if is_draft else ''}New Substack Reader bearcave Article!</b>\n\n"
     message += (
         f"<b>Published Date:</b> {post_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
@@ -214,6 +214,9 @@ async def run_scraper():
                 log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
                 for post in new_posts:
+                    if str(post.get("", "")) != "26828":
+                        continue
+
                     title = get_post_title(post)
                     ticker = extract_ticker(title)
                     await send_to_telegram(post, ticker)
