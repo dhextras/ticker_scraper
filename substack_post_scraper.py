@@ -160,18 +160,19 @@ async def send_to_telegram(post_data, ticker=None):
 
     if ticker:
         message += f"<b>Ticker:</b> {ticker}\n"
-        await send_ws_message(
-            {
-                "name": "Bearcave - Reader",
-                "type": "Sell",
-                "ticker": ticker,
-                "sender": "bearcave",
-            },
-            WS_SERVER_URL,
-        )
-        log_message(
-            f"Ticker sent to WebSocket: {ticker} - {post_data['canonical_url']}", "INFO"
-        )
+        # TODO: Do it later after we verify its safe
+        # await send_ws_message(
+        #     {
+        #         "name": "Bearcave - Reader",
+        #         "type": "Sell",
+        #         "ticker": ticker,
+        #         "sender": "bearcave",
+        #     },
+        #     WS_SERVER_URL,
+        # )
+        # log_message(
+        #     f"Ticker sent to WebSocket: {ticker} - {post_data['canonical_url']}", "INFO"
+        # )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Article sent to Telegram: {post_data['canonical_url']}", "INFO")
