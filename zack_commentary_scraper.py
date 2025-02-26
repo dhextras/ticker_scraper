@@ -47,12 +47,20 @@ def extract_ticker(title, content):
             if match:
                 return match.group(1), "Buy"
     elif "BUY" in title or "Buy" in title or "Buying" in title:
+        if "sell" in title.lower():
+            match = re.search("buy", content.lower())
+            match2 = re.search("hold", content.lower())
+            if match:
+                content = content[match.end() :]
+            elif match2:
+                content = content[match2.end() :]
         match = re.search(r"\(([A-Z]+)\)", content)
         if match:
             return match.group(1), "Buy"
     elif "Adding" in title:
-        return title.split()[1].strip(), "Buy"
-
+        match = re.search(r"Adding\s+([A-Z]+)", title)
+        if match:
+            return match.group(1), "Buy"
     # TODO: Later also process sell alerts
 
     return None, None
@@ -172,6 +180,9 @@ def process_commentary(html: str):
 
         title = title_elem.get_text(strip=True)
         content = content_elem.get_text(strip=True)
+
+        if title in content:
+            content = content.replace(title, "", 1)
 
         if not title or not content:
             return None
