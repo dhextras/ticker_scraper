@@ -26,8 +26,8 @@ API_URL = "https://substack.com/api/v1/community/publications/836125/posts"
 CHECK_INTERVAL = 5  # seconds
 PROCESSED_IDS_FILE = "data/substack_citrini_processed_ids.json"
 COOKIE_FILE = "cred/substack_cookies.json"
-TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
-TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
+TELEGRAM_BOT_TOKEN = os.getenv("CITRINI_TELEGRAM_BOT_TOKEN")
+TELEGRAM_GRP = os.getenv("CITRINI_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
