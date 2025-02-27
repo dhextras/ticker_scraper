@@ -309,7 +309,7 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
 
         # Small delay between batches
         if i + 3 < len(accounts):
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
     return valid_accounts
 
@@ -651,7 +651,7 @@ async def process_accounts_continuously(
                 continue
 
             for _, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.9)
+                await asyncio.sleep(0.7)
 
                 proxy = proxy_manager.get_next_proxy()
                 asyncio.create_task(
