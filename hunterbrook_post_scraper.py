@@ -86,7 +86,7 @@ async def process_post(post):
     box_ticker = extract_ticker_from_text(box_content.text if box_content else "")
 
     message = f"<b>New Hunter Brook Research Article</b>\n\n"
-    message += f"<b>Post Time:</b> {post_date.astimezone(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d %H:%M:%S')}\n"
+    message += f"<b>Post Time:</b> {post_date.astimezone(pytz.timezone('America/Chicago')).strftime('%Y-%m-%d %H:%M:%S')}\n"
     message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
     message += f"<b>Link:</b> {link}\n"
     message += f"<b>Title:</b> {title}\n"

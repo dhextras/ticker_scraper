@@ -170,9 +170,9 @@ def get_post_title(post):
 async def send_to_telegram(post_data, ticker=None):
     current_time = get_current_time()
     post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
-    post_date_est = post_date.astimezone(pytz.timezone("US/Eastern"))
+    post_date_est = post_date.astimezone(pytz.timezone("America/Chicago"))
     update_date = datetime.fromisoformat(post_data["updated_at"].replace("Z", "+00:00"))
-    update_date_est = update_date.astimezone(pytz.timezone("US/Eastern"))
+    update_date_est = update_date.astimezone(pytz.timezone("America/Chicago"))
 
     is_draft = is_draft_post(post_data.get("canonical_url", ""))
     title = post_data.get("title", "")

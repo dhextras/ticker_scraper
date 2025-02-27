@@ -151,11 +151,11 @@ async def send_to_telegram(post_data):
     created_at = datetime.fromisoformat(
         community_post.get("created_at", "").replace("Z", "+00:00")
     )
-    created_at_est = created_at.astimezone(pytz.timezone("US/Eastern"))
+    created_at_est = created_at.astimezone(pytz.timezone("America/Chicago"))
     updated_at = datetime.fromisoformat(
         community_post.get("updated_at", "").replace("Z", "+00:00")
     )
-    updated_at_est = updated_at.astimezone(pytz.timezone("US/Eastern"))
+    updated_at_est = updated_at.astimezone(pytz.timezone("America/Chicago"))
 
     post_id = community_post.get("id", "Unknown")
     body = community_post.get("body", "No content available")
