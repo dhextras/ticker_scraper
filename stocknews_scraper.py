@@ -24,7 +24,6 @@ load_dotenv()
 # Constants
 SITEMAP_URL = "https://app.stocks.news/blog-sitemap.xml"
 CHECK_INTERVAL = 1
-SEARCH_WORD = "NASDAQ"
 PROCESSED_JSON_FILE = "data/stocknews_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
@@ -137,9 +136,12 @@ async def process_new_entries(session, new_urls, processed_urls):
     # Get current date in various formats
     now = datetime.now()
     current_date_formats = [
-        now.strftime("%m/%d"),  # MM/DD
-        now.strftime("%m/%d/%Y"),  # MM/DD/YYYY
-        now.strftime("%m/%d/%y"),  # MM/DD/YY
+        now.strftime("%m/%d"),  # MM/DD (with leading zeros)
+        now.strftime("%m/%d/%Y"),  # MM/DD/YYYY (with leading zeros)
+        now.strftime("%m/%d/%y"),  # MM/DD/YY (with leading zeros)
+        now.strftime("%-m/%-d"),  # M/D (without leading zeros)
+        now.strftime("%-m/%-d/%Y"),  # M/D/YYYY (without leading zeros)
+        now.strftime("%-m/%-d/%y"),  # M/D/YY (without leading zeros)
     ]
 
     # Create tasks for fetching content of all new URLs
@@ -179,9 +181,15 @@ async def process_new_entries(session, new_urls, processed_urls):
                     )
 
                 # Only check content if a current date is in the title but no ticker was found there
-                if not stock_symbol and SEARCH_WORD in current_snippet:
+                if not stock_symbol and (
+                    "nasdaq" in current_snippet.lower()
+                    or "nyse" in current_snippet.lower()
+                ):
+
                     match = re.search(
-                        r"NASDAQ:\s+([A-Z]+)", current_snippet, re.IGNORECASE
+                        r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)",
+                        current_snippet,
+                        re.IGNORECASE,
                     )
                     if match:
                         stock_symbol = match.group(1)
@@ -276,22 +284,17 @@ async def run_scraper():
 
 
 async def send_posts_to_telegram(entries, timestamp):
-    """
-    Send a list of new blog post URLs to Telegram.
-
-    Args:
-        entries (list): List of blog post entries
-        timestamp (str): Timestamp of the check
-    """
-    urls = [entry["url"] for entry in entries]
-    joined_urls = "\n  ".join(urls)
-
-    message = f"<b>New Posts Found</b>\n\n"
+    url_titles = [f"{entry['url']} - {entry['title']}" for entry in entries]
+    joined_url_titles = "\n  ".join(url_titles)
+    message = f"<b>New Posts Found - HTML</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
-    message += f"<b>URLS:</b>\n  {joined_urls}"
-
+    message += f"<b>URLS:</b>\n  {joined_url_titles}"
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"New Posts sent to Telegram: {urls}", "INFO")
+
+    for entry in entries:
+        log_message(f"New Post: {entry['url']} - {entry['title']}", "INFO")
+
+    log_message(f"New Posts sent to Telegram: {len(entries)}", "INFO")
 
 
 def main():
