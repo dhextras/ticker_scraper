@@ -147,6 +147,12 @@ def fetch_csv_alerts(proxy):
         if response.status_code == 200:
             data = response.json()
             return data.get("content", {}).get("rendered", None)
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return None
 
         log_message(f"Error fetching alerts: {response.status_code}", "Warning")
         return None

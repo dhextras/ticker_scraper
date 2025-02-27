@@ -68,8 +68,14 @@ def fetch_json(session):
             data = response.json()
             log_message(f"Fetched {len(data)} posts from JSON", "INFO")
             return data
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return []
         else:
-            log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
+            log_message(f"Failed to fetch JSON: HTTP {response.status_code}", "ERROR")
             return []
     except Exception as e:
         log_message(f"Error fetching JSON: {e}", "ERROR")

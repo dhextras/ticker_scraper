@@ -85,6 +85,12 @@ async def get_new_token(session, creds):
                 save_token(token)
                 log_message("New token obtained and saved.", "INFO")
                 return token
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return None
             else:
                 log_message(f"Failed to get token: HTTP {response.status}", "ERROR")
                 return None

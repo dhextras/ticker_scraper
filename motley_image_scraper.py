@@ -224,6 +224,12 @@ async def fetch_latest_images(session_data):
                 if response.status == 200:
                     data = await response.json()
                     return data.get("data", {}).get("contents", [])
+                elif 500 <= response.status < 600:
+                    log_message(
+                        f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                        "WARNING",
+                    )
+                    return []
                 else:
                     log_message(f"Error fetching images: {response.status}", "ERROR")
                     return []

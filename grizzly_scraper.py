@@ -103,6 +103,12 @@ async def fetch_json(session, cookies):
                 if not cookies:
                     raise Exception("CF_CLEARANCE Failed: Post")
                 return [], cookies
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return [], None
             else:
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
                 return [], None

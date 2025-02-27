@@ -308,6 +308,12 @@ async def fetch_service_data(service, proxy):
                             await proxy_sessions[proxy].close()
                             del proxy_sessions[proxy]
                     return None
+                elif 500 <= response.status < 600:
+                    log_message(
+                        f"Server error {response.status}: Temporary issue, safe to ignore if not frequent."
+                        "WARNING",
+                    )
+                    return None
                 log_message(
                     f"Failed to fetch {service.name}. Status: {response.status}",
                     "ERROR",

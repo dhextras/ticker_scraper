@@ -61,6 +61,12 @@ async def fetch_posts(session):
                 data = await response.json()
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
                 return data
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return []
             log_message(f"Failed to fetch posts: HTTP {response.status}", "ERROR")
             return []
     except Exception as e:

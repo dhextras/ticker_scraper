@@ -123,6 +123,11 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
                         f"Rate limit hit for '{ticker}' using proxy {proxy}", "WARNING"
                     )
                     await asyncio.sleep(0.2)
+                elif 500 <= response.status < 600:
+                    log_message(
+                        f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                        "WARNING",
+                    )
                 else:
                     log_message(
                         f"Failed to fetch '{ticker}' with proxy {proxy}. Status: {response.status}",

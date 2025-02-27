@@ -278,6 +278,12 @@ async def get_article_data(article_id, uid, session_token):
 
                                         return joined_text
                     return None
+                elif 500 <= response.status < 600:
+                    log_message(
+                        f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                        "WARNING",
+                    )
+                    return None
                 else:
                     log_message(
                         f"Error fetching article data: {response.status}", "ERROR"

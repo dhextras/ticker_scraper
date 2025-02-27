@@ -98,7 +98,13 @@ async def check_minervini_posts(session: aiohttp.ClientSession) -> None:
 
     try:
         async with session.get(BASE_URL, headers=headers, cookies=cookies) as response:
-            if response.status != 200:
+            if 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return
+            elif response.status != 200:
                 await send_alert(f"Unexpected status code: {response.status}")
                 log_message(f"Unexpected response: {await response.text()}", "ERROR")
                 return

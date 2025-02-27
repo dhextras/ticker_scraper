@@ -56,6 +56,12 @@ def login_sync(session):
         if response.status_code == 200:
             log_message("Login successful", "INFO")
             return True
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return False
         log_message(f"Login failed: HTTP {response.status_code}", "ERROR")
         return False
     except Exception as e:

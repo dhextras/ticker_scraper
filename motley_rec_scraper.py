@@ -252,6 +252,12 @@ async def check_recommendation_url(session, product_id, date, session_data, know
                     f"No valid url found for {PRODUCT_NAMES[int(product_id)]}", "INFO"
                 )
                 return None, None
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return None, None
             log_message(
                 f"Failed to fetch rec article for {PRODUCT_NAMES[int(product_id)]}. Status: {response.status}",
                 "ERROR",

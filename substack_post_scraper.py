@@ -103,6 +103,13 @@ async def fetch_json(sid=None):
 
             log_message(f"Fetched posts from Reader API", "INFO")
             return data.get("posts", [])
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return []
+
         else:
             log_message(f"Failed to fetch JSON: HTTP {response.status_code}", "ERROR")
             return []

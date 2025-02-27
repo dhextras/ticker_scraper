@@ -92,6 +92,12 @@ async def fetch_alerts(session, creds):
                 log_message(f"Too Many requests, slow down...", "ERROR")
                 await asyncio.sleep(CHECK_INTERVAL * 5)
                 return None
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return None
             log_message(f"Failed to fetch alerts: HTTP {response.status}", "ERROR")
             return None
     except Exception as e:

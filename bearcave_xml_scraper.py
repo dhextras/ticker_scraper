@@ -156,6 +156,12 @@ async def fetch_xml_feed(session, raw_proxy=None):
                     "INFO",
                 )
                 return posts
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return []
             else:
                 log_message(f"Failed to fetch XML: HTTP {response.status}", "ERROR")
                 return []

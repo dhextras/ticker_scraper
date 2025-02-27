@@ -116,6 +116,12 @@ def fetch_article_content(url):
             soup = BeautifulSoup(response.text, "html.parser")
             title = soup.select_one("#main-content > article > div > header > h1")
             return response.status_code, title.text if title else None
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return response.status_code, None
 
         log_message(
             f"Error fetching artcle status code: {response.status_code}", "INFO"

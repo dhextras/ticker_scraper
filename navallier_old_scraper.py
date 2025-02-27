@@ -129,6 +129,12 @@ def fetch_flash_alerts(proxy) -> List:
 
         if response.status_code == 200:
             return response.json()
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return []
 
         log_message(f"Error fetching alerts: {response.status_code}", "WARNING")
         return []

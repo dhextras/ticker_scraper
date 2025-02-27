@@ -92,6 +92,12 @@ async def fetch_post(session, tokens, post_id):
                 return await response.json()
             elif response.status == 404:
                 return None
+            elif 500 <= response.status < 600:
+                log_message(
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    "WARNING",
+                )
+                return []
 
             await send_alert(f"Unexpected status code: {response.status}")
             log_message(f"Failed to fetch post: HTTP {response.status}", "ERROR")

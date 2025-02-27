@@ -68,7 +68,13 @@ async def fetch_and_process_table(session):
         }
 
         response = session.get(ARCHIVE_URL, headers=headers)
-        if response.status_code != 200:
+        if 500 <= response.status < 600:
+            log_message(
+                f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                "WARNING",
+            )
+            return []
+        elif response.status_code != 200:
             log_message(
                 f"Failed to fetch archive: HTTP {response.status_code}", "ERROR"
             )
