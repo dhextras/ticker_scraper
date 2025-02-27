@@ -102,7 +102,7 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
         proxy_url = f"http://{proxy}" if proxy else None
 
         async with session.get(
-            JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=5
+            JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=3
         ) as response:
             if response.status == 200:
                 try:
@@ -146,7 +146,7 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
                 return []
     except asyncio.TimeoutError:
         log_message(
-            f"Took more then 5 sec to fetch {subscription_name} with proxy: {proxy}",
+            f"Took more then 3 sec to fetch {subscription_name} with proxy: {proxy}",
             "WARNING",
         )
         return []

@@ -125,7 +125,7 @@ def fetch_flash_alerts(proxy) -> List:
             {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
         )
 
-        response = requests.get(JSON_URL, headers=headers, proxies=proxies, timeout=5)
+        response = requests.get(JSON_URL, headers=headers, proxies=proxies, timeout=3)
 
         if response.status_code == 200:
             return response.json()
@@ -140,7 +140,7 @@ def fetch_flash_alerts(proxy) -> List:
         return []
 
     except requests.Timeout:
-        log_message(f"Took more then 5 sec to fetch with proxy: {proxy}", "WARNING")
+        log_message(f"Took more then 3 sec to fetch with proxy: {proxy}", "WARNING")
         return []
     except Exception as e:
         log_message(f"Error fetching article data with proxy {proxy}: {e}", "ERROR")
