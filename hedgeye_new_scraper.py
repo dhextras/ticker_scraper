@@ -40,6 +40,8 @@ RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
     DATA_DIR, "hedgeye_new_rate_limited_accounts.json"
 )
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_new_last_alert.json")
+LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
+
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs("data/hedgeye_cookies", exist_ok=True)
@@ -241,6 +243,13 @@ def save_cookies(cookies: Dict[str, str], email: str):
     )
 
 
+def load_archives():
+    if os.path.exists(LAST_ARCHIVES_FILE):
+        with open(LAST_ARCHIVES_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+
 def load_cookies(email: str) -> Optional[Dict[str, str]]:
     filename = f"data/hedgeye_cookies/{email.replace('@', '_').replace('.', '_')}.json"
     if os.path.exists(filename):
@@ -305,6 +314,85 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
     return valid_accounts
 
 
+def archive_alert_parser(articles, fetch_time, current_time, proxy):
+    result = []
+
+    for article in articles:
+        try:
+            title = article.find(
+                "h2", class_="thumbnail-article-quarter__title"
+            ).get_text(strip=True)
+
+            date_text = article.find(
+                "div", class_="thumbnail-article-quarter__date"
+            ).get_text(strip=True)
+
+            date_format = "%m/%d/%y %I:%M %p EST"
+            created_at = datetime.strptime(date_text, date_format)
+            created_at_cst = created_at.astimezone(pytz.timezone("America/Chicago"))
+
+            created_at_cst = created_at_cst.astimezone(pytz.timezone("America/Chicago"))
+
+            result.append(
+                {
+                    "title": title,
+                    "created_at": created_at_cst,
+                    "current_time": current_time,
+                    "fetch_time": fetch_time,
+                    "proxy": proxy,
+                }
+            )
+        except:
+            pass
+
+    return result
+
+
+async def fetch_research_archives(
+    session: aiohttp.ClientSession,
+    cookies: Dict[str, str],
+    proxy: Optional[str],
+    today: str,
+):
+    try:
+        cache_buster = get_random_cache_buster()
+        url = f"https://app.hedgeye.com/research_archives?with_category=22-real-time-alerts&month={today}&{cache_buster}"
+
+        start_time = time.time()
+        async with session.get(
+            url,
+            cookies=cookies,
+            # proxy=f"http://{proxy}" if proxy else None,
+            timeout=aiohttp.ClientTimeout(total=3),
+        ) as response:
+            if response.status == 429:
+                raise Exception("Rate limited")
+            html = await response.text()
+
+        soup = BeautifulSoup(html, "html.parser")
+        articles = soup.find_all("div", class_="thumbnail-article__details")
+
+        current_time_cst = get_current_time().astimezone(
+            pytz.timezone("America/Chicago")
+        )
+        fetch_time = time.time() - start_time
+
+        results = archive_alert_parser(articles, fetch_time, current_time_cst, proxy)
+        return results
+
+    except asyncio.TimeoutError:
+        log_message(
+            f"Fetch alert took more then 3 seconds with ip: {proxy}, Gotta fix this ASAP",
+            "WARNING",
+        )
+        return []
+    except Exception as e:
+        if "Rate limited" in str(e):
+            raise
+        log_message(f"Error fetching archives: {str(e)}", "ERROR")
+        return []
+
+
 async def fetch_alert_details(
     session: aiohttp.ClientSession, cookies: Dict[str, str], proxy: Optional[str]
 ):
@@ -347,22 +435,152 @@ async def fetch_alert_details(
             "price": alert_price,
             "created_at": created_at_cst,
             "current_time": current_time_cst,
+            "proxy": proxy,
             "fetch_time": time.time() - start_time,
         }
 
     except asyncio.TimeoutError:
-        public_ip = await get_public_ip(proxy)
         log_message(
-            f"Fetch alert took more then 3 seconds with ip: {public_ip}, Gotta fix this ASAP",
+            f"Fetch alert took more then 3 seconds with proxy: {proxy}, Gotta fix this ASAP",
             "WARNING",
         )
-
         return None
     except Exception as e:
         if "Rate limited" in str(e):
             raise
         log_message(f"Error fetching alert: {str(e)}", "ERROR")
         return None
+
+
+async def process_fetched_alert(alert_details, last_alert_lock: asyncio.Lock):
+
+    if not alert_details:
+        return
+
+    async with last_alert_lock:
+        last_alert = {}
+        if os.path.exists(LAST_ALERT_FILE):
+            with open(LAST_ALERT_FILE, "r") as f:
+                last_alert = json.load(f)
+
+        if not last_alert or alert_details["title"] != last_alert.get("title"):
+            signal_type = (
+                "Buy"
+                if "buy" in alert_details["title"].lower()
+                else ("Sell" if "sell" in alert_details["title"].lower() else "None")
+            )
+
+            ticker_match = re.search(
+                r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
+            )
+            ticker = ticker_match.group(0) if ticker_match else "-"
+
+            await send_ws_message(
+                {
+                    "name": "Hedgeye",
+                    "type": signal_type,
+                    "ticker": ticker,
+                    "sender": "hedgeye",
+                },
+                WS_SERVER_URL,
+            )
+
+            message = (
+                f"Title: {alert_details['title']}\n"
+                f"Price: {alert_details['price']}\n"
+                f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                f"Fetch Time: {alert_details['fetch_time']:.2f}s"
+            )
+            await send_telegram_message(
+                message,
+                HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                HEDGEYE_SCRAPER_TELEGRAM_GRP,
+            )
+
+            with open(LAST_ALERT_FILE, "w") as f:
+                json.dump(
+                    {
+                        "title": alert_details["title"],
+                        "price": alert_details["price"],
+                        "created_at": alert_details["created_at"].isoformat(),
+                    },
+                    f,
+                    indent=2,
+                )
+
+            log_message(
+                f"New alert Sent to telegram: {alert_details['title']}",
+                "INFO",
+            )
+
+    # FIXME: Also try to bring this into 1 sec if not move on to different proxy provider
+    if alert_details["fetch_time"] > 2:
+        public_ip = await get_public_ip(alert_details["proxy"])
+        log_message(
+            f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
+            "WARNING",
+        )
+
+
+async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start_time):
+    for result in results:
+        async with last_alert_lock:
+            old_archives = load_archives()
+            is_new_alert = not old_archives or not result["title"] in old_archives
+
+            if is_new_alert:
+                signal_type = (
+                    "Buy"
+                    if "buy" in result["title"].lower()
+                    else "Sell" if "sell" in result["title"].lower() else "None"
+                )
+                ticker_match = re.search(r"\b([A-Z]{1,5})\b(?=\s*\$)", result["title"])
+                ticker = ticker_match.group(0) if ticker_match else "-"
+
+                log_message(
+                    f"Trying to send new alert, Title - {result['title']}, Proxy - {result['proxy']}",
+                    "INFO",
+                )
+                await send_ws_message(
+                    {
+                        "name": "Hedgeye",
+                        "type": signal_type,
+                        "ticker": ticker,
+                        "sender": "hedgeye",
+                    },
+                    WS_SERVER_URL,
+                )
+
+                message = (
+                    f"Title: {result['title']}\n"
+                    f"Created At: {result['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Current Time: {result['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Fetch Time: {result['fetch_time']:.2f}s"
+                )
+
+                await send_telegram_message(
+                    message,
+                    HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                    HEDGEYE_SCRAPER_TELEGRAM_GRP,
+                )
+
+                old_archives.append(result["title"])
+                with open(LAST_ARCHIVES_FILE, "w") as f:
+                    json.dump(old_archives, f, indent=2)
+
+                total_time = time.time() - start_time
+                log_message(
+                    f"New alert processed in {total_time:.2f}s - {result['title']}",
+                    "INFO",
+                )
+
+        if result["fetch_time"] > 2:
+            public_ip = await get_public_ip(result["proxy"])
+            log_message(
+                f"Slow fetch detected Publid IP: {public_ip}, took {result['fetch_time']} seconds",
+                "WARNING",
+            )
 
 
 async def process_account(
@@ -388,86 +606,29 @@ async def process_account(
             return
 
         async with aiohttp.ClientSession() as session:
-            alert_details = await fetch_alert_details(session, cookies, proxy)
-            if alert_details is None:
-                return
+            # METHOD 1: logged_in last alerts
+            # alert_details = await fetch_alert_details(session, cookies, proxy)
+            #
+            # if alert_details is None:
+            #     return
+            # log_message(
+            #     f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {email}, {proxy}",
+            #     "INFO",
+            # )
+            #
+            # await process_fetched_alert(alert_details, last_alert_lock)
+
+            # METHOD 2: research archives
+            start_time = time.time()
+            today = get_current_time().now().strftime("%Y-%m-%d")
+            results = await fetch_research_archives(session, cookies, proxy, today)
 
             log_message(
-                f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {email}, {proxy}",
+                f"fetch_alert_details took {time.time() - start_time:.2f} seconds. for {email}, {proxy}",
                 "INFO",
             )
 
-            if not alert_details:
-                return
-
-            async with last_alert_lock:
-                last_alert = {}
-                if os.path.exists(LAST_ALERT_FILE):
-                    with open(LAST_ALERT_FILE, "r") as f:
-                        last_alert = json.load(f)
-
-                if not last_alert or alert_details["title"] != last_alert.get("title"):
-                    signal_type = (
-                        "Buy"
-                        if "buy" in alert_details["title"].lower()
-                        else (
-                            "Sell"
-                            if "sell" in alert_details["title"].lower()
-                            else "None"
-                        )
-                    )
-
-                    ticker_match = re.search(
-                        r"\b([A-Z]{1,5})\b(?=\s*\$)", alert_details["title"]
-                    )
-                    ticker = ticker_match.group(0) if ticker_match else "-"
-
-                    await send_ws_message(
-                        {
-                            "name": "Hedgeye",
-                            "type": signal_type,
-                            "ticker": ticker,
-                            "sender": "hedgeye",
-                        },
-                        WS_SERVER_URL,
-                    )
-
-                    message = (
-                        f"Title: {alert_details['title']}\n"
-                        f"Price: {alert_details['price']}\n"
-                        f"Created At: {alert_details['created_at'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
-                        f"Current Time: {alert_details['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
-                        f"Fetch Time: {alert_details['fetch_time']:.2f}s"
-                    )
-                    await send_telegram_message(
-                        message,
-                        HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
-                        HEDGEYE_SCRAPER_TELEGRAM_GRP,
-                    )
-
-                    with open(LAST_ALERT_FILE, "w") as f:
-                        json.dump(
-                            {
-                                "title": alert_details["title"],
-                                "price": alert_details["price"],
-                                "created_at": alert_details["created_at"].isoformat(),
-                            },
-                            f,
-                            indent=2,
-                        )
-
-                    log_message(
-                        f"New alert Sent to telegram: {alert_details['title']}",
-                        "INFO",
-                    )
-
-            # FIXME: Also try to bring this into 1 sec if not move on to different proxy provider
-            if alert_details["fetch_time"] > 2:
-                public_ip = await get_public_ip(proxy)
-                log_message(
-                    f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
-                    "WARNING",
-                )
+            await process_fetched_archives(results, last_alert_lock, start_time)
 
     except Exception as e:
         if "Rate limited" in str(e):
@@ -489,7 +650,7 @@ async def process_accounts_continuously(
                 await asyncio.sleep(0.5)
                 continue
 
-            for i, (email, password) in enumerate(accounts):
+            for _, (email, password) in enumerate(accounts):
                 await asyncio.sleep(0.9)
 
                 proxy = proxy_manager.get_next_proxy()
