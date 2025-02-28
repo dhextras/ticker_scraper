@@ -64,7 +64,7 @@ def login():
         sleep(3)
 
         try:
-            logout_link = page.ele("#logout")
+            logout_link = page.ele("Logout", timeout=5)
             if logout_link:
                 log_message("Login successful", "INFO")
                 page.get("https://www.zacks.com/confidential")
@@ -132,7 +132,7 @@ async def save_comment_id(comment_id: int):
 def is_logged_in():
     """Check if we are still logged in"""
     try:
-        page.ele("#logout", timeout=1)
+        page.ele("Logout", timeout=3)
         return True
     except:
         return False
