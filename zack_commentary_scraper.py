@@ -54,7 +54,16 @@ def login():
 
         username_input = page.ele("#username_default")
         password_input = page.ele("#password_default")
-        login_input = page.ele("Login", timeout=0.1)
+        login_div = (
+            page.ele("#ecommerce-login", timeout=0.1)
+            .ele("tag:tbody")
+            .eles("tag:tr", timeout=0.1)[4]
+        )
+        if not login_div:
+            log_message("Cannot find login button", "ERROR")
+            return False
+
+        login_input = login_div.ele("tag:input", timeout=0.1)
 
         username_input.input(ZACKS_USERNAME)
         password_input.input(ZACKS_PASSWORD)
