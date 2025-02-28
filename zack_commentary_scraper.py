@@ -4,12 +4,11 @@ import os
 import re
 import sys
 from pathlib import Path
-from time import time
-from typing import Optional
+from time import sleep, time
 
-import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from DrissionPage import ChromiumOptions, ChromiumPage
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -34,9 +33,50 @@ STARTING_CID = 43250  # Starting comment ID
 DATA_DIR = Path("data")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
 
-# Session management
-session: Optional[aiohttp.ClientSession] = None
-session_lock = asyncio.Lock()
+# Initialize browser once
+co = ChromiumOptions()
+page = ChromiumPage(co)
+
+
+def login():
+    """Login to Zacks using DrissionPage"""
+    try:
+        log_message("Trying to login", "INFO")
+        page.get("https://www.zacks.com/my-account/")
+        sleep(2)
+
+        if is_logged_in():
+            log_message("Already logged in....", "WARNING")
+            page.get("https://www.zacks.com/confidential")
+            sleep(2)
+
+            return True
+
+        username_input = page.ele("#username_default")
+        password_input = page.ele("#password_default")
+        login_input = page.ele("Login", timeout=0.1)
+
+        username_input.input(ZACKS_USERNAME)
+        password_input.input(ZACKS_PASSWORD)
+
+        login_input.click()
+
+        sleep(3)
+
+        try:
+            logout_link = page.ele("#logout")
+            if logout_link:
+                log_message("Login successful", "INFO")
+                page.get("https://www.zacks.com/confidential")
+                sleep(2)
+                return True
+        except:
+            log_message("Login failed", "ERROR")
+            return False
+
+    except Exception as e:
+        log_message(f"Error during login: {e}", "ERROR")
+        return False
 
 
 def extract_ticker(title, content):
@@ -89,78 +129,34 @@ async def save_comment_id(comment_id: int):
         log_message(f"Error saving comment ID: {e}", "ERROR")
 
 
-async def create_session():
-    """Create and return a new session with login"""
+def is_logged_in():
+    """Check if we are still logged in"""
     try:
-        new_session = aiohttp.ClientSession()
-
-        headers = {
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "content-type": "application/x-www-form-urlencoded",
-            "origin": "https://www.zacks.com",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0",
-        }
-
-        data = {
-            "force_login": "true",
-            "username": ZACKS_USERNAME,
-            "password": ZACKS_PASSWORD,
-            "remember_me": "on",
-        }
-
-        async with new_session.post(
-            "https://www.zacks.com/tradingservices/index.php",
-            headers=headers,
-            data=data,
-        ) as response:
-            if response.status != 200:
-                await new_session.close()
-                return None
-
-        return new_session
-    except Exception as e:
-        log_message(f"Error creating session: {e}", "ERROR")
-        return None
+        page.ele("#logout", timeout=1)
+        return True
+    except:
+        return False
 
 
-async def get_or_create_session():
-    """Get existing session or create new one"""
-    global session
-    async with session_lock:
-        if session and not session.closed:
-            return session
-
-        new_session = await create_session()
-        if new_session:
-            session = new_session
-        return session
-
-
-async def fetch_commentary(comment_id: int):
+def fetch_commentary(comment_id: int):
     """Fetch commentary for Zacks Confidential"""
-    global session
-
-    current_session = await get_or_create_session()
-    if not current_session:
-        return None
-
-    url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}"
-    headers = {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0",
-    }
+    if not is_logged_in():
+        if not login():
+            return None
 
     try:
-        async with current_session.get(url, headers=headers) as response:
-            if response.status != 200:
-                if response.status in [401, 403]:
-                    # Session expired, create new session
-                    async with session_lock:
-                        if session and not session.closed:
-                            await session.close()
-                            session = None
+        url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}"
+        page.get(url)
+
+        try:
+            page.ele("About Zacks Confidential", timeout=10)
+        except:
+            if not login():
                 return None
-            return await response.text()
+            page.get(url)
+            page.ele("About Zacks Confidential", timeout=10)
+
+        return page.html
     except Exception as e:
         log_message(f"Error fetching commentary: {e}", "ERROR")
         return None
@@ -197,36 +193,37 @@ def process_commentary(html: str):
 
 async def run_scraper():
     """Main scraper loop that respects market hours"""
-    global session
-    current_comment_id = load_last_comment_id()
+    try:
+        if not login():
+            log_message("Initial login failed. Retrying during market hours.", "ERROR")
 
-    while True:
-        await sleep_until_market_open()
-        log_message("Market is open. Starting commentary monitoring...", "DEBUG")
-
-        _, _, market_close_time = get_next_market_times()
+        current_comment_id = load_last_comment_id()
 
         while True:
-            current_time = get_current_time()
-            if current_time > market_close_time:
-                log_message(
-                    "Market is closed. Waiting for next market open...", "DEBUG"
-                )
-                async with session_lock:
-                    if session and not session.closed:
-                        await session.close()
-                        session = None
-                break
+            # await sleep_until_market_open()
+            log_message("Market is open. Starting commentary monitoring...", "DEBUG")
 
-            start_time = time()
-            log_message(f"Checking comment ID: {current_comment_id}")
+            _, _, market_close_time = get_next_market_times()
 
-            try:
-                raw_html = await fetch_commentary(current_comment_id)
-                if raw_html:
-                    commentary = process_commentary(raw_html)
+            while True:
+                current_time = get_current_time()
+                if current_time > market_close_time:
+                    log_message(
+                        "Market is closed. Waiting for next market open...", "DEBUG"
+                    )
+                    break
+
+                start_time = time()
+                log_message(f"Checking comment ID: {current_comment_id}")
+                html = fetch_commentary(current_comment_id)
+
+                if html:
+                    commentary = process_commentary(html)
                     if commentary:
-                        current_time = get_current_time()
+                        log_message(
+                            f"Found comment: {current_comment_id}, Title: {commentary['title']}",
+                            "INFO",
+                        )
 
                         ticker_info = ""
                         if commentary["ticker"] and commentary["action"]:
@@ -254,22 +251,16 @@ async def run_scraper():
                         await send_telegram_message(
                             message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
                         )
-                        log_message(f"Found commentary for ID: {current_comment_id}")
+
                         current_comment_id += 1
                         await save_comment_id(current_comment_id)
 
                 log_message(
-                    f"Scan cycle completed in {time() - start_time:.2f} seconds"
+                    f"Checking comment completed in {time() - start_time:.2f} seconds"
                 )
                 await asyncio.sleep(CHECK_INTERVAL)
-
-            except Exception as e:
-                log_message(f"Error in scraper loop: {e}", "ERROR")
-                async with session_lock:
-                    if session and not session.closed:
-                        await session.close()
-                        session = None
-                await asyncio.sleep(1)
+    except Exception as e:
+        log_message(f"Critical error in run_scraper: {e}", "CRITICAL")
 
 
 def main():
@@ -281,8 +272,10 @@ def main():
         asyncio.run(run_scraper())
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
+        page.quit()
     except Exception as e:
         log_message(f"Critical error in main: {e}", "CRITICAL")
+        page.quit()
         sys.exit(1)
 
 
