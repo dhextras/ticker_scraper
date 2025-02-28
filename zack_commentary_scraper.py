@@ -64,7 +64,8 @@ def login():
         sleep(3)
 
         try:
-            if is_logged_in():
+            logged_out_ele = page.ele("#logout", timeout=8)
+            if logged_out_ele and "NoneElement" not in str(logged_out_ele):
                 log_message("Login successful", "INFO")
                 page.get("https://www.zacks.com/confidential")
                 sleep(2)
