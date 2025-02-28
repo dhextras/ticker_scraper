@@ -27,7 +27,6 @@ PROCESSED_JSON_FILE = "data/stocknews_html_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-CONTENT_SNIPPET_LENGTH = 3000  # Number of characters to save for content comparison
 
 os.makedirs("data", exist_ok=True)
 
@@ -73,14 +72,14 @@ def save_processed_urls(urls):
 
 async def fetch_blog_content(session, url):
     """
-    Fetch the first 1000 characters of a blog post asynchronously.
+    Fetch the content of a blog post asynchronously to check for stock symbols.
 
     Args:
         session (aiohttp.ClientSession): The aiohttp client session
         url (str): URL of the blog post
 
     Returns:
-        dict: A dictionary containing url, content snippet, and any processing result
+        dict: A dictionary containing url and text content
     """
     try:
         async with session.get(url) as response:
@@ -89,30 +88,27 @@ async def fetch_blog_content(session, url):
         soup = BeautifulSoup(content, "html.parser")
         text_content = soup.get_text(strip=True)
 
-        # Remove the realated blog post to avoid duplicate post sending
+        # Remove the related blog posts to avoid duplicate post sending
         if "Related Blogs" in text_content:
             text_content = text_content.split("Related Blogs")[0]
 
-        # Truncate content to specified length
-        content_snippet = text_content[:CONTENT_SNIPPET_LENGTH]
-
-        return {"url": url, "content_snippet": content_snippet}
+        return {"url": url, "text_content": text_content}
     except Exception as e:
         log_message(f"Error fetching content for {url}: {e}", "ERROR")
-        return {"url": url, "content_snippet": None, "error": str(e)}
+        return {"url": url, "text_content": None, "error": str(e)}
 
 
-async def process_new_entries(session, new_entries, processed_urls):
+async def process_new_entries(session, current_entries, processed_urls):
     """
-    Asynchronously process new blog entries, checking content changes and potential stock matches.
+    Asynchronously process blog entries, checking for new or changed titles.
 
     Args:
         session (aiohttp.ClientSession): The aiohttp client session
-        new_entries (list): List of new blog entries
+        current_entries (list): List of current blog entries
         processed_urls (dict): Dictionary of previously processed URLs
 
     Returns:
-        list: List of entries that have changed content but doesn't have a ticker in it
+        list: List of entries that are new or have changed titles
     """
     # Get current date in various formats
     now = datetime.now()
@@ -125,62 +121,78 @@ async def process_new_entries(session, new_entries, processed_urls):
         now.strftime("%-m/%-d/%y"),  # M/D/YY (without leading zeros)
     ]
 
-    content_tasks = [fetch_blog_content(session, entry["url"]) for entry in new_entries]
-    contents = await asyncio.gather(*content_tasks)
+    new_or_changed_entries = []
+    content_fetch_entries = []
 
-    changed_entries = []
-    for entry, content_info in zip(new_entries, contents):
+    # First pass: identify new or changed titles
+    for entry in current_entries:
         url = entry["url"]
         title = entry["title"]
 
-        if not content_info.get("content_snippet"):
+        if url not in processed_urls or processed_urls[url].get("title") != title:
+            new_or_changed_entries.append(entry)
+            content_fetch_entries.append(entry)
+
+            if url not in processed_urls:
+                processed_urls[url] = {}
+            processed_urls[url]["title"] = title
+
+    if not content_fetch_entries:
+        return []
+
+    # Only fetch content for entries that are new or have changed titles
+    content_tasks = [
+        fetch_blog_content(session, entry["url"]) for entry in content_fetch_entries
+    ]
+    contents = await asyncio.gather(*content_tasks)
+
+    changed_entries = []
+    for entry, content_info in zip(content_fetch_entries, contents):
+        url = entry["url"]
+        title = entry["title"]
+
+        if not content_info.get("text_content"):
             continue
 
-        current_snippet = content_info["content_snippet"]
-        if (
-            url not in processed_urls
-            or processed_urls[url].get("content_snippet") != current_snippet
-        ):
-            processed_urls[url] = {"content_snippet": current_snippet}
-            stock_symbol = None
+        text_content = content_info["text_content"]
+        stock_symbol = None
 
-            # Check if title contains today's date
-            has_current_date = any(
-                date_format in title for date_format in current_date_formats
+        # Check if title contains today's date
+        has_current_date = any(
+            date_format in title for date_format in current_date_formats
+        )
+
+        if has_current_date:
+            nasdaq_ticker_match = re.search(
+                r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)", title, re.IGNORECASE
             )
-
-            if has_current_date:
-                nasdaq_ticker_match = re.search(
-                    r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)", title, re.IGNORECASE
+            if nasdaq_ticker_match:
+                stock_symbol = nasdaq_ticker_match.group(1)
+                log_message(
+                    f"Match found in title with NASDAQ/NYSE format: {stock_symbol} in {url}",
+                    "INFO",
                 )
-                if nasdaq_ticker_match:
-                    stock_symbol = nasdaq_ticker_match.group(1)
+
+            # Only check content if a current date is in the title but no ticker was found there
+            if not stock_symbol and (
+                "nasdaq" in text_content.lower() or "nyse" in text_content.lower()
+            ):
+                match = re.search(
+                    r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)",
+                    text_content,
+                    re.IGNORECASE,
+                )
+                if match:
+                    stock_symbol = match.group(1)
                     log_message(
-                        f"Match found in title with NASDAQ/NYSE format: {stock_symbol} in {url}",
-                        "INFO",
+                        f"Match found in content: {stock_symbol} in {url}", "INFO"
                     )
 
-                # Only check content if a current date is in the title but no ticker was found there
-                if not stock_symbol and (
-                    "nasdaq" in current_snippet.lower()
-                    or "nyse" in current_snippet.lower()
-                ):
-                    match = re.search(
-                        r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)",
-                        current_snippet,
-                        re.IGNORECASE,
-                    )
-                    if match:
-                        stock_symbol = match.group(1)
-                        log_message(
-                            f"Match found in content: {stock_symbol} in {url}", "INFO"
-                        )
+        if stock_symbol:
+            await send_match_to_telegram(url, stock_symbol, title)
+            continue
 
-            if stock_symbol:
-                await send_match_to_telegram(url, stock_symbol, title)
-                continue
-
-            changed_entries.append({"url": url, "title": title})
+        changed_entries.append({"url": url, "title": title})
 
     return changed_entries
 
@@ -231,7 +243,7 @@ async def run_scraper():
 
                 if current_entries:
                     log_message(
-                        f"Found {len(current_entries)} new blog posts. Processing...",
+                        f"Found {len(current_entries)} blog posts. Processing...",
                         "INFO",
                     )
 
