@@ -64,8 +64,7 @@ def login():
         sleep(3)
 
         try:
-            logout_link = page.ele("Logout", timeout=5)
-            if logout_link:
+            if is_logged_in():
                 log_message("Login successful", "INFO")
                 page.get("https://www.zacks.com/confidential")
                 sleep(2)
@@ -132,7 +131,9 @@ async def save_comment_id(comment_id: int):
 def is_logged_in():
     """Check if we are still logged in"""
     try:
-        page.ele("Logout", timeout=3)
+        loggout_ele = page.ele("Logout", timeout=4)
+        if "NoneElement" in str(loggout_ele):
+            return False
         return True
     except:
         return False
@@ -148,14 +149,7 @@ def fetch_commentary(comment_id: int):
         url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}"
         page.get(url)
 
-        try:
-            page.ele("About Zacks Confidential", timeout=10)
-        except:
-            if not login():
-                return None
-            page.get(url)
-            page.ele("About Zacks Confidential", timeout=10)
-
+        page.ele("About Zacks Confidential", timeout=10)
         return page.html
     except Exception as e:
         log_message(f"Error fetching commentary: {e}", "ERROR")
