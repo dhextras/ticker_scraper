@@ -391,7 +391,8 @@ async def run_video_monitor():
                         raise Exception("Failed to refresh session token")
 
                 prev_videos = await check_for_new_videos(prev_videos, session_data)
-                await asyncio.sleep(5)
+                # NOTE: These are slow any way so good to have large interval too keep the server from crashing
+                await asyncio.sleep(15)
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")

@@ -367,7 +367,8 @@ async def run_recommendation_monitor():
                         raise Exception("Failed to refresh session token")
 
                 await check_for_new_recommendations(session_data)
-                await asyncio.sleep(5)  # Remove later
+                # NOTE: This is considerabily slow so make it much slower
+                await asyncio.sleep(10)
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
