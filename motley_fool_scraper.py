@@ -235,8 +235,15 @@ async def fetch_latest_articles(session_data):
                 base_url, params=params, headers=headers
             ) as response:
                 if response.status == 200:
-                    data = await response.json()
-                    return data.get("data", {}).get("contents", [])
+                    json_response = await response.json()
+                    data = json_response.get("data")
+                    if data is None:
+                        log_message(
+                            f"'data' field is null in response: {json.dumps(json_response)}",
+                            "WARNING",
+                        )
+                        return []
+                    return data.get("contents", [])
                 elif 500 <= response.status < 600:
                     log_message(
                         f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
