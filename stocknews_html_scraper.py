@@ -131,7 +131,7 @@ async def process_new_entries(session, new_entries, processed_urls):
     changed_entries = []
     for entry, content_info in zip(new_entries, contents):
         url = entry["url"]
-        title = content_info.get("title", "")
+        title = entry["title"]
 
         if not content_info.get("content_snippet"):
             continue
