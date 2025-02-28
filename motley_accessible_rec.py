@@ -244,7 +244,16 @@ async def fetch_instrument_data(session_data, ids):
                             "WARNING",
                         )
                         return []
-                    return data.get("instruments", [])
+
+                    instruments = data.get("instruments", [])
+                    if instruments is None:
+                        log_message(
+                            f"'instruments' field is null in response: {json.dumps(data)}",
+                            "WARNING",
+                        )
+                        return []
+
+                    return instruments
                 elif 500 <= response.status < 600:
                     log_message(
                         f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
@@ -371,9 +380,8 @@ async def check_for_new_recommendations(ids, session_data):
             "INFO",
         )
 
-        if instruments is not None and len(instruments) > 0:
-            for instrument in instruments:
-                stored_data = await process_new_recommendations(instrument, stored_data)
+        for instrument in instruments:
+            stored_data = await process_new_recommendations(instrument, stored_data)
 
             save_instrument_data(stored_data)
 
