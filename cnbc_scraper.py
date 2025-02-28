@@ -368,10 +368,29 @@ async def fetch_latest_assets() -> List[Dict]:
 
         response_json = response.json()
 
-        # Process content
-        assets = response_json.get("data", {}).get("assetList", {}).get("assets", [])
+        if response_json is None:
+            log_message(
+                f"Response JSON is None, Raw response: {response.text}", "WARNING"
+            )
+            return []
 
-        return assets
+        if "data" not in response_json or response_json["data"] is None:
+            log_message(
+                f"Response data is None, Response JSON: {response_json}", "WARNING"
+            )
+            return []
+
+        data = response_json["data"]
+        if "assetList" not in data or data["assetList"] is None:
+            log_message(f"Asset list is None, Response data: {data}", "WARNING")
+            return []
+
+        asset_list = data["assetList"]
+        if "assets" not in asset_list or asset_list["assets"] is None:
+            log_message(f"Assets is None, Asset list: {asset_list}", "WARNING")
+            return []
+
+        return asset_list["assets"]
     except Exception as e:
         log_message(f"Error fetching alerts: {e}", "ERROR")
         return []
