@@ -73,8 +73,7 @@ def login():
         sleep(3)
 
         try:
-            logged_out_ele = page.ele("#logout", timeout=8)
-            if logged_out_ele and "NoneElement" not in str(logged_out_ele):
+            if is_logged_in():
                 log_message("Login successful", "INFO")
                 page.get("https://www.zacks.com/confidential")
                 sleep(2)
@@ -141,7 +140,7 @@ async def save_comment_id(comment_id: int):
 def is_logged_in():
     """Check if we are still logged in"""
     try:
-        loggout_ele = page.ele("Logout", timeout=4)
+        loggout_ele = page.ele("#logout", timeout=5)
         if "NoneElement" in str(loggout_ele):
             return False
         return True
