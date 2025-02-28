@@ -220,13 +220,14 @@ These steps are only needed if you are using the **Hedgeye** scraper.
 
 2. **Install ChromeDriver:**
 
-   Replace `VERSION` with the version of Chrome you installed (e.g., `130.0.6723.58`):
+   Replace `VERSION` with the version of Chrome you installed (e.g., `133.0.6943.141`):
 
    ```bash
    cd /tmp/
-   sudo wget https://chromedriver.storage.googleapis.com/VERSION/chromedriver_linux64.zip
+   sudo wget https://storage.googleapis.com/chrome-for-testing-public/VERSION/linux64/chromedriver-linux64.zip
    sudo unzip chromedriver_linux64.zip
-   sudo mv chromedriver /usr/bin/chromedriver
+   sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
+   cd -
    ```
 
    ### Verify Installation
