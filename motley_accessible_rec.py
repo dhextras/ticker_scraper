@@ -301,13 +301,18 @@ async def process_new_recommendations(instrument, stored_data):
         name = instrument["name"]
 
         # FIXME: Add up filtering for the new alert here or after fetching if needed
-        if instrument_id not in stored_data:
+        if instrument_id not in stored_data or stored_data[instrument_id] is None:
             stored_data[instrument_id] = []
 
         current_time = get_current_time()
         stored_urls = {rec["url"] for rec in stored_data[instrument_id]}
 
-        for recommendation in instrument["accessibleFoolRecommendations"]:
+        recommendations = instrument.get("accessibleFoolRecommendations", [])
+
+        if recommendations is None:
+            recommendations = []
+
+        for recommendation in recommendations:
             content = recommendation["content"]
             url = content["url"]
 
@@ -364,6 +369,7 @@ async def process_new_recommendations(instrument, stored_data):
         log_message(
             f"Error trying process instrument:\n\n{instrument}\n\nerror message:{e}\n\n"
         )
+        return None
 
 
 async def check_for_new_recommendations(ids, session_data):
