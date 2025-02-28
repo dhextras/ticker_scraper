@@ -26,7 +26,7 @@ warning_counts = defaultdict(
 )  # {script_name: {message: count}}
 last_reset_time = time.time()
 reset_task = None
-warning_threshold = 5
+warning_threshold = 9
 reset_interval = 300  # 5 minutes
 
 
