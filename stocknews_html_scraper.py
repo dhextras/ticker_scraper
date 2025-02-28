@@ -22,7 +22,7 @@ load_dotenv()
 
 # Constants
 AUTHOR_URL = "https://app.stocks.news/blogs"
-CHECK_INTERVAL = 1
+CHECK_INTERVAL = 0.3
 PROCESSED_JSON_FILE = "data/stocknews_html_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
