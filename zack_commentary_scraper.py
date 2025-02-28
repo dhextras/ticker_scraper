@@ -200,7 +200,7 @@ async def run_scraper():
         current_comment_id = load_last_comment_id()
 
         while True:
-            # await sleep_until_market_open()
+            await sleep_until_market_open()
             log_message("Market is open. Starting commentary monitoring...", "DEBUG")
 
             _, _, market_close_time = get_next_market_times()
