@@ -25,8 +25,8 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-CHECK_INTERVAL = 0.2  # seconds between full list scans
-BATCH_SIZE = 250  # number of requests to run concurrently
+CHECK_INTERVAL = 5  # seconds between full list scans
+BATCH_SIZE = 150  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -108,7 +108,7 @@ async def save_alerts(alerts):
 
 async def fetch_ticker_data(session, ticker: str, proxy: str):
     """Fetch data for a single ticker using the provided proxy"""
-    url = f"https://widget3.zacks.com/tradingservices/ticker_search/json/{ticker}"
+    url = f"https://zacks.com/tradingservices/ts_ajax_data_handler.php?module_type=ticker_search&t={ticker}"
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -122,7 +122,7 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
                     log_message(
                         f"Rate limit hit for '{ticker}' using proxy {proxy}", "WARNING"
                     )
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(CHECK_INTERVAL)
                 elif 500 <= response.status < 600:
                     log_message(
                         f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
@@ -135,8 +135,17 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
                     )
                 return ticker, None
 
-            data = await response.json()
-            return ticker, data
+            response_text = await response.text()
+
+            try:
+                return json.loads(response_text)
+            except:
+                log_message(
+                    f"Failed to convert the response to json for '{ticker}' with proxy {proxy}",
+                    "WARNING",
+                )
+                return ticker, None
+
     except Exception as e:
         log_message(f"Error fetching {ticker} with proxy {proxy}: {e}", "ERROR")
         return ticker, None
