@@ -26,8 +26,7 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-CHECK_INTERVAL = 15
-BATCH_SIZE = 50  # number of requests to run concurrently
+BATCH_SIZE = 250  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -128,7 +127,7 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
                     log_message(
                         f"Rate limit hit for '{ticker}' using proxy {proxy}", "WARNING"
                     )
-                    await asyncio.sleep(CHECK_INTERVAL)
+                    await asyncio.sleep(60)
                 elif 500 <= response.status < 600:
                     log_message(
                         f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
@@ -150,7 +149,7 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
                         "WARNING",
                     )
                     return ticker, None
-                return json.loads(response_text)
+                return ticker, json.loads(response_text)
             except:
                 log_message(
                     f"Failed to convert the response to json for '{ticker}' with proxy {proxy}",
@@ -296,7 +295,7 @@ async def run_scraper():
                         batch_result = await process_batch(session, batch, proxy)
                         all_results.extend(batch_result)
                         log_message(
-                            f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f}",
+                            f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f} with proxy {proxy}",
                             "INFO",
                         )
 
@@ -319,7 +318,7 @@ async def run_scraper():
                 log_message(
                     f"Scan cycle completed in {time() - start_time:.2f} seconds"
                 )
-                await asyncio.sleep(CHECK_INTERVAL)
+                await asyncio.sleep(1)
 
             except Exception as e:
                 log_message(f"Error in scraper loop: {e}", "ERROR")
