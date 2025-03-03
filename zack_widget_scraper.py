@@ -293,7 +293,10 @@ async def run_scraper():
                         # Process the batch sequentially
                         batch_result = await process_batch(session, batch, proxy)
                         all_results.extend(batch_result)
-                        asyncio.sleep(0.3)
+                        log_message(
+                            f"fetched {i//BATCH_SIZE} batch successfully", "INFO"
+                        )
+                        await asyncio.sleep(0.3)
 
                     # NOTE: Create all tasks at once - use it if provne usefull
                     # for i in range(0, len(tickers), BATCH_SIZE):
