@@ -88,7 +88,7 @@ async def fetch_trades(session, creds):
                 return None
             elif 500 <= response.status < 600:
                 log_message(
-                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
                     "WARNING",
                 )
                 return None

@@ -254,7 +254,7 @@ async def check_recommendation_url(session, product_id, date, session_data, know
                 return None, None
             elif 500 <= response.status < 600:
                 log_message(
-                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
                     "WARNING",
                 )
                 return None, None

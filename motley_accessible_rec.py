@@ -256,7 +256,7 @@ async def fetch_instrument_data(session_data, ids):
                     return instruments
                 elif 500 <= response.status < 600:
                     log_message(
-                        f"Server error {response.status}: Temporary issue, safe to ignore if infrequent."
+                        f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
                         "WARNING",
                     )
                     return []

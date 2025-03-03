@@ -70,7 +70,7 @@ def fetch_json(session):
             return data
         elif 500 <= response.status_code < 600:
             log_message(
-                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",
                 "WARNING",
             )
             return []

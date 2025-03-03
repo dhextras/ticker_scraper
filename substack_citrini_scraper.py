@@ -112,7 +112,7 @@ async def fetch_posts(sid=None):
             return data["threads"]
         elif 500 <= response.status_code < 600:
             log_message(
-                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",
                 "WARNING",
             )
             return []

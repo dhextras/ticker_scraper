@@ -67,7 +67,7 @@ async def fetch_and_process_archive(session):
         response = session.get(ARCHIVE_URL, headers=headers)
         if 500 <= response.status_code < 600:
             log_message(
-                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent."
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",
                 "WARNING",
             )
             return []
