@@ -116,12 +116,8 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
 
     params = {"module_type": "ticker_search", "t": ticker, "get_param": "value"}
 
-    proxy_http = f"http://{proxy}"
-
     try:
-        async with session.get(
-            url, headers=headers, params=params, proxy=proxy_http
-        ) as response:
+        async with session.get(url, headers=headers, params=params) as response:
             if response.status != 200:
                 if response.status == 429:
                     log_message(
@@ -162,10 +158,17 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
         return ticker, None
 
 
-async def process_batch(session, tickers: List[str], proxy: str):
+async def process_batch(tickers: List[str], proxy: str):
     """Process a batch of tickers concurrently using available proxies"""
-    tasks = [fetch_ticker_data(session, ticker, proxy) for ticker in tickers]
-    return await asyncio.gather(*tasks)
+    proxy_url = f"http://{proxy}"
+
+    # Create a new session with the proxy already configured
+    connector = aiohttp.TCPConnector(force_close=True)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        session._default_proxy = proxy_url
+
+        tasks = [fetch_ticker_data(session, ticker, proxy) for ticker in tickers]
+        return await asyncio.gather(*tasks)
 
 
 async def process_results(results):
@@ -279,42 +282,39 @@ async def run_scraper():
             log_message("Starting new scan cycle...")
 
             try:
-                async with aiohttp.ClientSession() as session:
-                    all_results = []
-                    # tasks = []
+                all_results = []
+                # tasks = []
 
-                    # NOTE: Run Every batch one by one to avoid getting hit with the home page
-                    for i in range(0, len(tickers), BATCH_SIZE):
-                        start_time_2 = time()
-                        batch = tickers[i : i + BATCH_SIZE]
-                        proxy = await get_available_proxy(proxies)
+                # NOTE: Run Every batch one by one to avoid getting hit with the home page
+                for i in range(0, len(tickers), BATCH_SIZE):
+                    start_time_2 = time()
+                    batch = tickers[i : i + BATCH_SIZE]
+                    proxy = await get_available_proxy(proxies)
 
-                        # Process the batch sequentially
-                        batch_result = await process_batch(session, batch, proxy)
-                        all_results.extend(batch_result)
-                        log_message(
-                            f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f} with proxy {proxy}",
-                            "INFO",
-                        )
+                    # Process the batch sequentially
+                    batch_result = await process_batch(batch, proxy)
+                    all_results.extend(batch_result)
+                    log_message(
+                        f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f} with proxy {proxy}",
+                        "INFO",
+                    )
 
-                        await release_proxy(proxy)
+                    await release_proxy(proxy)
+                    await process_results(batch_result)
 
-                    # NOTE: Create all tasks at once - use it if provne usefull
-                    # for i in range(0, len(tickers), BATCH_SIZE):
-                    #     batch = tickers[i : i + BATCH_SIZE]
-                    #     proxy = await get_available_proxy(proxies)
-                    #
-                    #     tasks.append(process_batch(session, batch, proxy))
-                    #
-                    # # Run all batches truly concurrently
-                    # batch_results = await asyncio.gather(*tasks)
-                    #
-                    # # Flatten results
-                    # for batch in batch_results:
-                    #     all_results.extend(batch)
-                    #
-                    await process_results(all_results)
-
+                # NOTE: Create all tasks at once - use it if provne usefull
+                # for i in range(0, len(tickers), BATCH_SIZE):
+                #     batch = tickers[i : i + BATCH_SIZE]
+                #
+                #     tasks.append(process_batch(batch, proxy))
+                #
+                # # Run all batches truly concurrently
+                # batch_results = await asyncio.gather(*tasks)
+                #
+                # # Flatten results
+                # for batch in batch_results:
+                #     all_results.extend(batch)
+                #
                 log_message(
                     f"Scan cycle completed in {time() - start_time:.2f} seconds"
                 )
