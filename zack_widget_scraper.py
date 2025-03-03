@@ -27,6 +27,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 BATCH_SIZE = 250  # number of requests to run concurrently
+SUB_BATCH_SIZE = 50
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -160,14 +161,19 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
     except Exception as e:
         log_message(f"Error fetching {ticker} with proxy {proxy}: {e}", "ERROR")
         return ticker, None
-    finally:
-        await release_proxy(proxy)
 
 
 async def process_batch(session, tickers: List[str], proxy: str):
-    """Process a batch of tickers concurrently using available proxies"""
-    tasks = [fetch_ticker_data(session, ticker, proxy) for ticker in tickers]
-    return await asyncio.gather(*tasks)
+    """Process a batch of tickers concurrently using available proxies in sub-batches of 50"""
+    all_results = []
+
+    for i in range(0, len(tickers), SUB_BATCH_SIZE):
+        sub_batch = tickers[i : i + SUB_BATCH_SIZE]
+        tasks = [fetch_ticker_data(session, ticker, proxy) for ticker in sub_batch]
+        sub_results = await asyncio.gather(*tasks)
+        all_results.extend(sub_results)
+
+    return all_results
 
 
 async def process_results(results):
@@ -291,13 +297,14 @@ async def run_scraper():
                         batch = tickers[i : i + BATCH_SIZE]
                         proxy = await get_available_proxy(proxies)
 
-                        # Process the batch sequentially
+                        # Process the batch in sub-batches of 50
                         batch_result = await process_batch(session, batch, proxy)
                         all_results.extend(batch_result)
                         log_message(
                             f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f} with proxy {proxy}",
                             "INFO",
                         )
+                        await release_proxy(proxy)
 
                     # NOTE: Create all tasks at once - use it if provne usefull
                     # for i in range(0, len(tickers), BATCH_SIZE):
