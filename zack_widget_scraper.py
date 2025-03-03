@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import random
 import sys
@@ -25,8 +26,8 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-CHECK_INTERVAL = 30
-BATCH_SIZE = 150  # number of requests to run concurrently
+CHECK_INTERVAL = 15
+BATCH_SIZE = 50  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -287,6 +288,7 @@ async def run_scraper():
 
                     # NOTE: Run Every batch one by one to avoid getting hit with the home page
                     for i in range(0, len(tickers), BATCH_SIZE):
+                        start_time_2 = time()
                         batch = tickers[i : i + BATCH_SIZE]
                         proxy = await get_available_proxy(proxies)
 
@@ -294,9 +296,9 @@ async def run_scraper():
                         batch_result = await process_batch(session, batch, proxy)
                         all_results.extend(batch_result)
                         log_message(
-                            f"fetched {i//BATCH_SIZE} batch successfully", "INFO"
+                            f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f}",
+                            "INFO",
                         )
-                        await asyncio.sleep(0.3)
 
                     # NOTE: Create all tasks at once - use it if provne usefull
                     # for i in range(0, len(tickers), BATCH_SIZE):
