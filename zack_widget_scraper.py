@@ -25,7 +25,7 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-CHECK_INTERVAL = 5  # seconds between full list scans
+CHECK_INTERVAL = 30
 BATCH_SIZE = 150  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
@@ -108,15 +108,20 @@ async def save_alerts(alerts):
 
 async def fetch_ticker_data(session, ticker: str, proxy: str):
     """Fetch data for a single ticker using the provided proxy"""
-    url = f"https://zacks.com/tradingservices/ts_ajax_data_handler.php?module_type=ticker_search&t={ticker}"
+    url = f"https://zacks.com/tradingservices/ts_ajax_data_handler.php"
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     }
+
+    params = {"module_type": "ticker_search", "t": ticker, "get_param": "value"}
+
     proxy_http = f"http://{proxy}"
 
     try:
-        async with session.get(url, headers=headers, proxy=proxy_http) as response:
+        async with session.get(
+            url, headers=headers, params=params, proxy=proxy_http
+        ) as response:
             if response.status != 200:
                 if response.status == 429:
                     log_message(
@@ -138,6 +143,12 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
             response_text = await response.text()
 
             try:
+                if "Zacks Investment Research" in response_text:
+                    log_message(
+                        f"Failed to get data and hit with the home page for '{ticker}'",
+                        "WARNING",
+                    )
+                    return ticker, None
                 return json.loads(response_text)
             except:
                 log_message(
@@ -272,22 +283,31 @@ async def run_scraper():
             try:
                 async with aiohttp.ClientSession() as session:
                     all_results = []
-                    tasks = []
+                    # tasks = []
 
-                    # Create all tasks at once
+                    # NOTE: Run Every batch one by one to avoid getting hit with the home page
                     for i in range(0, len(tickers), BATCH_SIZE):
                         batch = tickers[i : i + BATCH_SIZE]
                         proxy = await get_available_proxy(proxies)
 
-                        tasks.append(process_batch(session, batch, proxy))
+                        # Process the batch sequentially
+                        batch_result = await process_batch(session, batch, proxy)
+                        all_results.extend(batch_result)
 
-                    # Run all batches truly concurrently
-                    batch_results = await asyncio.gather(*tasks)
-
-                    # Flatten results
-                    for batch in batch_results:
-                        all_results.extend(batch)
-
+                    # NOTE: Create all tasks at once - use it if provne usefull
+                    # for i in range(0, len(tickers), BATCH_SIZE):
+                    #     batch = tickers[i : i + BATCH_SIZE]
+                    #     proxy = await get_available_proxy(proxies)
+                    #
+                    #     tasks.append(process_batch(session, batch, proxy))
+                    #
+                    # # Run all batches truly concurrently
+                    # batch_results = await asyncio.gather(*tasks)
+                    #
+                    # # Flatten results
+                    # for batch in batch_results:
+                    #     all_results.extend(batch)
+                    #
                     await process_results(all_results)
 
                 log_message(
