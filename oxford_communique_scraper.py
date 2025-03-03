@@ -12,8 +12,11 @@ from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import (get_current_time, get_next_market_times,
-                              sleep_until_market_open)
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -55,7 +58,7 @@ def login_sync(session):
             return True
         elif 500 <= response.status_code < 600:
             log_message(
-                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",,
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",
                 "WARNING",
             )
             return False
@@ -121,7 +124,7 @@ async def fetch_and_process_archive(session):
         response = session.get(ARCHIVE_URL, headers=headers)
         if 500 <= response.status_code < 600:
             log_message(
-                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",,
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",
                 "WARNING",
             )
             return []
