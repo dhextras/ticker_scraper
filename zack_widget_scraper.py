@@ -26,7 +26,7 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-BATCH_SIZE = 200  # number of requests to run concurrently
+BATCH_SIZE = 150  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -300,7 +300,6 @@ async def run_scraper():
                     )
 
                     await release_proxy(proxy)
-                    await process_results(batch_result)
 
                 # NOTE: Create all tasks at once - use it if provne usefull
                 # for i in range(0, len(tickers), BATCH_SIZE):
@@ -315,10 +314,13 @@ async def run_scraper():
                 # for batch in batch_results:
                 #     all_results.extend(batch)
                 #
+
+                await asyncio.sleep(30)
+                await process_results(all_results)
+
                 log_message(
                     f"Scan cycle completed in {time() - start_time:.2f} seconds"
                 )
-                await asyncio.sleep(1)
 
             except Exception as e:
                 log_message(f"Error in scraper loop: {e}", "ERROR")
