@@ -375,9 +375,6 @@ async def fetch_latest_assets() -> List[Dict]:
             return []
 
         if "data" not in response_json or response_json["data"] is None:
-            log_message(
-                f"Response data is None, Response JSON: {response_json}", "WARNING"
-            )
             return []
 
         data = response_json["data"]
