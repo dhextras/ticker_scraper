@@ -142,7 +142,7 @@ async def send_to_telegram_and_ws(article_data, url, ticker):
         await send_ws_message(
             {
                 "name": "OXFORD Income Letter",
-                "type": "Alert",
+                "type": "Buy",
                 "ticker": ticker,
                 "sender": "oxfordclub",
                 "traget": "CSS",

@@ -127,11 +127,23 @@ async def process_page(session, url):
 
             for section in action_sections[1:]:
                 buy_match = re.search(r"Buy", section, re.IGNORECASE)
+                sell_match = re.search(r"Sell", section, re.IGNORECASE)
                 ticker_match = re.search(
                     r"(NYSE|NASDAQ):\s*(\w+)", section, re.IGNORECASE
                 )
 
                 if (
+                    sell_match
+                    and ticker_match
+                    and sell_match.start() < ticker_match.start()
+                ):
+                    exchange, ticker = ticker_match.groups()
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    await send_match_to_telegram(
+                        url, ticker, exchange, "Sell", timestamp, total_seconds
+                    )
+                    break
+                elif (
                     buy_match
                     and ticker_match
                     and buy_match.start() < ticker_match.start()
@@ -139,7 +151,7 @@ async def process_page(session, url):
                     exchange, ticker = ticker_match.groups()
                     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
                     await send_match_to_telegram(
-                        url, ticker, exchange, timestamp, total_seconds
+                        url, ticker, exchange, "Buy", timestamp, total_seconds
                     )
                     break
                 elif not ticker_match:
@@ -172,7 +184,9 @@ async def send_posts_to_telegram(urls, timestamp, time_to_fetch):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_match_to_telegram(url, ticker, exchange, timestamp, total_seconds):
+async def send_match_to_telegram(
+    url, ticker, exchange, action, timestamp, total_seconds
+):
     message = f"<b>New Stock Match Found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
@@ -182,7 +196,7 @@ async def send_match_to_telegram(url, ticker, exchange, timestamp, total_seconds
     await send_ws_message(
         {
             "name": "Oxford Club",
-            "type": "Buy",
+            "type": action,
             "ticker": ticker,
             "sender": "oxfordclub",
         },
