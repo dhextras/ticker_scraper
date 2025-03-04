@@ -124,6 +124,11 @@ async def fetch_ticker_data(session, ticker: str, proxy: str):
                         f"Rate limit hit for '{ticker}' using proxy {proxy}", "WARNING"
                     )
                     await asyncio.sleep(60)
+                elif response.status == 503:
+                    log_message(
+                        f"Knonw server error 503, Safe to ignore unless it gets flooded with it.",
+                        "INFO",
+                    )
                 elif 500 <= response.status < 600:
                     log_message(
                         f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
