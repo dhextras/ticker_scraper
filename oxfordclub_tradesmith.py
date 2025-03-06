@@ -4,11 +4,12 @@ import os
 import random
 import re
 import sys
+import warnings
 from time import time
 from typing import Dict, List, NamedTuple, Optional
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from dotenv import load_dotenv
 
 from utils.bypass_cloudflare import bypasser
@@ -21,6 +22,8 @@ from utils.time_utils import (
 )
 
 load_dotenv()
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
+
 
 # Constants
 CHECK_INTERVAL = 1  # seconds
@@ -69,7 +72,7 @@ TRADESMITH_SERVICES = [
     ),
     TradeSmithService("High Yield Portfolio", "156378f4-947e-46d8-9e0f-5a5299311684"),
     TradeSmithService(
-        "Fixed Income Funds/ETFs", "d60c5be6-a456-4482-8c54-42240c735545"
+        "Fixed Income Funds - ETFs", "d60c5be6-a456-4482-8c54-42240c735545"
     ),
     TradeSmithService(
         "Income Accelerator Portfolio", "1b2732af-0592-4fcd-8dc7-283044730ddf"
@@ -221,7 +224,6 @@ def process_js_code(js_code, service):
                 processed_row = {}
 
                 for key, value in row.items():
-                    # Remove HTML tags
                     soup = BeautifulSoup(value, "html.parser")
                     clean_value = soup.get_text().strip()
                     processed_row[key] = clean_value
