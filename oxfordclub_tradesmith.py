@@ -26,7 +26,7 @@ warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 # Constants
-CHECK_INTERVAL = 3  # seconds
+CHECK_INTERVAL = 60  # seconds
 DATA_DIR = "data/tradesmith"
 CRED_DIR = "cred"
 SESSION_FILE = "data/tradesmith_session.json"
