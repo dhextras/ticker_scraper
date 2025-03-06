@@ -26,7 +26,7 @@ warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 # Constants
-CHECK_INTERVAL = 0.5  # seconds
+CHECK_INTERVAL = 3  # seconds
 DATA_DIR = "data/tradesmith"
 CRED_DIR = "cred"
 SESSION_FILE = "data/tradesmith_session.json"
@@ -311,7 +311,7 @@ async def fetch_service_data(service, cookies, proxy):
     url = f"{BASE_URL}?guid={service.guid}"
 
     req_cookies = {"cf_clearance": cookies["cf_clearance"]}
-    req_proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+    req_proxies = {"http": f"http://{proxy}"}
     headers = {
         "User-Agent": f"{cookies['user_agent']}",
         "Cache-Control": "max-age=0",
@@ -389,7 +389,7 @@ def extract_grid_data(html_content, service):
 async def process_service(service, cookies, proxy):
     """Process a single service and handle its data"""
     try:
-        log_message(f"Processing {service.name}...", "INFO")
+        log_message(f"Processing {service.name} with proxy {proxy}", "INFO")
 
         html_content, new_cookies = await fetch_service_data(service, cookies, proxy)
         if new_cookies:
