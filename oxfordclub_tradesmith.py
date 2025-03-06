@@ -6,7 +6,7 @@ import re
 import sys
 import warnings
 from time import time
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Set
 
 import requests
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
@@ -26,17 +26,20 @@ warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 # Constants
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 0.5  # seconds
 DATA_DIR = "data/tradesmith"
+CRED_DIR = "cred"
 SESSION_FILE = "data/tradesmith_session.json"
 PROCESSED_DATA_FILE = "data/tradesmith_processed.json"
 BASE_URL = "https://publishers.tradesmith.com/Preview/Preview"
 TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
+PROXY_FILE = CRED_DIR + "/proxies.json"
 
 # Create necessary directories
 os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(CRED_DIR, exist_ok=True)
 
 
 class TradeSmithService(NamedTuple):
@@ -94,10 +97,44 @@ TRADESMITH_SERVICES = [
     ),
 ]
 
+active_proxies: Set[str] = set()
 alert_locks: Dict[str, asyncio.Lock] = {
     service.name: asyncio.Lock() for service in TRADESMITH_SERVICES
 }
 previous_alerts: Dict[str, List] = {}
+
+
+def load_proxies():
+    """Load proxies from json file"""
+    try:
+        with open(PROXY_FILE, "r") as f:
+            data = json.load(f)
+            return data["oxford_tradesmith"]
+    except Exception as e:
+        log_message(f"Error loading proxies: {e}", "ERROR")
+        return []
+
+
+async def get_available_proxy(proxies):
+    """Get a random available proxy that isn't currently in use"""
+    available_proxies = set(proxies) - active_proxies
+    if not available_proxies:
+        await asyncio.sleep(0.5)
+        log_message(
+            "No available proxy to choose from, be carefull it might go to inifinite loop",
+            "ERROR",
+        )
+        return await get_available_proxy(proxies)
+
+    proxy = random.choice(list(available_proxies))
+    active_proxies.add(proxy)
+    return proxy
+
+
+async def release_proxy(proxy):
+    """Release a proxy back to the available pool"""
+    proxy = proxy
+    active_proxies.discard(proxy)
 
 
 def load_cookies(fresh=False) -> Optional[Dict]:
@@ -163,7 +200,6 @@ async def save_data(service_name, data):
             file_path = get_service_file(service_name)
             with open(file_path, "w") as f:
                 json.dump(data, f, indent=2)
-            log_message(f"Saved data for {service_name}", "INFO")
         except Exception as e:
             log_message(f"Error saving data for {service_name}: {e}", "ERROR")
 
@@ -270,18 +306,22 @@ def extract_changes(old_data, new_data):
         return {"added": [], "removed": []}
 
 
-async def fetch_service_data(service, cookies):
+async def fetch_service_data(service, cookies, proxy):
     """Fetch data for a specific service using requests in an async-friendly way"""
     url = f"{BASE_URL}?guid={service.guid}"
 
     req_cookies = {"cf_clearance": cookies["cf_clearance"]}
+    req_proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
     headers = {
         "User-Agent": f"{cookies['user_agent']}",
         "Cache-Control": "max-age=0",
     }
 
     try:
-        response = requests.get(url, headers=headers, cookies=req_cookies)
+        response = requests.get(
+            url, proxies=req_proxies, headers=headers, cookies=req_cookies
+        )
+        await release_proxy(proxy)
 
         if response.status_code == 200:
             html_content = response.text
@@ -346,12 +386,12 @@ def extract_grid_data(html_content, service):
         return []
 
 
-async def process_service(service, cookies):
+async def process_service(service, cookies, proxy):
     """Process a single service and handle its data"""
     try:
         log_message(f"Processing {service.name}...", "INFO")
 
-        html_content, new_cookies = await fetch_service_data(service, cookies)
+        html_content, new_cookies = await fetch_service_data(service, cookies, proxy)
         if new_cookies:
             return new_cookies
 
@@ -422,6 +462,11 @@ async def run_scraper():
     for service in TRADESMITH_SERVICES:
         previous_alerts[service.name] = load_saved_data(service.name)
 
+    proxies = load_proxies()
+    if not proxies:
+        log_message("No proxies available", "CRITICAL")
+        return
+
     cookies = load_cookies()
     if not cookies:
         log_message("Failed to get valid cf_clearance", "CRITICAL")
@@ -444,7 +489,8 @@ async def run_scraper():
 
             for service in TRADESMITH_SERVICES:
                 try:
-                    cookies = await process_service(service, cookies)
+                    proxy = await get_available_proxy(proxies)
+                    cookies = await process_service(service, cookies, proxy)
                     if not cookies:
                         log_message(
                             "Lost cookies during processing, regenerating...",
