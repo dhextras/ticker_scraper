@@ -29,7 +29,7 @@ SESSION_FILE = "data/tradesmith_session.json"
 PROCESSED_DATA_FILE = "data/tradesmith_processed.json"
 BASE_URL = "https://publishers.tradesmith.com/Preview/Preview"
 TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
-TELEGRAM_GRP = os.getenv("TRADESMITH_TELEGRAM_GRP")
+TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 # Create necessary directories
