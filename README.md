@@ -225,7 +225,7 @@ These steps are only needed if you are using the **Hedgeye** scraper.
    ```bash
    cd /tmp/
    sudo wget https://storage.googleapis.com/chrome-for-testing-public/VERSION/linux64/chromedriver-linux64.zip
-   sudo unzip chromedriver_linux64.zip
+   sudo unzip chromedriver-linux64.zip
    sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
    cd -
    ```
