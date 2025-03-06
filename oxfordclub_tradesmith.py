@@ -1,12 +1,13 @@
 import asyncio
 import json
 import os
+import random
 import re
 import sys
 from time import time
 from typing import Dict, List, NamedTuple, Optional
 
-import aiohttp
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
@@ -26,7 +27,8 @@ CHECK_INTERVAL = 1  # seconds
 DATA_DIR = "data/tradesmith"
 SESSION_FILE = "data/tradesmith_session.json"
 PROCESSED_DATA_FILE = "data/tradesmith_processed.json"
-TELEGRAM_BOT_TOKEN = os.getenv("TRADESMITH_TELEGRAM_BOT_TOKEN")
+BASE_URL = "https://publishers.tradesmith.com/Preview/Preview"
+TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("TRADESMITH_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
@@ -110,8 +112,8 @@ def load_cookies(fresh=False) -> Optional[Dict]:
                 "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
                 "WARNING",
             )
-            base_url = "https://publishers.tradesmith.com/Preview/Preview"
-            bypass = bypasser(base_url, SESSION_FILE)
+            rand_guid = random.choice(TRADESMITH_SERVICES).guid
+            bypass = bypasser(f"{BASE_URL}?guid={rand_guid}", SESSION_FILE)
 
             if not bypass or bypass is False:
                 return None
@@ -266,53 +268,50 @@ def extract_changes(old_data, new_data):
         return {"added": [], "removed": []}
 
 
-async def fetch_service_data(session, service, cookies):
-    """Fetch data for a specific service"""
-    url = f"https://publishers.tradesmith.com/Preview/Preview"
+async def fetch_service_data(service, cookies):
+    """Fetch data for a specific service using requests in an async-friendly way"""
+    url = f"{BASE_URL}?guid={service.guid}"
 
-    params = {"guid": service.guid}
-
+    req_cookies = {"cf_clearance": cookies["cf_clearance"]}
     headers = {
         "User-Agent": f"{cookies['user_agent']}",
         "Cache-Control": "max-age=0",
-        "Cookie": f"cf_clearance={cookies['cf_clearance']}",
     }
 
     try:
-        async with session.get(
-            url, params=params, headers=headers, cookies=cookies
-        ) as response:
-            if response.status == 200:
-                html_content = await response.text()
+        response = requests.get(url, headers=headers, cookies=req_cookies)
 
-                # Check if the content contains prepareGrid function
-                if "prepareGrid" not in html_content:
-                    log_message(
-                        f"Content for {service.name} does not contain prepareGrid function",
-                        "WARNING",
-                    )
-                    return None, None
+        if response.status_code == 200:
+            html_content = response.text
 
-                return html_content, None
-            elif response.status == 403:
+            # Check if the content contains prepareGrid function
+            if "prepareGrid" not in html_content:
                 log_message(
-                    f"CloudFlare error fetching {service.name}, attempting to refresh session",
+                    f"Content for {service.name} does not contain prepareGrid function",
                     "WARNING",
                 )
-                cookies = load_cookies(fresh=True)
-                if not cookies:
-                    raise Exception(
-                        f"Failed to refresh CloudFlare session for {service.name}"
-                    )
-                return None, cookies
-            else:
-                log_message(
-                    f"Failed to fetch {service.name}. Status: {response.status}",
-                    "ERROR",
-                )
                 return None, None
+
+            return html_content, None
+        elif response.status_code == 403:
+            log_message(
+                f"CloudFlare error fetching {service.name}, attempting to refresh session",
+                "WARNING",
+            )
+            cookies = load_cookies(fresh=True)
+            if not cookies:
+                raise Exception(
+                    f"Failed to refresh CloudFlare session for {service.name}"
+                )
+            return None, cookies
+        else:
+            log_message(
+                f"Failed to fetch {service.name}. Status: {response.status_code}",
+                "ERROR",
+            )
+            return None, None
     except Exception as e:
-        log_message(f"Error fetching {service.name}: {e}", "ERROR")
+        log_message(f"Error fetching {service.name} with requests: {e}", "ERROR")
         return None, None
 
 
@@ -345,12 +344,12 @@ def extract_grid_data(html_content, service):
         return []
 
 
-async def process_service(session, service, cookies):
+async def process_service(service, cookies):
     """Process a single service and handle its data"""
     try:
         log_message(f"Processing {service.name}...", "INFO")
 
-        html_content, new_cookies = await fetch_service_data(session, service, cookies)
+        html_content, new_cookies = await fetch_service_data(service, cookies)
         if new_cookies:
             return new_cookies
 
@@ -426,46 +425,43 @@ async def run_scraper():
         log_message("Failed to get valid cf_clearance", "CRITICAL")
         return
 
-    async with aiohttp.ClientSession() as session:
+    while True:
+        await sleep_until_market_open()
+        log_message("Market is open. Starting service monitoring...", "INFO")
+
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
-            log_message("Market is open. Starting service monitoring...", "INFO")
+            current_time = get_current_time()
+            if current_time > market_close_time:
+                log_message("Market is closed. Waiting for next market open...", "INFO")
+                break
 
-            _, _, market_close_time = get_next_market_times()
+            log_message("Starting new scan cycle...", "INFO")
+            start_time = time()
 
-            while True:
-                current_time = get_current_time()
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "INFO"
-                    )
-                    break
-
-                log_message("Starting new scan cycle...", "INFO")
-                start_time = time()
-
-                for service in TRADESMITH_SERVICES:
-                    try:
-                        cookies = await process_service(session, service, cookies)
+            for service in TRADESMITH_SERVICES:
+                try:
+                    cookies = await process_service(service, cookies)
+                    if not cookies:
+                        log_message(
+                            "Lost cookies during processing, regenerating...",
+                            "WARNING",
+                        )
+                        cookies = load_cookies(fresh=True)
                         if not cookies:
                             log_message(
-                                "Lost cookies during processing, regenerating...",
-                                "WARNING",
+                                "Failed to regenerate cookies, exiting scan cycle",
+                                "ERROR",
                             )
-                            cookies = load_cookies(fresh=True)
-                            if not cookies:
-                                log_message(
-                                    "Failed to regenerate cookies, exiting scan cycle",
-                                    "ERROR",
-                                )
-                                break
-                    except Exception as e:
-                        log_message(f"Error processing {service.name}: {e}", "ERROR")
+                            break
+                except Exception as e:
+                    log_message(f"Error processing {service.name}: {e}", "ERROR")
 
-                log_message(
-                    f"Scan cycle completed in {time() - start_time:.2f} seconds", "INFO"
-                )
-                await asyncio.sleep(CHECK_INTERVAL)
+            log_message(
+                f"Scan cycle completed in {time() - start_time:.2f} seconds", "INFO"
+            )
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
