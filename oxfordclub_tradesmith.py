@@ -416,7 +416,7 @@ async def process_service(service, cookies, proxy):
                 price = item.get("price", "-")
                 symbol = item.get("Symbol", "-")
 
-                added_text += f"- ADD: '{symbol}' at '{price}'. Article URL - {url}\n"
+                added_text += f"- ADD '{symbol}' at '{price}' Article URL : {url}\n"
 
             removed_text = ""
             for item in changes["removed"]:
@@ -425,7 +425,7 @@ async def process_service(service, cookies, proxy):
                 symbol = item.get("Symbol", "-")
 
                 removed_text += (
-                    f"- REMOVE: '{symbol}' at '{price}'. Article URL - {url}\n\n"
+                    f"- REMOVE '{symbol}' at '{price}'. Article URL : {url}\n\n"
                 )
 
             changes_text = ""
