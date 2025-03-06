@@ -221,7 +221,7 @@ async def run_scraper():
                 log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
                 for post in new_posts:
-                    if str(post.get("", "")) != "26828":
+                    if str(post.get("publication_id", "")) != "26828":
                         continue
 
                     title = get_post_title(post)
