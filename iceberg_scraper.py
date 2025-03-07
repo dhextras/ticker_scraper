@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import sys
+from time import time
 
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
@@ -49,9 +50,12 @@ def save_processed_urls(urls):
 
 async def fetch_json():
     try:
+        start_time = time()
         page.get(JSON_URL)
         data = page.json
-        log_message(f"Fetched {len(data)} posts from JSON", "INFO")
+        log_message(
+            f"Fetched {len(data)} posts from JSON in {time() - start_time:2f}", "INFO"
+        )
         return data
     except Exception as e:
         log_message(f"Error fetching JSON: {e}", "ERROR")
