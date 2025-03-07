@@ -481,6 +481,7 @@ async def process_fetched_alert(alert_details, last_alert_lock: asyncio.Lock):
                     "type": signal_type,
                     "ticker": ticker,
                     "sender": "hedgeye",
+                    "target": "CSS",
                 },
                 WS_SERVER_URL,
             )
