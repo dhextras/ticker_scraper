@@ -29,13 +29,31 @@ ZACKS_PASSWORD = os.getenv("ZACKS_PASSWORD")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 CHECK_INTERVAL = 0.2  # seconds
 STARTING_CID = 43250  # Starting comment ID
+BROWSER_REFRESH_INTERVAL = 3600  # 1 hour in seconds
 
 DATA_DIR = Path("data")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
 
-# Initialize browser once
-co = ChromiumOptions()
-page = ChromiumPage(co)
+# Initialize browser variables
+co = None
+page = None
+
+
+def initialize_browser():
+    """Initialize a new browser instance"""
+    global co, page
+
+    log_message("Initializing new browser instance", "INFO")
+    if page:
+        try:
+            page.quit()
+            log_message("Successfully closed old browser instance", "INFO")
+        except Exception as e:
+            log_message(f"Error closing browser: {e}", "WARNING")
+
+    co = ChromiumOptions()
+    page = ChromiumPage(co)
+    log_message("New browser instance created", "INFO")
 
 
 def login():
@@ -197,10 +215,13 @@ def process_commentary(html: str):
 async def run_scraper():
     """Main scraper loop that respects market hours"""
     try:
+        initialize_browser()
+
         if not login():
             log_message("Initial login failed. Retrying during market hours.", "ERROR")
 
         current_comment_id = load_last_comment_id()
+        last_browser_refresh_time = time()
 
         while True:
             await sleep_until_market_open()
@@ -215,6 +236,17 @@ async def run_scraper():
                         "Market is closed. Waiting for next market open...", "DEBUG"
                     )
                     break
+
+                current_timestamp = time()
+                if (
+                    current_timestamp - last_browser_refresh_time
+                    >= BROWSER_REFRESH_INTERVAL
+                ):
+                    log_message("Time to refresh browser instance", "INFO")
+                    initialize_browser()
+                    if not login():
+                        log_message("Login after browser refresh failed", "ERROR")
+                    last_browser_refresh_time = current_timestamp
 
                 start_time = time()
                 log_message(f"Checking comment ID: {current_comment_id}")
@@ -275,10 +307,12 @@ def main():
         asyncio.run(run_scraper())
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
-        page.quit()
+        if page:
+            page.quit()
     except Exception as e:
         log_message(f"Critical error in main: {e}", "CRITICAL")
-        page.quit()
+        if page:
+            page.quit()
         sys.exit(1)
 
 
