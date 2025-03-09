@@ -171,7 +171,7 @@ async def check_post_by_search(
         start_time = time.time()
         url = f"{SEARCH_URL}?include={post_id}"
         proxy = await get_available_proxy(proxies)
-        response = await fetch_with_proxy(session, url, proxy, timeout=1)
+        response = await fetch_with_proxy(session, url, proxy, timeout=3)
         time_to_fetch = time.time() - start_time
 
         if response and response.status_code == 200:
