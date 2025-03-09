@@ -165,7 +165,7 @@ async def process_page(session, url):
                         f"'Buy' not found before ticker in section: {url}", "WARNING"
                     )
 
-            log_message(f"Took {total_seconds:.2f} to fetch url: {url}", "ERROR")
+            log_message(f"Took {total_seconds:.2f} to fetch url: {url}", "WARNING")
         else:
             log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
     except Exception as e:
