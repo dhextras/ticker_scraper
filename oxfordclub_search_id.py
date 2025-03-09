@@ -178,10 +178,10 @@ async def check_post_by_search(
             if data and isinstance(data, list) and len(data) > 0:
                 log_message(f"Found post with ID: {post_id}", "INFO")
                 found_post = data[0]
-                if found_post and found_post.get("link"):
+                if found_post and found_post.get("url"):
                     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-                    url = found_post.get("link", "")
+                    url = found_post.get("url", "")
                     await process_page(session, url, proxy)
 
                     await send_post_to_telegram(found_post, timestamp, time_to_fetch)
@@ -193,7 +193,7 @@ async def check_post_by_search(
         else:
             status_code = response.status_code if response else "No response"
             log_message(
-                f"Failed to check post ID {post_id}: HTTP {status_code}",
+                f"Failed to check post ID {post_id}: HTTP {status_code}, response {response}",
                 "ERROR",
             )
             return None
@@ -273,7 +273,7 @@ async def send_post_to_telegram(
 ) -> None:
     message = f"<b>New Post Found - Search Id</b>\n\n"
     message += f"<b>Id:</b> {post_details.get('id', '-')}\n"
-    message += f"<b>Url:</b> {post_details.get('link', '-')}\n"
+    message += f"<b>Url:</b> {post_details.get('url', '-')}\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>time_to_fetch:</b> {time_to_fetch:.2f}s"
 

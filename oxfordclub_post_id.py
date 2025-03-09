@@ -193,7 +193,7 @@ async def check_post_by_id(
         else:
             status_code = response.status_code if response else "No response"
             log_message(
-                f"Failed to check post ID {post_id}: HTTP {status_code}",
+                f"Failed to check post ID {post_id}: HTTP {status_code}, response {response}",
                 "ERROR",
             )
             return None
