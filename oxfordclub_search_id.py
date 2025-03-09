@@ -129,9 +129,10 @@ async def fetch_with_proxy(
     url: str,
     proxy: str,
     headers: Optional[Dict[str, str]] = None,
-    timeout: int = 10,
+    timeout: int = 15,
 ) -> Optional[requests.Response]:
     """Make a request using a proxy"""
+    response = None
     try:
         proxies = {
             "http": proxy,
@@ -153,11 +154,11 @@ async def fetch_with_proxy(
             f"Took more then {timeout} sec to fetch {url} with proxy: {proxy}",
             "WARNING",
         )
-        return None
+        return response
     except Exception as e:
         await release_proxy(proxy)
         log_message(f"Error with proxy {proxy}: {e}", "ERROR")
-        return None
+        return response
 
 
 async def check_post_by_search(
@@ -191,11 +192,12 @@ async def check_post_by_search(
             else:
                 return None
         else:
-            status_code = response.status_code if response else "No response"
-            log_message(
-                f"Failed to check post ID {post_id}: HTTP {status_code}, response {response}",
-                "ERROR",
-            )
+            status_code = response.status_code if response else None
+            if status_code:
+                log_message(
+                    f"Failed to check post ID {post_id}: HTTP {status_code}",
+                    "ERROR",
+                )
             return None
     except Exception as e:
         log_message(f"Error checking post ID {post_id}: {e}", "ERROR")
@@ -262,8 +264,9 @@ async def process_page(session: requests.Session, url: str, proxy: str) -> None:
                 f"Took {total_seconds:.2f}s to fetch and process URL: {url}", "WARNING"
             )
         else:
-            status_code = response.status_code if response else "No response"
-            log_message(f"Failed to fetch page: HTTP {status_code}", "ERROR")
+            status_code = response.status_code if response else None
+            if status_code:
+                log_message(f"Failed to fetch page: HTTP {status_code}", "ERROR")
     except Exception as e:
         log_message(f"Error processing page {url}: {e}", "ERROR")
 
