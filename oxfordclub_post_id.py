@@ -290,15 +290,15 @@ async def send_match_to_telegram(
     timestamp: str,
     total_seconds: float,
 ) -> None:
-    await send_ws_message(
-        {
-            "name": "Oxford Club - Post ID",
-            "type": action,
-            "ticker": ticker,
-            "sender": "oxfordclub",
-        },
-        WS_SERVER_URL,
-    )
+    # await send_ws_message(
+    #     {
+    #         "name": "Oxford Club - Post ID",
+    #         "type": action,
+    #         "ticker": ticker,
+    #         "sender": "oxfordclub",
+    #     },
+    #     WS_SERVER_URL,
+    # )
 
     message = f"<b>New Stock Match Found - Post ID</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
