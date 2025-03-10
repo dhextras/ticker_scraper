@@ -327,8 +327,11 @@ def archive_alert_parser(articles, fetch_time, current_time, proxy):
                 "div", class_="thumbnail-article-quarter__date"
             ).get_text(strip=True)
 
-            date_format = "%m/%d/%y %I:%M %p EST"
-            created_at = datetime.strptime(date_text, date_format)
+            tz_suffix = re.search(r"(E[DS]T)$", date_text).group(1)
+            base_format = "%m/%d/%y %I:%M %p"
+            created_at = datetime.strptime(
+                date_text.replace(tz_suffix, "").strip(), base_format
+            )
             created_at_cst = created_at.astimezone(pytz.timezone("America/Chicago"))
 
             created_at_cst = created_at_cst.astimezone(pytz.timezone("America/Chicago"))
