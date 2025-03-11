@@ -145,7 +145,7 @@ async def send_to_telegram_and_ws(article_data, url, ticker):
                 "type": "Buy",
                 "ticker": ticker,
                 "sender": "oxfordclub",
-                "traget": "CSS",
+                "target": "CSS",
             },
             WS_SERVER_URL,
         )
