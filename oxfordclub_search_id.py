@@ -383,11 +383,11 @@ async def process_page_multi(
     """Process page with multiple concurrent requests (with and without proxies)"""
     # Create tasks for processing with multiple proxies + one without proxy
     tasks = []
-    tasks.append(process_page_without_proxy(session, url))
+    tasks.append(asyncio.create_task(process_page_without_proxy(session, url)))
 
     for _ in range(PAGE_PROCESS_CONCURRENT_REQUESTS):
         proxy = await get_available_proxy(proxies)
-        tasks.append(process_page(session, url, proxy))
+        tasks.append(asyncio.create_task(process_page(session, url, proxy)))
 
     # Create a future for the first completed task
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
