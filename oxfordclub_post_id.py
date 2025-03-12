@@ -203,6 +203,7 @@ async def check_post_by_id(
         # FIX: Remove this later and use proxy to fetch
         # proxy = await get_available_proxy(proxies)
         # response = await fetch_with_proxy(session, url, proxy, timeout=3)
+        # await release_proxy(proxy)
         response = await fetch_without_proxy(session, url)
         time_to_fetch = time.time() - start_time
 
@@ -246,6 +247,7 @@ async def fetch_latest_media_id(
         url = f"{MEDIA_URL}?per_page=1&orderby=id&order=desc"
         proxy = await get_available_proxy(proxies)
         response = await fetch_with_proxy(session, url, proxy, timeout=5)
+        await release_proxy(proxy)
 
         if response and response.status_code == 200:
             data = response.json()
@@ -390,6 +392,7 @@ async def process_page_multi(
     for _ in range(PAGE_PROCESS_CONCURRENT_REQUESTS):
         proxy = await get_available_proxy(proxies)
         tasks.append(asyncio.create_task(process_page(session, url, proxy)))
+        await release_proxy(proxy)
 
     # Create a future for the first completed task
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
