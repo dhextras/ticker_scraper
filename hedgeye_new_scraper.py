@@ -552,6 +552,7 @@ async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start
                         "type": signal_type,
                         "ticker": ticker,
                         "sender": "hedgeye",
+                        "target": "CSS",
                     },
                     WS_SERVER_URL,
                 )
