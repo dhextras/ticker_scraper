@@ -211,7 +211,6 @@ pip install -r requirements.txt
    - `zacks_tickers.json`  # Contains the 3000 tickers we use on the zacks_widget scraper
    - `hedeye_cookies/` # NOTE: This a folder and contains cookies for all hedgeye accounts
 
-
 Ensure that these files are named exactly as specified.
 
 ## Step 5: Install Google Chrome and ChromeDriver (Optional - Needed for Hedgeye, Motley)
