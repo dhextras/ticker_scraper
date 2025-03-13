@@ -147,6 +147,9 @@ class AccountManager:
                 self.currently_running.remove(email)
 
     def mark_rate_limited(self, email: str):
+        log_message(
+            f"account '{email}' got rate limited sleeping it for 15 min", "ERROR"
+        )
         self.rate_limited.add(email)
         self._save_rate_limited()
 
@@ -309,7 +312,7 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
 
         # Small delay between batches
         if i + 3 < len(accounts):
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
 
     return valid_accounts
 
@@ -652,11 +655,12 @@ async def process_accounts_continuously(
             accounts = await account_manager.get_available_accounts(2)
             if not accounts:
                 # If no accounts available, wait briefly and try again
-                await asyncio.sleep(0.5)
+                log_message("No available account found to process", "Warning")
+                await asyncio.sleep(1)
                 continue
 
             for _, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.7)
+                await asyncio.sleep(0.6)
 
                 proxy = proxy_manager.get_next_proxy()
                 asyncio.create_task(
