@@ -120,8 +120,7 @@ async def extract_ticker_from_pdf(session, url):
         return ticker, action
 
 
-async def send_posts_to_telegram(urls):
-    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+async def send_posts_to_telegram(urls, timestamp):
     joined_urls = "\n  ".join(urls)
 
     message = f"<b>New Kerrisdale medias found</b>\n\n"
@@ -193,6 +192,7 @@ async def run_scraper():
 
                 if new_urls:
                     log_message(f"Found {len(new_urls)} new posts to process.", "INFO")
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
@@ -212,7 +212,7 @@ async def run_scraper():
 
                         processed_urls.add(url)
 
-                    await send_posts_to_telegram(new_urls)
+                    await send_posts_to_telegram(new_urls, timestamp)
                     save_processed_urls(processed_urls)
 
                 else:
