@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import aiohttp
 from dotenv import load_dotenv
@@ -195,8 +196,12 @@ async def run_scraper():
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
+                            start_time = time.time()
                             ticker, action = await extract_ticker_from_pdf(session, url)
                             if ticker:
+                                log_message(
+                                    f"Extracted ticker `{ticker}` in {time.time() - start_time}s from `url`"
+                                )
                                 await send_to_telegram(
                                     url, ticker_obj=ticker, action=action
                                 )
