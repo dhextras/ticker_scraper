@@ -13,8 +13,8 @@ Make sure you have the following installed:
 If you don't have Python and pip installed, you can install them using the following command:
 
 ```bash
-sudo apt update
-sudo apt install python3 python3-pip python3-venv python3-dev python3-tk
+sudo apt update -y
+sudo apt install python3 python3-pip python3-venv python3-dev python3-tk -y
 ```
 
 ## Step 1: Setup the Virtual Environment
@@ -197,11 +197,20 @@ pip install -r requirements.txt
 2. **Place the following files in `cred/`:**
 
    - `gmail_credentials.json`  # Credentials for Gmail API (download this from Google Cloud API)
-   - `cnbc_latest_article_id.json` # Contains {"article_id": xxxxxxxxx}
-   - `fool_session.json` # Contains Session data from where you manually logged in with out a headless mode
+   - `fool_session.json` # Contains Session data from where you manually logged in with out a headless mode ( Needs to be updated every Monday )
    - `hedgeye_credentials.json` # Contains login accounts for hedgeye
+   - `ibd_creds.json` # Contains cookies and session creds for ibd leaderboard scripts ( Needs to be updated every Year )
    - `proxies.json` # Contains all the proxies for all scripts
+   - `substack_cookies.json` # Contains cookies data for substack ( bearcave top domain & and needs to be updated every year )
    - `youtube_api_keys.json` # Contains youtube api keys
+
+3. **Place the following files in `data/`:**
+
+   - `minervini_access_token.json`  # Contains access csrf and session token for minervini ( Needs to be updated every Monday )
+   - `wolfpack_access_token.json`  # Contains svsession and auth token for wolfpack ( Needs to be updated every year )
+   - `zacks_tickers.json`  # Contains the 3000 tickers we use on the zacks_widget scraper
+   - `hedeye_cookies/` # NOTE: This a folder and contains cookies for all hedgeye accounts
+
 
 Ensure that these files are named exactly as specified.
 
@@ -257,35 +266,38 @@ python <script_name>.py
 ### Available Scripts:
 
 ### 1. **Ticker Scrapers**
-- **OxfordClub:** `oxfordclub_scraper.py`
+- **Altucher:** `altucher_scraper.py`
+- **OxfordClub:** `oxfordclub_scraper.py`, `oxfordclub_post_id.py`, `oxfordclub_search_id.py`
+- **Oxford Tradesmith:** `oxfordclub_tradesmith.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Oxford Communique:** `oxford_communique_scraper.py`
 - **Oxford Income Letter:** `oxford_income_let_scraper.py`
-- **StockNews:** `stocknews_scraper.py`, `stocknews_html_scraper.py`
-- **CNBC:** `cnbc_scraper.py`, `cnbc_html_scraper.py`
-- **Motley Fool:** `motley_fool_scraper.py`
-- **Navallier:** `navallier_old_scraper.py`, `navallier_old_csv_scraper.py`
-- **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`
-- **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`
+- **StockNews:** `stocknews_scraper.py`, `stocknews_html_scraper.py`, `stocknews_author_html_scraper.py`, `stocknews_secret_html_scraper.py`
+- **CNBC:** `cnbc_scraper.py`
+- **Motley Fool:** `motley_accessible_rec.py`, `motley_fool_scraper.py`, `motley_image_scraper.py`, `motley_instrument_scraper.py`, `motley_rec_scraper.py`, `motley_video_scraper.py`
+- **Navallier:** `navallier_old_scraper.py`, `navallier_old_csv_scraper.py`,  `navallier_new_scraper.py`
+- **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`, `zack_commentary_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`, `hedgeye_new_scraper.py`
 - **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
 - **Wolfpack:** `wolfpack_scraper.py`, `wolfpack_xml_scraper.py`
-- **MinerVini:** `minervini_live_scraper.py`, `minervini_post_scraper.py`
+- **MinerVini:** `minervini_live_id.py`, `minervini_live_scraper.py`, `minervini_livestream_id.py`, `minervini_post_id.py`, `minervini_post_scraper.py`
 - **IBD Swing Trader:** `ibd_api_scraper.py`, `ibd_history_scraper.py`, `ibd_stock_id_scraper.py`
+- **IBD Leaderboard:** `ibd_leaderboard.py`
 
 ### 2. **PDF & Image Scrapers**
-- **Blue Orca:** `blueorca_scraper.py`
+- **Blue Orca:** `blueorca_scraper.py`, `blue_orca_report.py`, `blue_orca_sitemap.py`
 - **Hindenburg:** `hindenburg_scraper.py`
-- **Jehoshaphat Research:** `jehoshaphat_scraper.py` (*requires GUI setup*)
+- **Jehoshaphat Research:** `jehoshaphat_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Friendly Bear:** `friendly_bear_scraper.py`
-- **HunterBrook Research:** `hunterbrook_scraper.py`
-- **HunterBrook Post Scraper:** `hunterbrook_post_scraper.py`
-- **Iceberg Research:** `iceberg_scraper.py`
+- **HunterBrook Research:** `hunterbrook_scraper.py`, `hunterbrook_post_scraper.py`
+- **Iceberg Research:** `iceberg_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Kerrisdale Capital:** `kerrisdale_scraper.py`
 - **Mariner Research:** `mariner_scraper.py`
 - **Viceroy Research:** `viceroy_scraper.py`
 - **Citron Research:** `citron_scraper.py`
-- **Muddy Waters Media:** `mudddy_waters_scraper.py` (*requires GUI setup*)
-- **Grizzly Media:** `grizzly_scraper.py` (*requires GUI setup*)
-- **Bearcave:** `bearcave_scraper.py`, `bearcave_xml_scraper.py`
+- **Muddy Waters Media:** `mudddy_waters_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Grizzly Media:** `grizzly_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Bearcave:** `bearcave_scraper.py`, `bearcave_xml_scraper.py`, `bearcave_html_scraper.py`
+- **Substack:** `substack_citrini_scraper.py`, `substack_post_scraper.py`
 - **Beta Ville:** `beta_ville_scrper.py`
 
 ### 3. **Email Scrapers**
@@ -329,8 +341,10 @@ ticker_scraper/
 │   ├── gmail_token_a1.json
 │   ├── gmail_token_a2.json
 │   ├── hedgeye_credentials.json
-│   ├── youtube_api_keys.json
-│   └── proxies.json
+│   ├── ibd_creds.json
+│   ├── proxies.json
+│   ├── substack_cookies.json
+│   └── youtube_api_keys.json
 ├── data/                         # Folder to save scraper data to access later
 ├── log/                          # Folder for log files
 ├── utils/                        # Utility functions
@@ -346,53 +360,73 @@ ticker_scraper/
 ├── .env.example                  # Environment variables
 ├── .gitignore                    # Git ignore file
 ├── README.md                     # Project documentation
-├── altucher_scraper.py           # Altucher ticker scraper
-├── banyan_image_scraper.py       # Banayan image scraper
-├── bearcave_scraper.py           # Bearcave ticker scraper
-├── bearcave_xml_scraper.py       # Bearcave xml method ticker scraper
-├── beta_ville_scrper.py          # Beta Ville Scraper
-├── blueorca_scraper.py           # Blue Orca pdf & image ticker scraper
-├── citron_scraper.py             # Citron media scraper
-├── cnbc_html_scraper.py          # CNBC ticker scraper html implelementation
-├── cnbc_scraper.py               # CNBC ticker scraper
-├── friendly_bear_scraper.py      # Friendly Bear Research pdf & image ticker scraper
-├── gmail_scraper.py              # Gmail ticker scraper
-├── gmail_scraper_a2.py           # Gmail ticker scraper second account
-├── grizzly_scraper.py            # Grizzly Media scraper
-├── gui_setup.md                  # Setting up gui for ubuntu server
-├── hedgeye_html_scraper.py       # Hedgeye html scraper implementation
-├── hedgeye_scraper.py            # Hedgeye article scraper
-├── hindenburg_scraper.py         # Hindenburg pdf & image ticker scraper
-├── hunterbrook_scraper.py        # Hunterbrook Research pdf & image ticker scraper
-├── hunterbrook_post_scraper.py   # Hunterbrook Post ticker scraper
-├── ibd_api_scraper.py            # Ibd Swing trader api method scraper
-├── ibd_history_scraper.py        # Ibd Swing trader history method scraper
-├── ibd_stock_id_scraper.py       # Ibd Swing trader stock id method scraper
-├── iceberg_scraper.py            # Iceberg Research pdf & image ticker scraper
-├── jehoshaphat_scraper.py        # Jehoshaphat pdf & image ticker scraper
-├── kerrisdale_scraper.py         # Kerrisdale pdf & image ticker scraper
-├── mariner_scraper.py            # Mariner Research pdf & image ticker scraper
-├── minervini_live_scraper.py     # Miner vini live stream scraper
-├── minervini_post_scraper.py     # Minervini post scraper
-├── motley_fool_scraper.py        # Motley ticker scraper
-├── mudddy_waters_scraper.py      # Muddy Waters Media scraper
-├── navallier_old_csv_scraper.py  # Navallier protfolio CSV scraper
-├── navallier_old_scraper.py      # Navallier old ticker scraper
-├── oxfordclub_scraper.py         # OxfordClub ticker scraper
-├── oxford_communique_scraper.py  # Oxford Communique scraper
-├── oxford_income_let_scraper.py  # Oxford Income Letter scraper
-├── requirements.txt              # Project dependencies
-├── stocknews_html_scraper.py     # StockNews ticker scraper html implelementation
-├── stocknews_scraper.py          # StockNews ticker scraper
-├── viceroy_scraper.py            # Viceroy Research pdf & image ticker scraper
-├── youtube_channel_monitor.py    # Moon Market channel monitor
-├── wdr_ticker_scraper.py         # White diamond Article scraper
-├── wdr_article_scraper.py        # White diamond table ticker scraper
-├── wolfpack_scraper.py           # Wolfpack pdf scraper
-├── wolfpack_xml_scraper.py       # Wolfpack xml pdf scraper
-├── zack_commentary_scraper.py    # Zacks trading service commentary scraper
-├── zack_html_ts_scraper.py       # Zacks trading service html implementation
-└── zack_widget_scraper.py        # Zacks widget3 ticker scraper
+├── altucher_scraper.py
+├── banyan_image_scraper.py
+├── bearcave_html_scraper.py
+├── bearcave_scraper.py
+├── bearcave_xml_scraper.py
+├── beta_ville_scraper.py
+├── blue_orca_report.py
+├── blue_orca_sitemap.py
+├── blueorca_scraper.py
+├── citron_scraper.py
+├── cnbc_scraper.py
+├── friendly_bear_scraper.py
+├── gmail_scraper.py
+├── gmail_scraper_a2.py
+├── grizzly_scraper.py
+├── gui_setup.md                        # Setting up gui for ubuntu server
+├── hedgeye_html_scraper.py
+├── hedgeye_new_scraper.py
+├── hedgeye_scraper.py
+├── hindenburg_scraper.py
+├── hunterbrook_post_scraper.py
+├── hunterbrook_scraper.py
+├── ibd_api_scraper.py
+├── ibd_history_scraper.py
+├── ibd_leaderboard.py
+├── ibd_stock_id_scraper.py
+├── iceberg_scraper.py
+├── jehoshaphat_scraper.py
+├── kerrisdale_scraper.py
+├── mariner_scraper.py
+├── minervini_live_id.py
+├── minervini_live_scraper.py
+├── minervini_livestream_id.py
+├── minervini_post_id.py
+├── minervini_post_scraper.py
+├── motley_accessible_rec.py
+├── motley_fool_scraper.py
+├── motley_image_scraper.py
+├── motley_instrument_scraper.py
+├── motley_rec_scraper.py
+├── motley_video_scraper.py
+├── mudddy_waters_scraper.py
+├── navallier_new_scraper.py
+├── navallier_old_csv_scraper.py
+├── navallier_old_scraper.py
+├── oxford_communique_scraper.py
+├── oxford_income_let_scraper.py
+├── oxfordclub_post_id.py
+├── oxfordclub_scraper.py
+├── oxfordclub_search_id.py
+├── oxfordclub_tradesmith.py
+├── requirements.txt                    # Project dependencies
+├── stocknews_author_html_scraper.py
+├── stocknews_html_scraper.py
+├── stocknews_scraper.py
+├── stocknews_secret_html_scraper.py
+├── substack_citrini_scraper.py
+├── substack_post_scraper.py
+├── viceroy_scraper.py
+├── wdr_article_scraper.py
+├── wdr_ticker_scraper.py
+├── wolfpack_scraper.py
+├── wolfpack_xml_scraper.py
+├── youtube_channel_monitor.py
+├── zack_commentary_scraper.py
+├── zack_html_ts_scraper.py
+└── zack_widget_scraper.py
 ```
 
 ### Important Notes
