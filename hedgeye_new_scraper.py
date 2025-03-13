@@ -660,7 +660,7 @@ async def process_accounts_continuously(
                 continue
 
             for _, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(0.7)
 
                 proxy = proxy_manager.get_next_proxy()
                 asyncio.create_task(
