@@ -312,7 +312,7 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
 
         # Small delay between batches
         if i + 3 < len(accounts):
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.4)
 
     return valid_accounts
 
