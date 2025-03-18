@@ -474,14 +474,16 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
-        log_message("Market is open. Starting service monitoring...", "INFO")
+        log_message("Market is open. Starting service monitoring...", "WARNING")
 
         _, _, market_close_time = get_next_market_times()
 
         while True:
             current_time = get_current_time()
             if current_time > market_close_time:
-                log_message("Market is closed. Waiting for next market open...", "INFO")
+                log_message(
+                    "Market is closed. Waiting for next market open...", "WARNING"
+                )
                 break
 
             log_message("Starting new scan cycle...", "INFO")
