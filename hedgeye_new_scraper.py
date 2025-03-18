@@ -682,12 +682,14 @@ async def process_account(
             )
 
             await process_fetched_archives(results, last_alert_lock, start_time)
+            return time.time() - start_time  # use this to sleep less time
 
     except Exception as e:
         if "Rate limited" in str(e):
             proxy_manager.mark_rate_limited(proxy)
             account_manager.mark_rate_limited(email)
         log_message(f"Error processing account {email}: {str(e)}", "ERROR")
+        return -0.6  # this gonna be added to the sleep time
 
 
 async def process_accounts_continuously(
@@ -704,7 +706,7 @@ async def process_accounts_continuously(
                 await asyncio.sleep(1)
                 continue
 
-            for _, (email, password) in enumerate(accounts):
+            for idx, (email, password) in enumerate(accounts):
                 await asyncio.sleep(0.3)
 
                 proxy = proxy_manager.get_next_proxy()
@@ -716,6 +718,7 @@ async def process_accounts_continuously(
                         proxy_manager,
                         last_alert_lock,
                         account_manager,
+                        idx + 1 == len(accounts),
                     )
                 )
 
@@ -733,11 +736,21 @@ async def process_account_with_release(
     proxy_manager: ProxyManager,
     last_alert_lock: asyncio.Lock,
     account_manager: AccountManager,
+    should_sleep: bool,
 ):
     try:
-        await process_account(
+        fetch_time = await process_account(
             email, password, proxy, proxy_manager, account_manager, last_alert_lock
         )
+        # NOTE: Reduce or increase this value 0.4 depending on how the server rate limits
+        time_to_sleep = 0.4 - fetch_time if fetch_time else 0
+
+        if should_sleep:
+            # FIX: remove this log later
+            log_message(
+                f"Batch completed sleeping {time_to_sleep}s before next", "INFO"
+            )
+            await asyncio.sleep(time_to_sleep)
     finally:
         await account_manager.release_account(email)
 
