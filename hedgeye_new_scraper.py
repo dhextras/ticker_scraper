@@ -688,7 +688,7 @@ async def process_account(
         if "Rate limited" in str(e):
             proxy_manager.mark_rate_limited(proxy)
             account_manager.mark_rate_limited(email)
-        log_message(f"Error processing account {email}: {str(e)}", "ERROR")
+        log_message(f"Error processing account {email} with {proxy}: {str(e)}", "ERROR")
         return -0.6  # this gonna be added to the sleep time
 
 
