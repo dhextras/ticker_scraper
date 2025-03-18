@@ -98,7 +98,12 @@ class ProxyManager:
         if not available_proxies:
             raise Exception("No available proxies")
 
-        proxy = random.choice(available_proxies)
+        if self.current_index >= len(available_proxies):
+            self.current_index = 0
+
+        proxy = available_proxies[self.current_index]
+        self.current_index += 1
+
         return proxy
 
     def mark_rate_limited(self, proxy: str):
