@@ -722,8 +722,6 @@ async def process_accounts_continuously(
                     )
                 )
 
-            await asyncio.sleep(0.3)
-
         except Exception as e:
             log_message(f"Error in process_accounts_continuously: {str(e)}", "ERROR")
             await asyncio.sleep(1)
