@@ -707,7 +707,7 @@ async def process_accounts_continuously(
                 continue
 
             for idx, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.7)
 
                 proxy = proxy_manager.get_next_proxy()
                 asyncio.create_task(
@@ -741,7 +741,7 @@ async def process_account_with_release(
             email, password, proxy, proxy_manager, account_manager, last_alert_lock
         )
         # NOTE: Reduce or increase this value 0.4 depending on how the server rate limits
-        time_to_sleep = 0.4 - fetch_time if fetch_time else 0
+        time_to_sleep = 0.3 - fetch_time if fetch_time else 0
 
         if should_sleep:
             await asyncio.sleep(time_to_sleep)
