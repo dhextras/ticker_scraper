@@ -115,29 +115,69 @@ class ProxyManager:
 class AccountManager:
     def __init__(self, accounts: List[Tuple[str, str]]):
         self.accounts = accounts
-        self.rate_limited: Set[str] = self._load_rate_limited()
+        self.rate_limited: Dict[str, datetime] = self._load_rate_limited()
         self.currently_running: Set[str] = set()
         self.lock = asyncio.Lock()
+        self.current_index = 0
 
-    def _load_rate_limited(self) -> Set[str]:
+    def _load_rate_limited(self) -> Dict[str, datetime]:
         if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
             with open(RATE_LIMIT_ACCOUNTS_FILE, "r") as f:
-                return set(json.load(f))
-        return set()
+                rate_limited = json.load(f)
+                if isinstance(rate_limited, list):
+                    return {
+                        email: datetime.fromisoformat(get_current_time().isoformat())
+                        for email in rate_limited
+                    }
+                return {k: datetime.fromisoformat(v) for k, v in rate_limited.items()}
+        return {}
 
     def _save_rate_limited(self):
         with open(RATE_LIMIT_ACCOUNTS_FILE, "w") as f:
-            json.dump(list(self.rate_limited), f)
+            rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
+            json.dump(rate_limited, f)
 
     async def get_available_accounts(self, count: int) -> List[Tuple[str, str]]:
         async with self.lock:
+            current_time = get_current_time()
+            expired_accounts = [
+                email
+                for email, limit_time in self.rate_limited.items()
+                if (current_time - limit_time).total_seconds() >= 1800  # 30 minutes
+            ]
+
+            for email in expired_accounts:
+                del self.rate_limited[email]
+                log_message(
+                    f"Account {email} removed from rate limits (30-minute expired)",
+                    "INFO",
+                )
+
+            if expired_accounts:
+                self._save_rate_limited()
+
+            # Get available accounts
             available = [
                 acc
                 for acc in self.accounts
                 if acc[0] not in self.rate_limited
                 and acc[0] not in self.currently_running
             ]
-            selected = random.sample(available, min(count, len(available)))
+
+            if not available:
+                return []
+
+            selected = []
+            remaining = count
+
+            while remaining > 0 and available:
+                if self.current_index >= len(available):
+                    self.current_index = 0
+
+                selected.append(available[self.current_index])
+                self.current_index += 1
+                remaining -= 1
+
             self.currently_running.update(email for email, _ in selected)
             return selected
 
@@ -148,9 +188,9 @@ class AccountManager:
 
     def mark_rate_limited(self, email: str):
         log_message(
-            f"account '{email}' got rate limited sleeping it for 15 min", "ERROR"
+            f"account '{email}' got rate limited sleeping it for 30 min", "ERROR"
         )
-        self.rate_limited.add(email)
+        self.rate_limited[email] = get_current_time()
         self._save_rate_limited()
 
     def clear_rate_limits(self):
@@ -312,7 +352,7 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
 
         # Small delay between batches
         if i + 3 < len(accounts):
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(0.5)
 
     return valid_accounts
 
@@ -660,7 +700,7 @@ async def process_accounts_continuously(
                 continue
 
             for _, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.7)
+                await asyncio.sleep(0.3)
 
                 proxy = proxy_manager.get_next_proxy()
                 asyncio.create_task(
@@ -674,7 +714,7 @@ async def process_accounts_continuously(
                     )
                 )
 
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.3)
 
         except Exception as e:
             log_message(f"Error in process_accounts_continuously: {str(e)}", "ERROR")
