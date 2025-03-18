@@ -242,7 +242,7 @@ async def fetch_latest_media_id(
     Fetch the latest media ID from the WordPress API
     """
     try:
-        url = f"{MEDIA_URL}?per_page=1&orderby=id&order=desc"
+        url = f"{MEDIA_URL}?orderby=id&order=desc"
         proxy = await get_available_proxy(proxies)
         response = await fetch_with_proxy(session, url, proxy, timeout=5)
         await release_proxy(proxy)
