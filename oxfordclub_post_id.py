@@ -389,10 +389,10 @@ async def process_page_multi(
     tasks = []
     tasks.append(asyncio.create_task(process_page_without_proxy(session, url)))
 
-    for _ in range(PAGE_PROCESS_CONCURRENT_REQUESTS):
-        proxy = await get_available_proxy(proxies)
-        tasks.append(asyncio.create_task(process_page(session, url, proxy)))
-        await release_proxy(proxy)
+    # for _ in range(PAGE_PROCESS_CONCURRENT_REQUESTS):
+    #     proxy = await get_available_proxy(proxies)
+    #     tasks.append(asyncio.create_task(process_page(session, url, proxy)))
+    #     await release_proxy(proxy)
 
     # Create a future for the first completed task
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
