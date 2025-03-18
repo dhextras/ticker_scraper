@@ -744,10 +744,6 @@ async def process_account_with_release(
         time_to_sleep = 0.4 - fetch_time if fetch_time else 0
 
         if should_sleep:
-            # FIX: remove this log later
-            log_message(
-                f"Batch completed sleeping {time_to_sleep}s before next", "INFO"
-            )
             await asyncio.sleep(time_to_sleep)
     finally:
         await account_manager.release_account(email)
