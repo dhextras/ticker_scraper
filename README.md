@@ -185,8 +185,13 @@ pip install -r requirements.txt
    MINERVINI_TELEGRAM_GRP=  # Telegram group ID for Miner Vini
 
    # IBD Swing Trader scraper settings
-   IBD_TELEGRAM_BOT_TOKEN= # Telegram toke for IBD
+   IBD_TELEGRAM_BOT_TOKEN= # Telegram token for IBD
    IBD_TELEGRAM_GRP= # Telegram Group for IBD
+
+   # Morpheus Research scraper settings
+   MORPHEUS_API_KEY=86f454e4bd7ac34dbc09ca1448
+   MORPHEUS_TELEGRAM_BOT_TOKEN= # Telegram token for morpheus
+   MORPHEUS_TELEGRAM_GRP= # Telegram group id for morpheus
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -281,6 +286,7 @@ python <script_name>.py
 - **MinerVini:** `minervini_live_id.py`, `minervini_live_scraper.py`, `minervini_livestream_id.py`, `minervini_post_id.py`, `minervini_post_scraper.py`
 - **IBD Swing Trader:** `ibd_api_scraper.py`, `ibd_history_scraper.py`, `ibd_stock_id_scraper.py`
 - **IBD Leaderboard:** `ibd_leaderboard.py`
+- **Morpheus Ghost:** `morpheus_ghost_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`, `blue_orca_report.py`, `blue_orca_sitemap.py`
@@ -394,6 +400,7 @@ ticker_scraper/
 ├── minervini_livestream_id.py
 ├── minervini_post_id.py
 ├── minervini_post_scraper.py
+├── morpheus_ghost_scraper.py
 ├── motley_accessible_rec.py
 ├── motley_fool_scraper.py
 ├── motley_image_scraper.py
