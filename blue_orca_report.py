@@ -58,6 +58,12 @@ async def fetch_reports(session):
                     return []
 
                 reports = []
+
+                # FIX: Remove this after fixing the issue
+                date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S")
+                with open(f"data/blue_orca_report_remove_{date}.html", "w") as f:
+                    f.write(str(table))
+
                 rows = table.select("tbody > tr")
 
                 for row in rows:
