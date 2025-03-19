@@ -291,9 +291,12 @@ async def run_scraper():
                         current_comment_id += 1
                         await save_comment_id(current_comment_id)
 
-                log_message(
-                    f"Checking comment completed in {time() - start_time:.2f} seconds"
-                )
+                total_time = time() - start_time
+                log_message(f"Checking comment completed in {total_time:.2f} seconds")
+                if total_time > 2:
+                    log_message(
+                        f"Took more then 2 seconds to fetch the commentary", "WARNING"
+                    )
                 await asyncio.sleep(CHECK_INTERVAL)
     except Exception as e:
         log_message(f"Critical error in run_scraper: {e}", "CRITICAL")
