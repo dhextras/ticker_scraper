@@ -27,9 +27,9 @@ TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 ZACKS_USERNAME = os.getenv("ZACKS_USERNAME")
 ZACKS_PASSWORD = os.getenv("ZACKS_PASSWORD")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-CHECK_INTERVAL = 0.2  # seconds
+CHECK_INTERVAL = 0.5  # seconds
 STARTING_CID = 43250  # Starting comment ID
-BROWSER_REFRESH_INTERVAL = 3600  # 1 hour in seconds
+BROWSER_REFRESH_INTERVAL = 1800  #  Half an hour
 
 DATA_DIR = Path("data")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
@@ -253,6 +253,7 @@ async def run_scraper():
                 html = fetch_commentary(current_comment_id)
 
                 if html:
+                    fetched_time = get_current_time()
                     commentary = process_commentary(html)
                     if commentary:
                         log_message(
@@ -277,7 +278,7 @@ async def run_scraper():
 
                         message = (
                             f"<b>New Zacks Commentary!</b>\n"
-                            f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                            f"<b>Current Time:</b> {fetched_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
                             f"<b>Comment Id:</b> {current_comment_id}{ticker_info}\n\n"
                             f"<b>Title:</b> {commentary['title']}\n\n"
                             f"{commentary['content'][:600]}\n\n\nthere is more......."
