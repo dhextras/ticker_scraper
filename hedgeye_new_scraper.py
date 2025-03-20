@@ -316,8 +316,15 @@ async def validate_credentials(email: str, password: str) -> Optional[Dict[str, 
                     "https://app.hedgeye.com/logged_in", cookies=cookies
                 ) as response:
                     if response.status == 200:
-                        log_message(f"Using existing cookies for {email}", "INFO")
-                        return cookies
+                        soup = BeautifulSoup(await response.text(), "html.parser")
+                        logged_message = soup.select_one(".logged-out-notice")
+                        if (
+                            not logged_message
+                            or "you are no longer logged in"
+                            not in logged_message.get_text(strip=True).lower()
+                        ):
+                            log_message(f"Using existing cookies for {email}", "INFO")
+                            return cookies
 
         # If no cookies or invalid, get new ones
         log_message(f"Getting new cookies for {email}", "INFO")
