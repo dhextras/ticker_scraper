@@ -41,6 +41,8 @@ RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
 )
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_new_last_alert.json")
 LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
+FETCH_PER_ACCOUNT = 25  # Max is 30 so we can adjust this accordingly if needed
+SLEEP_BETWEEN_REQUESTS = 0.3  # Adjust this depend on how they rate limit
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -689,14 +691,12 @@ async def process_account(
             )
 
             await process_fetched_archives(results, last_alert_lock, start_time)
-            return time.time() - start_time  # use this to sleep less time
 
     except Exception as e:
         if "Rate limited" in str(e):
             proxy_manager.mark_rate_limited(proxy)
             account_manager.mark_rate_limited(email)
         log_message(f"Error processing account {email} with {proxy}: {str(e)}", "ERROR")
-        return -0.6  # this gonna be added to the sleep time
 
 
 async def process_accounts_continuously(
@@ -706,17 +706,21 @@ async def process_accounts_continuously(
 ):
     while True:
         try:
-            accounts = await account_manager.get_available_accounts(2)
-            if not accounts:
+            accounts = await account_manager.get_available_accounts(1)
+            if not accounts and len(accounts) < 1:
                 # If no accounts available, wait briefly and try again
                 log_message("No available account found to process", "Warning")
                 await asyncio.sleep(1)
                 continue
 
-            for idx, (email, password) in enumerate(accounts):
-                await asyncio.sleep(0.7)
+            email, password = accounts[0]
+            proxy = (
+                proxy_manager.get_next_proxy()
+            )  # Use the same proxy for a single account to avoid being flagged
 
-                proxy = proxy_manager.get_next_proxy()
+            for _ in range(FETCH_PER_ACCOUNT):
+                await asyncio.sleep(SLEEP_BETWEEN_REQUESTS)
+
                 asyncio.create_task(
                     process_account_with_release(
                         email,
@@ -725,9 +729,10 @@ async def process_accounts_continuously(
                         proxy_manager,
                         last_alert_lock,
                         account_manager,
-                        idx + 1 == len(accounts),
                     )
                 )
+
+            await account_manager.release_account(email)
 
         except Exception as e:
             log_message(f"Error in process_accounts_continuously: {str(e)}", "ERROR")
@@ -741,19 +746,13 @@ async def process_account_with_release(
     proxy_manager: ProxyManager,
     last_alert_lock: asyncio.Lock,
     account_manager: AccountManager,
-    should_sleep: bool,
 ):
     try:
-        fetch_time = await process_account(
+        await process_account(
             email, password, proxy, proxy_manager, account_manager, last_alert_lock
         )
-        # NOTE: Reduce or increase this value 0.4 depending on how the server rate limits
-        time_to_sleep = 0.3 - fetch_time if fetch_time else 0
-
-        if should_sleep:
-            await asyncio.sleep(time_to_sleep)
     finally:
-        await account_manager.release_account(email)
+        pass
 
 
 async def main():
