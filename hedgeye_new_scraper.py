@@ -21,11 +21,8 @@ from seleniumrequests import Chrome
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import (
-    get_current_time,
-    get_next_market_times,
-    sleep_until_market_open,
-)
+from utils.time_utils import (get_current_time, get_next_market_times,
+                              sleep_until_market_open)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -42,7 +39,7 @@ RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_new_last_alert.json")
 LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
 FETCH_PER_ACCOUNT = 25  # Max is 30 so we can adjust this accordingly if needed
-SLEEP_BETWEEN_REQUESTS = 0.4  # Adjust this depend on how they rate limit
+SLEEP_BETWEEN_REQUESTS = 0.5  # Adjust this depend on how they rate limit
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
