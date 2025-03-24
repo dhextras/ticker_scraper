@@ -26,11 +26,12 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-BATCH_SIZE = 150  # number of requests to run concurrently
+BATCH_SIZE = 3  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
-TICKERS_FILE = DATA_DIR / "zacks_tickers.json"
+TICKERS_FILE = DATA_DIR / "zacks_tickers_300.json"  # tickers only for stock 1
+# TICKERS_FILE = DATA_DIR / "zacks_tickers.json"
 ALERTS_FILE = DATA_DIR / "zacks_widget_alerts.json"
 PROXY_FILE = CRED_DIR / "proxies.json"
 
@@ -46,7 +47,8 @@ def load_proxies() -> List[str]:
     try:
         with open(PROXY_FILE, "r") as f:
             data = json.load(f)
-            return data["zacks_widget"]
+            # NOTE: Change it to zacks later on
+            return data["hedgeye"]
     except Exception as e:
         log_message(f"Error loading proxies: {e}", "ERROR")
         return []
