@@ -4,6 +4,7 @@ import math
 import os
 import random
 import sys
+import uuid
 from pathlib import Path
 from time import time
 from typing import List, Set
@@ -74,6 +75,22 @@ async def release_proxy(proxy: str):
         active_proxies.discard(proxy)
 
 
+def get_random_cache_buster():
+    cache_busters = [
+        ("cache_timestamp", lambda: int(time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time())),
+        ("ran_time", lambda: int(time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time()))),
+    ]
+
+    variable, value_generator = random.choice(cache_busters)
+    return variable, value_generator()
+
+
 def load_tickers():
     """Load tickers from json file"""
     try:
@@ -111,9 +128,11 @@ async def save_alerts(alerts):
 async def fetch_ticker_data(session, ticker: str, proxy: str):
     """Fetch data for a single ticker using the provided proxy"""
     url = f"https://zacks.com/tradingservices/ts_ajax_data_handler.php"
+    key, value = get_random_cache_buster()
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        key: value,
     }
 
     params = {"module_type": "ticker_search", "t": ticker, "get_param": "value"}
