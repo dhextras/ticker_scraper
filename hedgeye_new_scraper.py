@@ -147,6 +147,39 @@ class AccountManager:
             rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
             json.dump(rate_limited, f)
 
+    async def get_all_available_accounts(self) -> Tuple[int, List[Tuple[str, str]]]:
+        async with self.lock:
+            current_time = get_current_time()
+            expired_accounts = [
+                email
+                for email, limit_time in self.rate_limited.items()
+                if (current_time - limit_time).total_seconds() >= 1800  # 30 minutes
+            ]
+
+            for email in expired_accounts:
+                del self.rate_limited[email]
+                log_message(
+                    f"Account {email} removed from rate limits (30-minute expired)",
+                    "INFO",
+                )
+
+            if expired_accounts:
+                self._save_rate_limited()
+
+            # Get available accounts
+            available = [
+                acc
+                for acc in self.accounts
+                if acc[0] not in self.rate_limited
+                and acc[0] not in self.currently_running
+            ]
+
+            if not available:
+                return 0, []
+
+            self.currently_running.update(email for email, _ in available)
+            return len(available), available
+
     async def get_available_accounts(
         self, count: int
     ) -> Tuple[int, List[Tuple[str, str]]]:
@@ -726,46 +759,53 @@ async def process_accounts_continuously(
 
     while True:
         try:
-            available_len, accounts = await account_manager.get_available_accounts(1)
+            # available_len, accounts = await account_manager.get_available_accounts(1)
+            available_len, accounts = await account_manager.get_all_available_accounts()
             if not accounts and len(accounts) < 1:
                 # If no accounts available, wait briefly and try again
                 log_message("No available account found to process", "Warning")
                 await asyncio.sleep(1)
                 continue
 
-            if len(all_diffs) < 1:
-                log_message(
-                    f"Finished processing single cycle of all accounts in {time.time() - start_time:.2f}s",
-                    "INFO",
-                )
-                start_time = time.time()
-                all_diffs = generate_equalized_differentiators(available_len)
-
-            email, password = accounts[0]
-            proxy = (
-                proxy_manager.get_next_proxy()
-            )  # Use the same proxy for a single account to avoid being flagged
-
-            # Use the first diff and then remove it after processing it
-            fetch_count = FETCH_PER_ACCOUNT + (all_diffs[0])
-            log_message(f"Start processing {email} with {fetch_count} requests", "INFO")
-            for _ in range(fetch_count):
-                asyncio.create_task(
-                    process_account_with_release(
-                        email,
-                        password,
-                        proxy,
-                        proxy_manager,
-                        last_alert_lock,
-                        account_manager,
+            # NOTE: Proccess all the acounts one by one then do the same for the next account before processing the next cycle
+            # Incase in future you update this function handle it in other ways.
+            for account in accounts:
+                if len(all_diffs) < 1:
+                    log_message(
+                        f"Finished processing single cycle of all accounts in {time.time() - start_time:.2f}s",
+                        "INFO",
                     )
+                    start_time = time.time()
+                    all_diffs = generate_equalized_differentiators(available_len)
+
+                # email, password = accounts[0]
+                email, password = account
+                proxy = (
+                    proxy_manager.get_next_proxy()
+                )  # Use the same proxy for a single account to avoid being flagged
+
+                # Use the first diff and then remove it after processing it
+                fetch_count = FETCH_PER_ACCOUNT + (all_diffs[0])
+                log_message(
+                    f"Start processing {email} with {fetch_count} requests", "INFO"
                 )
+                for _ in range(fetch_count):
+                    asyncio.create_task(
+                        process_account_with_release(
+                            email,
+                            password,
+                            proxy,
+                            proxy_manager,
+                            last_alert_lock,
+                            account_manager,
+                        )
+                    )
 
-                await asyncio.sleep(SLEEP_BETWEEN_REQUESTS)
+                    await asyncio.sleep(SLEEP_BETWEEN_REQUESTS)
 
-            all_diffs.pop(0)
+                all_diffs.pop(0)
 
-            await account_manager.release_account(email)
+                await account_manager.release_account(email)
 
         except Exception as e:
             log_message(f"Error in process_accounts_continuously: {str(e)}", "ERROR")
