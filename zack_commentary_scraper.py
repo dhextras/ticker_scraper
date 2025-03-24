@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from time import sleep, time
 
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
@@ -29,19 +30,22 @@ ZACKS_PASSWORD = os.getenv("ZACKS_PASSWORD")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 CHECK_INTERVAL = 0.5  # seconds
 STARTING_CID = 43250  # Starting comment ID
-BROWSER_REFRESH_INTERVAL = 1800  #  Half an hour
+BROWSER_REFRESH_INTERVAL = 1800  # Half an hour
 
 DATA_DIR = Path("data")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
+COOKIES_HEADERS_FILE = DATA_DIR / "zacks_session_data.json"
 
 # Initialize browser variables
 co = None
 page = None
+session_cookies = {}
+session_headers = {}
 
 
 def initialize_browser():
-    """Initialize a new browser instance"""
-    global co, page
+    """Initialize a new browser instance and extract cookies/headers"""
+    global co, page, session_cookies, session_headers
 
     log_message("Initializing new browser instance", "INFO")
     if page:
@@ -54,6 +58,66 @@ def initialize_browser():
     co = ChromiumOptions()
     page = ChromiumPage(co)
     log_message("New browser instance created", "INFO")
+
+    if login():
+        extract_session_data()
+
+
+def extract_session_data():
+    """Extract cookies and headers from the browser session"""
+    global session_cookies, session_headers
+
+    try:
+        log_message("Extracting session data for requests", "INFO")
+
+        page.get("https://www.zacks.com/confidential")
+        sleep(2)
+
+        sample_cid = load_last_comment_id()
+        page.get(f"https://www.zacks.com/confidential/commentary.php?cid={sample_cid}")
+        sleep(2)
+
+        browser_cookies = page.cookies()
+        session_cookies = {
+            cookie["name"]: cookie["value"] for cookie in browser_cookies
+        }
+
+        session_headers = {
+            "User-Agent": page.user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive",
+            "Referer": "https://www.zacks.com/confidential",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+        DATA_DIR.mkdir(exist_ok=True)
+        with open(COOKIES_HEADERS_FILE, "w") as f:
+            json.dump({"cookies": session_cookies, "headers": session_headers}, f)
+
+        log_message("Successfully extracted and saved session data", "INFO")
+        return True
+
+    except Exception as e:
+        log_message(f"Error extracting session data: {e}", "ERROR")
+        return False
+
+
+def load_session_data():
+    """Load saved session data if available"""
+    global session_cookies, session_headers
+
+    try:
+        if COOKIES_HEADERS_FILE.exists():
+            with open(COOKIES_HEADERS_FILE, "r") as f:
+                data = json.load(f)
+                session_cookies = data.get("cookies", {})
+                session_headers = data.get("headers", {})
+                return True
+        return False
+    except Exception as e:
+        log_message(f"Error loading session data: {e}", "ERROR")
+        return False
 
 
 def login():
@@ -166,20 +230,28 @@ def is_logged_in():
         return False
 
 
-def fetch_commentary(comment_id: int):
-    """Fetch commentary for Zacks Confidential"""
-    if not is_logged_in():
-        if not login():
-            return None
+def fetch_commentary_with_requests(comment_id: int):
+    """Fetch commentary using requests library instead of browser"""
+    global session_cookies, session_headers
 
     try:
         url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}"
-        page.get(url)
 
-        page.ele("About Zacks Confidential", timeout=10)
-        return page.html
+        response = requests.get(
+            url, cookies=session_cookies, headers=session_headers, timeout=10
+        )
+
+        if response.status_code == 200 and "About Zacks Confidential" in response.text:
+            return response.text
+        else:
+            log_message(
+                f"Request failed or content not as expected: Status {response.status_code}",
+                "WARNING",
+            )
+            return None
+
     except Exception as e:
-        log_message(f"Error fetching commentary: {e}", "ERROR")
+        log_message(f"Error fetching commentary with requests: {e}", "ERROR")
         return None
 
 
@@ -217,8 +289,9 @@ async def run_scraper():
     try:
         initialize_browser()
 
-        if not login():
-            log_message("Initial login failed. Retrying during market hours.", "ERROR")
+        if not session_cookies or not session_headers:
+            log_message("Failed to initialize session data. Exiting.", "CRITICAL")
+            return
 
         current_comment_id = load_last_comment_id()
         last_browser_refresh_time = time()
@@ -242,61 +315,87 @@ async def run_scraper():
                     current_timestamp - last_browser_refresh_time
                     >= BROWSER_REFRESH_INTERVAL
                 ):
-                    log_message("Time to refresh browser instance", "INFO")
+                    log_message(
+                        "Time to refresh browser instance and session data", "INFO"
+                    )
                     initialize_browser()
-                    if not login():
-                        log_message("Login after browser refresh failed", "ERROR")
                     last_browser_refresh_time = current_timestamp
 
                 start_time = time()
                 log_message(f"Checking comment ID: {current_comment_id}")
-                html = fetch_commentary(current_comment_id)
 
-                if html:
-                    fetched_time = get_current_time()
-                    commentary = process_commentary(html)
-                    if commentary:
-                        log_message(
-                            f"Found comment: {current_comment_id}, Title: {commentary['title']}",
-                            "INFO",
-                        )
+                html = fetch_commentary_with_requests(current_comment_id)
 
-                        ticker_info = ""
-                        if commentary["ticker"] and commentary["action"]:
-                            ticker_info = f"\n<b>Action:</b> {commentary['action']} {commentary['ticker']}"
-
-                            await send_ws_message(
-                                {
-                                    "name": "Zacks - Commentary",
-                                    "type": commentary["action"],
-                                    "ticker": commentary["ticker"],
-                                    "sender": "zacks",
-                                    "target": "CSS",
-                                },
-                                WS_SERVER_URL,
+                if not html:
+                    log_message(
+                        "Requests fetch failed, trying with browser as fallback",
+                        "WARNING",
+                    )
+                    if not is_logged_in():
+                        if not login():
+                            log_message(
+                                "Browser login failed too, skipping this iteration",
+                                "ERROR",
                             )
+                            await asyncio.sleep(CHECK_INTERVAL)
+                            continue
 
-                        message = (
-                            f"<b>New Zacks Commentary!</b>\n"
-                            f"<b>Current Time:</b> {fetched_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                            f"<b>Comment Id:</b> {current_comment_id}{ticker_info}\n\n"
-                            f"<b>Title:</b> {commentary['title']}\n\n"
-                            f"{commentary['content'][:600]}\n\n\nthere is more......."
+                    page.get(
+                        f"https://www.zacks.com/confidential/commentary.php?cid={current_comment_id}"
+                    )
+
+                    extract_session_data()
+
+                    html = fetch_commentary_with_requests(current_comment_id)
+
+                    if not html:
+                        log_message(
+                            "Both request methods failed, skipping this comment",
+                            "ERROR",
+                        )
+                        await asyncio.sleep(CHECK_INTERVAL)
+                        continue
+
+                fetched_time = get_current_time()
+                commentary = process_commentary(html)
+                if commentary:
+                    log_message(
+                        f"Found comment: {current_comment_id}, Title: {commentary['title']}",
+                        "INFO",
+                    )
+
+                    ticker_info = ""
+                    if commentary["ticker"] and commentary["action"]:
+                        ticker_info = f"\n<b>Action:</b> {commentary['action']} {commentary['ticker']}"
+
+                        await send_ws_message(
+                            {
+                                "name": "Zacks - Commentary",
+                                "type": commentary["action"],
+                                "ticker": commentary["ticker"],
+                                "sender": "zacks",
+                                "target": "CSS",
+                            },
+                            WS_SERVER_URL,
                         )
 
-                        await send_telegram_message(
-                            message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-                        )
+                    message = (
+                        f"<b>New Zacks Commentary!</b>\n"
+                        f"<b>Current Time:</b> {fetched_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                        f"<b>Comment Id:</b> {current_comment_id}{ticker_info}\n\n"
+                        f"<b>Title:</b> {commentary['title']}\n\n"
+                        f"{commentary['content'][:600]}\n\n\nthere is more......."
+                    )
 
-                        current_comment_id += 1
-                        await save_comment_id(current_comment_id)
+                    await send_telegram_message(
+                        message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+                    )
+
+                    current_comment_id += 1
+                    await save_comment_id(current_comment_id)
 
                 total_time = time() - start_time
                 log_message(f"Checking comment completed in {total_time:.2f} seconds")
-                if total_time > 2:
-                    log_message(
-                        f"Took more then 2 seconds to fetch the commentary", "WARNING"
-                    )
                 await asyncio.sleep(CHECK_INTERVAL)
     except Exception as e:
         log_message(f"Critical error in run_scraper: {e}", "CRITICAL")
@@ -308,6 +407,11 @@ def main():
         sys.exit(1)
 
     try:
+        if not load_session_data():
+            log_message(
+                "No saved session data found, will create after browser init", "INFO"
+            )
+
         asyncio.run(run_scraper())
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
