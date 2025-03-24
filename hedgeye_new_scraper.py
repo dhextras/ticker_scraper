@@ -781,7 +781,6 @@ async def process_account_with_release(
     account_manager: AccountManager,
 ):
     try:
-        log_message(f"just nothing with email {email}")
         await process_account(
             email, password, proxy, proxy_manager, account_manager, last_alert_lock
         )
