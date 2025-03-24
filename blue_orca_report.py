@@ -55,14 +55,9 @@ async def fetch_reports(session):
 
                 if not table:
                     log_message("Table not found on the page", "ERROR")
-                    return []
+                    return None, []
 
                 reports = []
-
-                # FIX: Remove this after fixing the issue
-                date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S")
-                with open(f"data/blue_orca_report_remove_{date}.html", "w") as f:
-                    f.write(str(table))
 
                 rows = table.select("tbody > tr")
 
@@ -88,16 +83,16 @@ async def fetch_reports(session):
                             )
 
                 log_message(f"Fetched {len(reports)} reports", "INFO")
-                return reports
+                return table, reports
             elif 500 <= response.status < 600:
                 log_message(
                     f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
                     "WARNING",
                 )
-                return []
+                return None, []
             else:
                 log_message(f"Failed to fetch reports: HTTP {response.status}", "ERROR")
-                return []
+                return None, []
     except Exception as e:
         log_message(f"Error fetching reports: {e}", "ERROR")
         return []
@@ -147,7 +142,7 @@ async def run_report_monitor():
                     break
 
                 log_message("Checking for new reports...")
-                reports = await fetch_reports(session)
+                table, reports = await fetch_reports(session)
 
                 for report in reports:
                     report_url = report["url"]
@@ -155,6 +150,13 @@ async def run_report_monitor():
                         log_message(f"Found new report: {report['title']}", "INFO")
                         await send_report_to_telegram(report)
                         processed_reports.add(report_url)
+
+                        # FIX: Remove this after fixing the issue
+                        date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S")
+                        with open(
+                            f"data/blue_orca_report_remove_{date}.html", "w"
+                        ) as f:
+                            f.write(str(table))
 
                 if reports:
                     save_processed_reports(processed_reports)
