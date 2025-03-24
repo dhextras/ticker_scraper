@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import random
 import re
@@ -21,8 +22,11 @@ from seleniumrequests import Chrome
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import (get_current_time, get_next_market_times,
-                              sleep_until_market_open)
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import send_ws_message
 
 load_dotenv()
@@ -38,7 +42,9 @@ RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
 )
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_new_last_alert.json")
 LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
-FETCH_PER_ACCOUNT = 25  # Max is 30 so we can adjust this accordingly if needed
+FETCH_PER_ACCOUNT = (
+    25  # Max is 30 so we can adjust this accordingly if needed ( We will use -+2)
+)
 SLEEP_BETWEEN_REQUESTS = 0.5  # Adjust this depend on how they rate limit
 
 
@@ -141,7 +147,9 @@ class AccountManager:
             rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
             json.dump(rate_limited, f)
 
-    async def get_available_accounts(self, count: int) -> List[Tuple[str, str]]:
+    async def get_available_accounts(
+        self, count: int
+    ) -> Tuple[int, List[Tuple[str, str]]]:
         async with self.lock:
             current_time = get_current_time()
             expired_accounts = [
@@ -169,7 +177,7 @@ class AccountManager:
             ]
 
             if not available:
-                return []
+                return 0, []
 
             selected = []
             remaining = count
@@ -183,7 +191,7 @@ class AccountManager:
                 remaining -= 1
 
             self.currently_running.update(email for email, _ in selected)
-            return selected
+            return len(available), selected
 
     async def release_account(self, email: str):
         async with self.lock:
@@ -203,6 +211,17 @@ class AccountManager:
         if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
             os.remove(RATE_LIMIT_ACCOUNTS_FILE)
         log_message("All account rate limits cleared", "INFO")
+
+
+def generate_equalized_differentiators(list_len):
+    full_list = []
+    ran_list = [-2, -1, 0, 1, 2]
+
+    for _ in range(math.ceil(list_len / len(ran_list))):
+        ran_list = random.sample(ran_list, len(ran_list))
+        full_list += ran_list
+
+    return full_list[:list_len]
 
 
 def get_random_cache_buster():
@@ -700,24 +719,37 @@ async def process_accounts_continuously(
     account_manager: AccountManager,
     proxy_manager: ProxyManager,
     last_alert_lock: asyncio.Lock,
+    init_valid_accounts: int,
 ):
+    start_time = time.time()
+    all_diffs = generate_equalized_differentiators(init_valid_accounts)
+
     while True:
         try:
-            accounts = await account_manager.get_available_accounts(1)
+            available_len, accounts = await account_manager.get_available_accounts(1)
             if not accounts and len(accounts) < 1:
                 # If no accounts available, wait briefly and try again
                 log_message("No available account found to process", "Warning")
                 await asyncio.sleep(1)
                 continue
 
+            if len(all_diffs) < 1:
+                log_message(
+                    f"Finished processing single cycle of all accounts in {time.time() - start_time:.2f}s",
+                    "INFO",
+                )
+                start_time = time.time()
+                all_diffs = generate_equalized_differentiators(available_len)
+
             email, password = accounts[0]
             proxy = (
                 proxy_manager.get_next_proxy()
             )  # Use the same proxy for a single account to avoid being flagged
 
-            for _ in range(FETCH_PER_ACCOUNT):
-                await asyncio.sleep(SLEEP_BETWEEN_REQUESTS)
-
+            # Use the first diff and then remove it after processing it
+            fetch_count = FETCH_PER_ACCOUNT + (all_diffs[0])
+            log_message(f"Start processing {email} with {fetch_count} requests", "INFO")
+            for _ in range(fetch_count):
                 asyncio.create_task(
                     process_account_with_release(
                         email,
@@ -728,6 +760,10 @@ async def process_accounts_continuously(
                         account_manager,
                     )
                 )
+
+                await asyncio.sleep(SLEEP_BETWEEN_REQUESTS)
+
+            all_diffs.pop(0)
 
             await account_manager.release_account(email)
 
@@ -745,6 +781,7 @@ async def process_account_with_release(
     account_manager: AccountManager,
 ):
     try:
+        log_message(f"just nothing with email {email}")
         await process_account(
             email, password, proxy, proxy_manager, account_manager, last_alert_lock
         )
@@ -793,7 +830,7 @@ async def main():
 
             process_task = asyncio.create_task(
                 process_accounts_continuously(
-                    account_manager, proxy_manager, last_alert_lock
+                    account_manager, proxy_manager, last_alert_lock, len(valid_accounts)
                 )
             )
 
