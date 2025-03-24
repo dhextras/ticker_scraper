@@ -7,6 +7,7 @@ from time import time
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
 
+from utils.bypass_cloudflare import bypasser
 from utils.gpt_ticker_extractor import TickerAnalysis, analyze_image_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -23,6 +24,7 @@ load_dotenv()
 JSON_URL = "https://iceberg-research.com/wp-json/wp/v2/media"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/iceberg_processed_urls.json"
+SESSION_FILE = "data/iceberg_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ICEBERG_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ICEBERG_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
@@ -52,6 +54,16 @@ async def fetch_json():
     try:
         start_time = time()
         page.get(JSON_URL)
+        if "just a moment" in page.title.lower():
+            bypass = bypasser(JSON_URL, SESSION_FILE)
+            if not bypass or bypass is False:
+                log_message(
+                    "Failed to bypass cloudflare, ignore if infrequent", "WARNING"
+                )
+                return []
+
+            page.get(JSON_URL)
+
         data = page.json
         log_message(
             f"Fetched {len(data)} posts from JSON in {time() - start_time:2f}", "INFO"
