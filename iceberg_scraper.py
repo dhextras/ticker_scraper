@@ -51,6 +51,8 @@ def save_processed_urls(urls):
 
 
 async def fetch_json():
+    global page, co
+
     try:
         start_time = time()
         page.get(JSON_URL)
@@ -62,6 +64,8 @@ async def fetch_json():
                 )
                 return []
 
+            co = ChromiumOptions()
+            page = ChromiumPage(co)
             page.get(JSON_URL)
 
         data = page.json
