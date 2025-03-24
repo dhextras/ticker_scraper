@@ -64,6 +64,11 @@ async def fetch_json():
                 )
                 return []
 
+            try:
+                page.quit()
+            except:
+                pass
+
             co = ChromiumOptions()
             page = ChromiumPage(co)
             page.get(JSON_URL)
