@@ -1,11 +1,10 @@
 import asyncio
 import json
 import os
-import random
 import re
 import sys
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import requests
@@ -36,17 +35,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 STARTING_ID = 133350  # A bit higher than the highest in the known list
-PROXY_FILE = "cred/proxies.json"
-PAGE_PROCESS_CONCURRENT_REQUESTS = (
-    5  # Number of concurrent ( with proxy ) requests to process a page
-)
 
 os.makedirs("data", exist_ok=True)
-os.makedirs("cred", exist_ok=True)
-
-# Global variables for proxy management
-active_proxies: Set[str] = set()
-proxy_lock = asyncio.Lock()
 
 
 def load_latest_id() -> Optional[int]:
@@ -94,105 +84,8 @@ def get_headers() -> Dict[str, str]:
     }
 
 
-def load_proxies() -> List[str]:
-    """Load proxies from json file"""
-    try:
-        with open(PROXY_FILE, "r") as f:
-            data = json.load(f)
-            return data.get("oxford_tradesmith", [])
-    except Exception as e:
-        log_message(f"Error loading proxies: {e}", "ERROR")
-        return []
-
-
-async def get_available_proxy(proxies: List[str]) -> str:
-    """Get a random available proxy that isn't currently in use"""
-    async with proxy_lock:
-        available_proxies = set(proxies) - active_proxies
-        if not available_proxies:
-            log_message(
-                "No available proxies, waiting for one to be released", "WARNING"
-            )
-            # Release the lock while waiting
-            await asyncio.sleep(0.5)
-            return await get_available_proxy(proxies)
-
-        proxy = random.choice(list(available_proxies))
-        active_proxies.add(proxy)
-        return proxy
-
-
-async def release_proxy(proxy: str) -> None:
-    """Release a proxy back to the available pool"""
-    async with proxy_lock:
-        active_proxies.discard(proxy)
-
-
-async def fetch_with_proxy(
-    session: requests.Session,
-    url: str,
-    proxy: str,
-    headers: Optional[Dict[str, str]] = None,
-    timeout: int = 15,
-) -> Optional[requests.Response]:
-    """Make a request using a proxy"""
-    response = None
-    try:
-        proxies = {
-            "http": proxy,
-            "https": proxy,
-        }
-
-        response = await asyncio.to_thread(
-            session.get,
-            url,
-            proxies=proxies,
-            headers=headers if headers else get_headers(),
-            timeout=timeout,
-        )
-        await release_proxy(proxy)
-        return response
-    except requests.Timeout:
-        await release_proxy(proxy)
-        log_message(
-            f"Took more then {timeout} sec to fetch {url} with proxy: {proxy}",
-            "WARNING",
-        )
-        return response
-    except Exception as e:
-        await release_proxy(proxy)
-        log_message(f"Error with proxy {proxy}: {e}", "ERROR")
-        return response
-
-
-async def fetch_without_proxy(
-    session: requests.Session,
-    url: str,
-    headers: Optional[Dict[str, str]] = None,
-    timeout: int = 15,
-) -> Optional[requests.Response]:
-    """Make a request without using a proxy"""
-    try:
-        response = await asyncio.to_thread(
-            session.get,
-            url,
-            headers=headers if headers else get_headers(),
-            timeout=timeout,
-        )
-        return response
-    except requests.Timeout:
-        log_message(
-            f"Took more then {timeout} sec to fetch {url} without proxy",
-            "WARNING",
-        )
-        return None
-    except Exception as e:
-        log_message(f"Error without proxy: {e}", "ERROR")
-        return None
-
-
 async def check_post_by_id(
-    session: requests.Session, post_id: int, proxies: List[str]
+    session: requests.Session, post_id: int
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Check if a post with the given ID exists by querying the Posts API
@@ -200,14 +93,12 @@ async def check_post_by_id(
     try:
         start_time = time.time()
         url = f"{POSTS_URL}?include={post_id}"
-        # FIX: Remove this later and use proxy to fetch
-        # proxy = await get_available_proxy(proxies)
-        # response = await fetch_with_proxy(session, url, proxy, timeout=3)
-        # await release_proxy(proxy)
-        response = await fetch_without_proxy(session, url)
+        response = await asyncio.to_thread(
+            session.get, url, headers=get_headers(), timeout=15
+        )
         time_to_fetch = time.time() - start_time
 
-        if response and response.status_code == 200:
+        if response.status_code == 200:
             data = response.json()
             if data and isinstance(data, list) and len(data) > 0:
                 log_message(f"Found post with ID: {post_id}", "INFO")
@@ -216,7 +107,7 @@ async def check_post_by_id(
                     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
                     url = found_post.get("link", "")
-                    await process_page_multi(session, url, proxies)
+                    await process_page(session, url)
 
                     await send_post_to_telegram(found_post, timestamp, time_to_fetch)
 
@@ -225,61 +116,27 @@ async def check_post_by_id(
             else:
                 return None
         else:
-            status_code = response.status_code if response else None
-            if status_code:
-                log_message(
-                    f"Failed to check post ID {post_id}: HTTP {status_code}",
-                    "ERROR",
-                )
+            log_message(
+                f"Failed to check post ID {post_id}: HTTP {response.status_code}",
+                "ERROR",
+            )
             return None
     except Exception as e:
         log_message(f"Error checking post ID {post_id}: {e}", "ERROR")
         return None
 
 
-async def fetch_latest_media_id(
-    session: requests.Session, proxies: List[str]
-) -> Optional[int]:
-    """
-    Fetch the latest media ID from the WordPress API
-    """
-    try:
-        url = f"{MEDIA_URL}?orderby=id&order=desc"
-        proxy = await get_available_proxy(proxies)
-        response = await fetch_with_proxy(session, url, proxy, timeout=5)
-        await release_proxy(proxy)
-
-        if response and response.status_code == 200:
-            data = response.json()
-            if data and isinstance(data, list) and len(data) > 0:
-                media_id = data[0].get("id")
-                log_message(f"Latest media ID found: {media_id}", "INFO")
-                return media_id
-            else:
-                log_message("No media items found", "WARNING")
-                return None
-        else:
-            status_code = response.status_code if response else None
-            if status_code:
-                log_message(
-                    f"Failed to fetch latest media ID: HTTP {status_code}",
-                    "ERROR",
-                )
-            return None
-    except Exception as e:
-        log_message(f"Error fetching latest media ID: {e}", "ERROR")
-        return None
-
-
 async def process_page(
-    session: requests.Session, url: str, proxy: str
+    session: requests.Session, url: str
 ) -> Optional[Tuple[str, str, str, float]]:
     try:
         start_time = time.time()
-        response = await fetch_with_proxy(session, url, proxy)
+        response = await asyncio.to_thread(
+            session.get, url, headers=get_headers(), timeout=15
+        )
         total_seconds = time.time() - start_time
 
-        if response and response.status_code == 200:
+        if response.status_code == 200:
             content = response.text
             soup = BeautifulSoup(content, "html.parser")
             all_text = soup.get_text(separator=" ", strip=True)
@@ -302,6 +159,10 @@ async def process_page(
                     and sell_match.start() < ticker_match.start()
                 ):
                     exchange, ticker = ticker_match.groups()
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    await send_match_to_telegram(
+                        url, ticker, exchange, "Sell", timestamp, total_seconds
+                    )
                     return (ticker, exchange, "Sell", total_seconds)
                 elif (
                     buy_match
@@ -309,114 +170,21 @@ async def process_page(
                     and buy_match.start() < ticker_match.start()
                 ):
                     exchange, ticker = ticker_match.groups()
-                    return (ticker, exchange, "Buy", total_seconds)
-                elif not ticker_match:
-                    log_message(f"No ticker found in section: {url}", "WARNING")
-                elif not buy_match or (
-                    buy_match
-                    and ticker_match
-                    and buy_match.start() > ticker_match.start()
-                ):
-                    log_message(
-                        f"'Buy' not found before ticker in section: {url}", "WARNING"
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    await send_match_to_telegram(
+                        url, ticker, exchange, "Buy", timestamp, total_seconds
                     )
+                    return (ticker, exchange, "Buy", total_seconds)
 
             log_message(
                 f"Took {total_seconds:.2f}s to fetch and process URL: {url}", "WARNING"
             )
         else:
-            status_code = response.status_code if response else None
-            if status_code:
-                log_message(f"Failed to fetch page: HTTP {status_code}", "ERROR")
+            log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
     except Exception as e:
         log_message(f"Error processing page {url}: {e}", "ERROR")
 
     return None
-
-
-async def process_page_without_proxy(
-    session: requests.Session, url: str
-) -> Optional[Tuple[str, str, str, float]]:
-    """Process page without using any proxy"""
-    try:
-        start_time = time.time()
-        response = await fetch_without_proxy(session, url)
-        total_seconds = time.time() - start_time
-
-        if response and response.status_code == 200:
-            content = response.text
-            soup = BeautifulSoup(content, "html.parser")
-            all_text = soup.get_text(separator=" ", strip=True)
-
-            action_sections = re.split(r"Action to Take", all_text, flags=re.IGNORECASE)
-
-            if len(action_sections) < 2:
-                log_message(f"'Action to Take' not found (no proxy): {url}", "WARNING")
-
-            for section in action_sections[1:]:
-                buy_match = re.search(r"Buy", section, re.IGNORECASE)
-                sell_match = re.search(r"Sell", section, re.IGNORECASE)
-                ticker_match = re.search(
-                    r"(NYSE|NASDAQ):\s*(\w+)", section, re.IGNORECASE
-                )
-
-                if (
-                    sell_match
-                    and ticker_match
-                    and sell_match.start() < ticker_match.start()
-                ):
-                    exchange, ticker = ticker_match.groups()
-                    return (ticker, exchange, "Sell", total_seconds)
-                elif (
-                    buy_match
-                    and ticker_match
-                    and buy_match.start() < ticker_match.start()
-                ):
-                    exchange, ticker = ticker_match.groups()
-                    return (ticker, exchange, "Buy", total_seconds)
-
-        return None
-    except Exception as e:
-        log_message(f"Error processing page without proxy {url}: {e}", "ERROR")
-        return None
-
-
-async def process_page_multi(
-    session: requests.Session, url: str, proxies: List[str]
-) -> None:
-    """Process page with multiple concurrent requests (with and without proxies)"""
-    # Create tasks for processing with multiple proxies + one without proxy
-    tasks = []
-    tasks.append(asyncio.create_task(process_page_without_proxy(session, url)))
-
-    # for _ in range(PAGE_PROCESS_CONCURRENT_REQUESTS):
-    #     proxy = await get_available_proxy(proxies)
-    #     tasks.append(asyncio.create_task(process_page(session, url, proxy)))
-    #     await release_proxy(proxy)
-
-    # Create a future for the first completed task
-    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
-    # Process the first completed task
-    first_result = None
-    for task in done:
-        result = task.result()
-        if result:
-            first_result = result
-            break
-
-    for task in pending:
-        task.cancel()
-
-    # If we got a result, send it to Telegram
-    if first_result:
-        ticker, exchange, action, total_seconds = first_result
-        timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-        await send_match_to_telegram(
-            url, ticker, exchange, action, timestamp, total_seconds
-        )
-    else:
-        log_message(f"No actionable content found in page: {url}", "WARNING")
 
 
 async def send_post_to_telegram(
@@ -439,16 +207,6 @@ async def send_match_to_telegram(
     timestamp: str,
     total_seconds: float,
 ) -> None:
-    # await send_ws_message(
-    #     {
-    #         "name": "Oxford Club - Post ID",
-    #         "type": action,
-    #         "ticker": ticker,
-    #         "sender": "oxfordclub",
-    #     },
-    #     WS_SERVER_URL,
-    # )
-
     message = f"<b>New Stock Match Found - Post ID</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
@@ -456,20 +214,18 @@ async def send_match_to_telegram(
     message += f"<b>Article Fetch time:</b> {total_seconds:.2f}s\n"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(
-        f"Match sent to Telegram and WebSocket: {exchange}:{ticker} - {url}", "INFO"
-    )
+    log_message(f"Match sent to Telegram: {exchange}:{ticker} - {url}", "INFO")
 
 
 async def check_batch_of_posts(
-    session: requests.Session, latest_id: int, batch_size: int, proxies: List[str]
+    session: requests.Session, latest_id: int, batch_size: int
 ) -> int:
-    """Check a batch of post IDs concurrently using multiple proxies"""
+    """Check a batch of post IDs concurrently"""
     tasks = []
 
     for offset in range(batch_size):
         current_id = latest_id + offset + 1
-        tasks.append(check_post_by_id(session, current_id, proxies))
+        tasks.append(check_post_by_id(session, current_id))
 
     results = await asyncio.gather(*tasks)
 
@@ -489,11 +245,6 @@ async def run_scraper() -> None:
     if not latest_id:
         latest_id = STARTING_ID
         save_latest_id(latest_id)
-
-    proxies = load_proxies()
-    if not proxies:
-        log_message("No proxies available. Exiting...", "CRITICAL")
-        return
 
     session = requests.Session()
     if not login_sync(session):
@@ -516,18 +267,7 @@ async def run_scraper() -> None:
             log_message(f"Checking for new posts from ID: {latest_id + 1}", "INFO")
 
             # Check a batch of posts concurrently
-            found_id = await check_batch_of_posts(
-                session, latest_id, BATCH_SIZE, proxies
-            )
-
-            # Fetch the latest media ID and compare the highest ID
-            latest_media_id = await fetch_latest_media_id(session, proxies)
-            if latest_media_id and latest_media_id > found_id:
-                log_message(
-                    f"Latest media ID {latest_media_id} is higher than found post ID {found_id}",
-                    "INFO",
-                )
-                found_id = latest_media_id
+            found_id = await check_batch_of_posts(session, latest_id, BATCH_SIZE)
 
             if found_id > latest_id:
                 latest_id = found_id
@@ -539,7 +279,7 @@ async def run_scraper() -> None:
 
 
 def main() -> None:
-    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

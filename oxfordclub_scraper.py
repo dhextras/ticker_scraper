@@ -98,8 +98,6 @@ def login_sync(session):
 
 
 async def process_page(session, url):
-    cache_timestamp = int(time.time() * 10000)
-    cache_uuid = uuid4()
 
     try:
         headers = {
@@ -107,8 +105,6 @@ async def process_page(session, url):
             "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
             "pragma": "no-cache",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
-            "cache-timestamp": str(cache_timestamp),
-            "cache-uuid": str(cache_uuid),
         }
 
         start_time = time.time()
