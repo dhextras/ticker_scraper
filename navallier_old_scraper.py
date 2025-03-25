@@ -149,7 +149,7 @@ def fetch_flash_alerts(proxy) -> List:
         )
 
         response = requests.get(
-            f"{JSON_URL}?{cache_param}={cache_value}",
+            f"{JSON_URL}&{cache_param}={cache_value}",
             headers=headers,
             proxies=proxies,
             timeout=3,
