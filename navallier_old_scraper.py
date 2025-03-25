@@ -4,10 +4,11 @@ import os
 import random
 import re
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 from time import time
-from typing import List, Set
+from typing import List, Set, Tuple
 
 import pytz
 import requests
@@ -57,6 +58,27 @@ def load_proxies():
     except Exception as e:
         log_message(f"Error loading proxies: {e}", "CRITICAL")
         sys.exit(1)
+
+
+def get_random_cache_buster() -> Tuple[str, str]:
+    """
+    Generate a random cache-busting parameter.
+
+    Returns:
+        Tuple of (parameter_name, parameter_value)
+    """
+    cache_busters = [
+        ("cache_timestamp", lambda: str(int(time() * 10000))),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: str(int(time()))),
+        ("ran_time", lambda: str(int(time() * 1000))),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time()))),
+    ]
+    variable, value_generator = random.choice(cache_busters)
+    return variable, value_generator()
 
 
 def load_saved_alerts() -> Set[str]:
@@ -120,12 +142,18 @@ def extract_tickers(title):
 def fetch_flash_alerts(proxy) -> List:
     """Fetch and parse article data from InvestorPlace"""
     try:
+        cache_param, cache_value = get_random_cache_buster()
         headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
         proxies = (
             {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
         )
 
-        response = requests.get(JSON_URL, headers=headers, proxies=proxies, timeout=3)
+        response = requests.get(
+            f"{JSON_URL}?{cache_param}={cache_value}",
+            headers=headers,
+            proxies=proxies,
+            timeout=3,
+        )
 
         if response.status_code == 200:
             return response.json()
