@@ -22,7 +22,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://iceberg-research.com/wp-json/wp/v2/media"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 2  # seconds
 PROCESSED_URLS_FILE = "data/iceberg_processed_urls.json"
 SESSION_FILE = "data/iceberg_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ICEBERG_TELEGRAM_BOT_TOKEN")
