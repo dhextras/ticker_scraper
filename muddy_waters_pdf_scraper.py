@@ -140,7 +140,7 @@ async def fetch_pdfs_for_dates(session, cookies, date=None):
 
     # Try different date formats
     date_formats = [
-        date.strftime("%d%m%Y"),  # ddmmyyyy
+        date.strftime("%m%d%Y"),  # mmddyyyy
         date.strftime("%Y%m%d"),  # yyyymmdd
     ]
 
@@ -153,12 +153,13 @@ async def fetch_pdfs_for_dates(session, cookies, date=None):
         log_message(f"Attempting to fetch: {url}", "INFO")
         title = await download_pdf(session, url, cookies)
 
+        # If the cookies got refresh return the new one
         if title is not None and isinstance(title, dict):
             cookies = title
-        else:
+        elif title and isinstance(title, dict):
             processed_pdfs.add(url)
+            save_processed_pdfs(processed_pdfs)
 
-    save_processed_pdfs(processed_pdfs)
     return cookies
 
 
