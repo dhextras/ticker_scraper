@@ -113,7 +113,7 @@ async def download_pdf(session, url, cookies):
                 first_page = extract_text(pdf_file, page_numbers=[0])
                 title = first_page.split("\n")[0].strip()
 
-                pattern = r"\b[A-Z]{3,5}\b"
+                pattern = r"\b[A-Z]{3,6}\b"
                 match = re.search(pattern, title)
 
                 await send_telegram_notification(url, title, match)

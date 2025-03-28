@@ -145,10 +145,10 @@ async def extract_ticker_from_pdf(session, url, cookies):
                 first_page = extract_text(pdf_file, page_numbers=[0])
                 title = first_page.split("\n")[0].strip()
 
-                pattern = r"\b[A-Z]{3,5}\b"
+                pattern = r"\b[A-Z]{3,6}\b"
                 match = re.search(pattern, title)
 
-                await send_to_telegram(url, match)
+                await send_to_telegram(url, title, match)
                 return None
 
             elif response.status == 403:
@@ -180,12 +180,13 @@ async def send_posts_to_telegram(urls):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_to_telegram(url, match):
+async def send_to_telegram(url, title, match):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
     message = f"<b>New Muddy Waters Ticker found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
+    message += f"<b>Title:</b> {title}\n"
 
     if match:
         message += f"<b>Ticker:</b> {match.group(0)}\n"
