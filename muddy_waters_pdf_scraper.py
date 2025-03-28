@@ -19,6 +19,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import send_ws_message
 
 load_dotenv()
 
@@ -29,6 +30,7 @@ TELEGRAM_GRP = os.getenv("MUDDY_WATERS_TELEGRAM_GRP")
 SESSION_FILE = "data/muddy_waters_session.json"
 PROCESSED_PDFS_FILE = "data/muddy_waters_processed_pdfs.json"
 CHECK_INTERVAL = 3  # seconds
+WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -87,11 +89,21 @@ async def send_telegram_notification(url, title, match):
         f"<b>Muddy Waters PDF Found</b>\n\n"
         f"<b>Time:</b> {timestamp}\n"
         f"<b>URL:</b> {url}\n"
-        f"<b>Title:</b> {title}"
+        f"<b>Title:</b> {title}\n"
     )
 
     if match:
         message += f"<b>Ticker:</b> {match.group(0)}"
+        await send_ws_message(
+            {
+                "name": "Muddy Waters - PDF",
+                "type": "Sell",
+                "ticker": match.group(0),
+                "sender": "muddy_waters",
+                "target": "CSS",
+            },
+            WS_SERVER_URL,
+        )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"PDF notification sent: {url}", "INFO")
