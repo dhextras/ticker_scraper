@@ -8,11 +8,16 @@ from typing import Any, Dict, Optional
 
 import aiohttp
 from dotenv import load_dotenv
-from PyPDF2 import PdfReader
+from pdfminer.high_level import extract_text
 
 from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 
 load_dotenv()
 
@@ -98,11 +103,11 @@ async def download_pdf(session, url, cookies):
         async with session.get(url, headers=headers, cookies=cookies) as response:
             if response.status == 200:
                 pdf_content = await response.read()
+                pdf_file = io.BytesIO(pdf_content)
 
                 # Read PDF title
-                pdf_reader = PdfReader(io.BytesIO(pdf_content))
-                first_page = pdf_reader.pages[0]
-                title = first_page.extract_text().split("\n")[0].strip()
+                first_page = extract_text(pdf_file, page_numbers=[0])
+                title = first_page.split("\n")[0].strip()
 
                 await send_telegram_notification(url, title)
 
@@ -166,12 +171,25 @@ async def run_pdf_fetcher():
 
     async with aiohttp.ClientSession() as session:
         while True:
-            # NOTE: send the custom date if needed
-            # custom_date = datetime(datetime.now().year, 12, 28)
-            # cookies = await fetch_pdfs_for_dates(session, cookies, custom_date)
+            await sleep_until_market_open()
+            log_message("Market is open. Starting to check for new posts...", "DEBUG")
+            _, _, market_close_time = get_next_market_times()
 
-            cookies = await fetch_pdfs_for_dates(session, cookies)
-            await asyncio.sleep(CHECK_INTERVAL)
+            while True:
+                current_time = get_current_time()
+
+                if current_time > market_close_time:
+                    log_message(
+                        "Market is closed. Waiting for next market open...", "DEBUG"
+                    )
+                    break
+
+                # NOTE: send the custom date if needed
+                # custom_date = datetime(2025, 01, 15)
+                # cookies = await fetch_pdfs_for_dates(session, cookies, custom_date)
+
+                cookies = await fetch_pdfs_for_dates(session, cookies)
+                await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
