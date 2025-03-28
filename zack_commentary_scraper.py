@@ -1,8 +1,10 @@
 import asyncio
 import json
 import os
+import random
 import re
 import sys
+import uuid
 from pathlib import Path
 from time import sleep, time
 
@@ -230,12 +232,29 @@ def is_logged_in():
         return False
 
 
+def get_random_cache_buster():
+    cache_busters = [
+        ("cache_timestamp", lambda: int(time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time())),
+        ("ran_time", lambda: int(time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time()))),
+    ]
+
+    variable, value_generator = random.choice(cache_busters)
+    return variable, value_generator()
+
+
 def fetch_commentary_with_requests(comment_id: int):
     """Fetch commentary using requests library instead of browser"""
     global session_cookies, session_headers
 
     try:
-        url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}"
+        key, value = get_random_cache_buster()
+        url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}&{key}={value}"
 
         response = requests.get(
             url, cookies=session_cookies, headers=session_headers, timeout=10
