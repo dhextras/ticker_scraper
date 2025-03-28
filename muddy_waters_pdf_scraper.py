@@ -120,7 +120,6 @@ async def download_pdf(session, url, cookies):
                 return cookies
 
             elif response.status == 404:
-                log_message(f"PDF not found: {url}", "WARNING")
                 return None
 
             else:
@@ -132,7 +131,7 @@ async def download_pdf(session, url, cookies):
         return None
 
 
-async def fetch_pdfs_for_dates(session, cookies, date=None):
+async def fetch_pdfs_for_dates(session, cookies, market_close_time, date=None):
     if not date:
         date = datetime.now()
 
@@ -156,9 +155,16 @@ async def fetch_pdfs_for_dates(session, cookies, date=None):
         # If the cookies got refresh return the new one
         if title is not None and isinstance(title, dict):
             cookies = title
-        elif title and isinstance(title, dict):
+        elif title and not isinstance(title, dict):
             processed_pdfs.add(url)
             save_processed_pdfs(processed_pdfs)
+
+            sleep_seconds = (market_close_time - get_current_time()).total_seconds()
+            log_message(
+                f"Valid alert found for today. Waiting for {sleep_seconds:.2f} seconds until market close.",
+                "WARNING",
+            )
+            await asyncio.sleep(sleep_seconds)
 
     return cookies
 
@@ -187,9 +193,11 @@ async def run_pdf_fetcher():
 
                 # NOTE: send the custom date if needed
                 # custom_date = datetime(2025, 1, 15)
-                # cookies = await fetch_pdfs_for_dates(session, cookies, custom_date)
+                # cookies = await fetch_pdfs_for_dates(session, cookies, market_close_time, custom_date)
 
-                cookies = await fetch_pdfs_for_dates(session, cookies)
+                cookies = await fetch_pdfs_for_dates(
+                    session, cookies, market_close_time
+                )
                 await asyncio.sleep(CHECK_INTERVAL)
 
 
