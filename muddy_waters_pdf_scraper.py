@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -80,7 +81,7 @@ def save_processed_pdfs(pdfs):
     log_message("Processed PDFs saved.", "INFO")
 
 
-async def send_telegram_notification(url, title):
+async def send_telegram_notification(url, title, match):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     message = (
         f"<b>Muddy Waters PDF Found</b>\n\n"
@@ -88,6 +89,9 @@ async def send_telegram_notification(url, title):
         f"<b>URL:</b> {url}\n"
         f"<b>Title:</b> {title}"
     )
+
+    if match:
+        message += f"<b>Ticker:</b> {match.group(0)}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"PDF notification sent: {url}", "INFO")
@@ -109,7 +113,10 @@ async def download_pdf(session, url, cookies):
                 first_page = extract_text(pdf_file, page_numbers=[0])
                 title = first_page.split("\n")[0].strip()
 
-                await send_telegram_notification(url, title)
+                pattern = r"\b[A-Z]{3,5}\b"
+                match = re.search(pattern, title)
+
+                await send_telegram_notification(url, title, match)
 
                 return title
 

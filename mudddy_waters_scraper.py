@@ -143,19 +143,14 @@ async def extract_ticker_from_pdf(session, url, cookies):
                 pdf_file = io.BytesIO(pdf_content)
 
                 first_page = extract_text(pdf_file, page_numbers=[0])
+                title = first_page.split("\n")[0].strip()
 
-                # Look for capitalized words after brackets
-                bracket_pattern = r"\((.*?)\)"
-                matches = re.findall(bracket_pattern, first_page)
+                pattern = r"\b[A-Z]{3,5}\b"
+                match = re.search(pattern, title)
 
-                if matches:
-                    # Take the first all-caps word after a bracket
-                    for match in matches:
-                        if match.isupper():
-                            return match, None
+                await send_to_telegram(url, match)
+                return None
 
-                log_message(f"No ticker found in PDF: {url}", "WARNING")
-                return None, None
             elif response.status == 403:
                 log_message(
                     f"CF_CLEARANCE expired trying to revalidate it while fetching url: {url}",
@@ -164,13 +159,13 @@ async def extract_ticker_from_pdf(session, url, cookies):
                 cookies = load_cookies(frash=True)
                 if not cookies:
                     raise Exception(f"CF_CLEARANCE Failed, url: {url}")
-                return None, cookies
+                return cookies
             else:
                 log_message(f"Failed to fetch PDF: HTTP {response.status}", "ERROR")
-                return None, None
+                return None
     except Exception as e:
         log_message(f"Error processing PDF {url}: {e}", "ERROR")
-        return None, None
+        return None
 
 
 async def send_posts_to_telegram(urls):
@@ -185,26 +180,29 @@ async def send_posts_to_telegram(urls):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_to_telegram(url, ticker):
+async def send_to_telegram(url, match):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
     message = f"<b>New Muddy Waters Ticker found</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
-    message += f"<b>Ticker:</b> {ticker}\n"
 
-    await send_ws_message(
-        {
-            "name": "Muddy Waters",
-            "type": "Sell",
-            "ticker": ticker,
-            "sender": "muddy_waters",
-            "target": "CSS",
-        },
-        WS_SERVER_URL,
-    )
+    if match:
+        message += f"<b>Ticker:</b> {match.group(0)}\n"
+
+        await send_ws_message(
+            {
+                "name": "Muddy Waters",
+                "type": "Sell",
+                "ticker": match.group(0),
+                "sender": "muddy_waters",
+                "target": "CSS",
+            },
+            WS_SERVER_URL,
+        )
+
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Report sent to Telegram and WebSocket: {ticker} - {url}", "INFO")
+    log_message(f"Report sent to Telegram and WebSocket: {url}", "INFO")
 
 
 async def run_scraper():
@@ -252,15 +250,13 @@ async def run_scraper():
 
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
-                            ticker, pos_cookies = await extract_ticker_from_pdf(
+                            pos_cookies = await extract_ticker_from_pdf(
                                 session, url, cookies
                             )
 
                             cookies = (
                                 pos_cookies if pos_cookies is not None else cookies
                             )
-                            if ticker:
-                                await send_to_telegram(url, ticker)
                         processed_urls.add(url)
 
                     await send_posts_to_telegram(new_urls)
