@@ -145,7 +145,7 @@ async def fetch_pdfs_for_dates(session, cookies, date=None):
     ]
 
     for date_str in date_formats:
-        url = (f"{BASE_URL}/{date.year}/{date.month:02d}/MW_{date_str}.pdf",)
+        url = f"{BASE_URL}/{date.year}/{date.month:02d}/MW_{date_str}.pdf"
 
         if url in processed_pdfs:
             continue
@@ -185,7 +185,7 @@ async def run_pdf_fetcher():
                     break
 
                 # NOTE: send the custom date if needed
-                # custom_date = datetime(2025, 01, 15)
+                # custom_date = datetime(2025, 1, 15)
                 # cookies = await fetch_pdfs_for_dates(session, cookies, custom_date)
 
                 cookies = await fetch_pdfs_for_dates(session, cookies)
