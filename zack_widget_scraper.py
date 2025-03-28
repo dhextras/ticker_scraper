@@ -27,12 +27,11 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
-BATCH_SIZE = 1  # number of requests to run concurrently
+BATCH_SIZE = 250  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
-TICKERS_FILE = DATA_DIR / "zacks_tickers_300.json"  # tickers only for stock 1
-# TICKERS_FILE = DATA_DIR / "zacks_tickers.json"
+TICKERS_FILE = DATA_DIR / "zacks_tickers.json"
 ALERTS_FILE = DATA_DIR / "zacks_widget_alerts.json"
 PROXY_FILE = CRED_DIR / "proxies.json"
 
@@ -48,8 +47,7 @@ def load_proxies() -> List[str]:
     try:
         with open(PROXY_FILE, "r") as f:
             data = json.load(f)
-            # NOTE: Change it to zacks later on
-            return data["hedgeye"]
+            return data["zacks_widget"]
     except Exception as e:
         log_message(f"Error loading proxies: {e}", "ERROR")
         return []
@@ -309,39 +307,39 @@ async def run_scraper():
 
             try:
                 all_results = []
-                # tasks = []
+                tasks = []
 
                 # NOTE: Run Every batch one by one to avoid getting hit with the home page
-                for i in range(0, len(tickers), BATCH_SIZE):
-                    start_time_2 = time()
-                    batch = tickers[i : i + BATCH_SIZE]
-                    proxy = await get_available_proxy(proxies)
-
-                    # Process the batch sequentially
-                    batch_result = await process_batch(batch, proxy)
-                    all_results.extend(batch_result)
-                    log_message(
-                        f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f} with proxy {proxy}",
-                        "INFO",
-                    )
-
-                    await release_proxy(proxy)
+                # for i in range(0, len(tickers), BATCH_SIZE):
+                #     start_time_2 = time()
+                #     batch = tickers[i : i + BATCH_SIZE]
+                #     proxy = await get_available_proxy(proxies)
+                #
+                #     # Process the batch sequentially
+                #     batch_result = await process_batch(batch, proxy)
+                #     all_results.extend(batch_result)
+                #     log_message(
+                #         f"fetched batch {i//BATCH_SIZE + 1}/{math.ceil(len(tickers)/BATCH_SIZE)} in {(time()- start_time_2):2f} with proxy {proxy}",
+                #         "INFO",
+                #     )
+                #
+                #     await release_proxy(proxy)
 
                 # NOTE: Create all tasks at once - use it if provne usefull
-                # for i in range(0, len(tickers), BATCH_SIZE):
-                #     batch = tickers[i : i + BATCH_SIZE]
-                #
-                #     tasks.append(process_batch(batch, proxy))
-                #
-                # # Run all batches truly concurrently
-                # batch_results = await asyncio.gather(*tasks)
-                #
-                # # Flatten results
-                # for batch in batch_results:
-                #     all_results.extend(batch)
-                #
+                for i in range(0, len(tickers), BATCH_SIZE):
+                    proxy = await get_available_proxy(proxies)
+                    batch = tickers[i : i + BATCH_SIZE]
 
-                await asyncio.sleep(30)
+                    tasks.append(process_batch(batch, proxy))
+
+                # Run all batches truly concurrently
+                batch_results = await asyncio.gather(*tasks)
+
+                # Flatten results
+                for batch in batch_results:
+                    all_results.extend(batch)
+
+                await asyncio.sleep(1)
                 await process_results(all_results)
 
                 log_message(
