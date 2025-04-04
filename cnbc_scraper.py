@@ -186,6 +186,44 @@ async def capture_login_response(message):
         log_message(f"Error in capture_login_response: {e}", "ERROR")
 
 
+def extracte_blockquote_text(article_body):
+    if not article_body:
+        return None
+
+    for content_block in article_body:
+        if content_block.get("tagName") == "div":
+            for child in content_block.get("children", []):
+                if child.get("tagName") == "blockquote":
+                    elements = child.get("children", [])
+
+                    joined_text = ""
+
+                    def extract_text(element):
+                        # Recursively extract text from allowed tags
+                        text = ""
+                        if isinstance(element, str):
+                            return element
+                        if isinstance(element, dict):
+                            tag = element.get("tagName")
+                            if tag in [
+                                "p",
+                                "ul",
+                                "ol",
+                                "li",
+                                "div",
+                            ]:  # Allowed tags
+                                for child in element.get("children", []):
+                                    text += extract_text(child)
+                        return text
+
+                    for element in elements:
+                        joined_text += f" {extract_text(element)}"
+
+                    return joined_text.strip()
+
+    return None
+
+
 async def get_article_data(article_id, uid, session_token):
     await rate_limiter.acquire()
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
@@ -244,40 +282,7 @@ async def get_article_data(article_id, uid, session_token):
                         .get("content", [])
                     )
 
-                    if article_body:
-                        for content_block in article_body:
-                            if content_block.get("tagName") == "div":
-                                for child in content_block.get("children", []):
-                                    if child.get("tagName") == "blockquote":
-                                        elements = child.get("children", [])
-
-                                        joined_text = ""
-
-                                        def extract_text(element):
-                                            # Recursively extract text from allowed tags
-                                            text = ""
-                                            if isinstance(element, str):
-                                                return element
-                                            if isinstance(element, dict):
-                                                tag = element.get("tagName")
-                                                if tag in [
-                                                    "p",
-                                                    "ul",
-                                                    "ol",
-                                                    "li",
-                                                    "div",
-                                                ]:  # Allowed tags
-                                                    for child in element.get(
-                                                        "children", []
-                                                    ):
-                                                        text += extract_text(child)
-                                            return text
-
-                                        for element in elements:
-                                            joined_text += f" {extract_text(element)}"
-
-                                        return joined_text
-                    return None
+                    return extracte_blockquote_text(article_body)
                 elif 500 <= response.status < 600:
                     log_message(
                         f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
@@ -305,7 +310,7 @@ def get_ticker(data):
 
 
 def get_random_cache_buster():
-    """Generate random cache busting url variable for requests"""
+    """Generate a random cache-busting URL variable based on weekday-restricted choices."""
     cache_busters = [
         ("timestamp_uniq", lambda: int(time.time() * 10000)),
         ("request_uuid", lambda: str(uuid.uuid4())),
@@ -315,9 +320,33 @@ def get_random_cache_buster():
         ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
         ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
         ("tist", lambda: str(int(time.time()))),
+        ("cb_rand", lambda: random.randint(100000, 999999)),
+        ("session_id", lambda: uuid.uuid4().hex),
+        ("uid", lambda: f"u{random.randint(10000, 99999)}"),
+        ("tick_ms", lambda: int(time.time() * 1000)),
+        ("cb_uid", lambda: uuid.uuid4().hex[:10]),
+        ("cb_tock", lambda: f"{int(time.time())}_{random.randint(0, 999)}"),
+        ("zulu_time", lambda: get_current_time().strftime("%Y%m%dT%H%M%SZ")),
+        ("cb_xid", lambda: f"xid{random.randint(1000000, 9999999)}"),
+        ("uniq_val", lambda: f"val{random.randint(10000, 99999)}"),
+        ("meta_time", lambda: f"mt_{int(time.time())}"),
+        ("hex_token", lambda: uuid.uuid4().hex[:12]),
+        ("burst", lambda: str(int(time.perf_counter() * 1e6))),
+        ("ts_hex", lambda: hex(int(time.time()))[2:]),
+        ("cb_id", lambda: f"id{random.randint(0, 99999)}"),
+        ("time_marker", lambda: f"tm{int(time.time())}"),
+        ("ping_id", lambda: f"p{uuid.uuid4().hex[:6]}"),
+        ("echo", lambda: f"e{int(time.time()*100)}"),
     ]
 
-    variable, value_generator = random.choice(cache_busters)
+    # Determine the weekday (0=Monday, 4=Friday)
+    weekday = get_current_time().weekday()
+    if weekday >= 5:
+        weekday = random.randint(0, 4)
+
+    daily_subset = cache_busters[weekday * 5 : (weekday + 1) * 5]
+
+    variable, value_generator = random.choice(daily_subset)
     return (variable, value_generator())
 
 
