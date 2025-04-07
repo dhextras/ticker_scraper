@@ -1,4 +1,5 @@
 import asyncio
+import random
 from datetime import datetime, timedelta
 
 import pytz
@@ -46,6 +47,9 @@ async def sleep_until_market_open(start=6, end=19):
 
     if current_time < pre_market_login_time:
         sleep_duration = (pre_market_login_time - current_time).total_seconds()
+        sleep_duration += random.choice(
+            [i for i in range(0, 60)]
+        )  # NOTE: Extra random time to avoid overloading telegram bot
         log_message(
             f"Sleeping until pre-market login time. Sleep duration: {sleep_duration:.2f} seconds",
             "INFO",
