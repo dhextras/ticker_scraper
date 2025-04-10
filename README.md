@@ -189,9 +189,13 @@ pip install -r requirements.txt
    IBD_TELEGRAM_GRP= # Telegram Group for IBD
 
    # Morpheus Research scraper settings
-   MORPHEUS_API_KEY=86f454e4bd7ac34dbc09ca1448
+   MORPHEUS_API_KEY= # Morpheus api key
    MORPHEUS_TELEGRAM_BOT_TOKEN= # Telegram token for morpheus
    MORPHEUS_TELEGRAM_GRP= # Telegram group id for morpheus
+
+   # Spruce Point Capital scraper settings
+   SPRUCEPOINT_TELEGRAM_BOT_TOKEN= # Telegram bot token for Spruce Point alerts
+   SPRUCEPOINT_TELEGRAM_GRP= # Telegram group/channel ID for Spruce Point alerts
    ```
 
 **Note:** Fill in the values for each variable as needed.
