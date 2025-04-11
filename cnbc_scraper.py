@@ -10,8 +10,7 @@ import uuid
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Set
-from uuid import uuid4
+from typing import Dict, List, Set, Tuple
 
 import aiohttp
 import requests
@@ -350,13 +349,13 @@ def get_random_cache_buster():
     return (variable, value_generator())
 
 
-async def fetch_latest_assets() -> List[Dict]:
+async def fetch_latest_assets() -> Tuple[List[Dict], str]:
     """Fetch latest alerts from CNBC Investing Club"""
+    cache_buster = get_random_cache_buster()
+    key = cache_buster[0]
+
     try:
         base_url = "https://webql-redesign.cnbcfm.com/graphql"
-        timestamp = int(time.time() * 10000)
-        cache_uuid = uuid4()
-        cache_buster = get_random_cache_buster()
 
         variables = {
             "id": "15838187",
@@ -377,8 +376,6 @@ async def fetch_latest_assets() -> List[Dict]:
             "operationName": "getAssetList",
             "variables": json.dumps(variables),
             "extensions": json.dumps(extensions),
-            "buster-timestamp": str(timestamp),
-            "cache-uuid-buster": str(cache_uuid),
             cache_buster[0]: str(cache_buster[1]),
         }
 
@@ -401,25 +398,25 @@ async def fetch_latest_assets() -> List[Dict]:
             log_message(
                 f"Response JSON is None, Raw response: {response.text}", "WARNING"
             )
-            return []
+            return [], key
 
         if "data" not in response_json or response_json["data"] is None:
-            return []
+            return [], key
 
         data = response_json["data"]
         if "assetList" not in data or data["assetList"] is None:
             log_message(f"Asset list is None, Response data: {data}", "WARNING")
-            return []
+            return [], key
 
         asset_list = data["assetList"]
         if "assets" not in asset_list or asset_list["assets"] is None:
             log_message(f"Assets is None, Asset list: {asset_list}", "WARNING")
-            return []
+            return [], key
 
-        return asset_list["assets"]
+        return asset_list["assets"], key
     except Exception as e:
         log_message(f"Error fetching alerts: {e}", "ERROR")
-        return []
+        return [], key
 
 
 async def process_article(article, uid, session_token, fetch_time):
@@ -477,9 +474,11 @@ async def check_for_new_alerts(uid, session_token):
 
     try:
         start = time.time()
-        current_articles = await fetch_latest_assets()
+        current_articles, key = await fetch_latest_assets()
         fetch_time = time.time() - start
-        log_message(f"fetch_latest_assets took {fetch_time:.2f} seconds")
+        log_message(
+            f"fetch_latest_assets took {fetch_time:.2f} seconds, with key ${key}"
+        )
 
         articles_updated = False
 
