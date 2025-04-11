@@ -476,9 +476,7 @@ async def check_for_new_alerts(uid, session_token):
         start = time.time()
         current_articles, key = await fetch_latest_assets()
         fetch_time = time.time() - start
-        log_message(
-            f"fetch_latest_assets took {fetch_time:.2f} seconds, with key ${key}"
-        )
+        log_message(f"fetch_latest_assets took {fetch_time:.2f} seconds, with: {key}")
 
         articles_updated = False
 
