@@ -195,7 +195,11 @@ pip install -r requirements.txt
 
    # Spruce Point Capital scraper settings
    SPRUCEPOINT_TELEGRAM_BOT_TOKEN= # Telegram bot token for Spruce Point alerts
-   SPRUCEPOINT_TELEGRAM_GRP= # Telegram group/channel ID for Spruce Point alerts
+   SPRUCEPOINT_TELEGRAM_GRP= # Telegram group ID for Spruce Point alerts
+
+   # Spruce Point Capital scraper settings
+   FUZZYPANDA_TELEGRAM_BOT_TOKEN= # Telegram bot token for Fuzzy panda
+   FUZZYPANDA_TELEGRAM_GRP= # Telegram group ID for Fuzzy panda
    ```
 
 **Note:** Fill in the values for each variable as needed.
