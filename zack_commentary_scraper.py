@@ -33,9 +33,10 @@ STARTING_CID = 43250  # Starting comment ID
 BROWSER_REFRESH_INTERVAL = 1800  # Half an hour
 
 DATA_DIR = Path("data")
+CRED_DIR = Path("cred")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
 COOKIES_HEADERS_FILE = DATA_DIR / "zacks_session_data.json"
-CREDENTIALS_FILE = DATA_DIR / "zacks_credentials.json"
+CREDENTIALS_FILE = CRED_DIR / "zacks_credentials.json"
 
 # Initialize browser variables
 co = None
