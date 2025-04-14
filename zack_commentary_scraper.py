@@ -184,6 +184,9 @@ def login(email, password):
                 page.get("https://www.zacks.com/my-account/")
                 sleep(2)
 
+        page.get("https://www.zacks.com/my-account/")
+        sleep(2)
+
         username_input = page.ele("#username_default")
         password_input = page.ele("#password_default")
         login_div = (
