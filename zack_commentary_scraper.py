@@ -27,8 +27,6 @@ load_dotenv()
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
-ZACKS_USERNAME = os.getenv("ZACKS_USERNAME")
-ZACKS_PASSWORD = os.getenv("ZACKS_PASSWORD")
 WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 CHECK_INTERVAL = 0.5  # seconds
 STARTING_CID = 43250  # Starting comment ID
@@ -37,19 +35,58 @@ BROWSER_REFRESH_INTERVAL = 1800  # Half an hour
 DATA_DIR = Path("data")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
 COOKIES_HEADERS_FILE = DATA_DIR / "zacks_session_data.json"
+CREDENTIALS_FILE = DATA_DIR / "zacks_credentials.json"
 
 # Initialize browser variables
 co = None
 page = None
 session_cookies = {}
 session_headers = {}
+current_account_index = 0
+accounts = []
+total_accounts = 0
+
+
+def load_credentials():
+    """Load credentials from the JSON file"""
+    global accounts, total_accounts
+
+    try:
+        if CREDENTIALS_FILE.exists():
+            with open(CREDENTIALS_FILE, "r") as f:
+                accounts = json.load(f)
+                total_accounts = len(accounts)
+                if total_accounts == 0:
+                    log_message("No accounts found in credentials file", "CRITICAL")
+                    sys.exit(1)
+                log_message(
+                    f"Loaded {total_accounts} accounts from credentials file", "INFO"
+                )
+                return True
+        else:
+            log_message(f"Credentials file not found at {CREDENTIALS_FILE}", "CRITICAL")
+            sys.exit(1)
+    except Exception as e:
+        log_message(f"Error loading credentials: {e}", "CRITICAL")
+        sys.exit(1)
+
+
+def get_next_account():
+    """Get the next account to use"""
+    global current_account_index, accounts, total_accounts
+
+    account = accounts[current_account_index]
+    current_account_index = (current_account_index + 1) % total_accounts
+    return account["email"], account["password"]
 
 
 def initialize_browser():
     """Initialize a new browser instance and extract cookies/headers"""
     global co, page, session_cookies, session_headers
 
-    log_message("Initializing new browser instance", "INFO")
+    email, password = get_next_account()
+    log_message(f"Initializing new browser instance with account: {email}", "INFO")
+
     if page:
         try:
             page.quit()
@@ -61,8 +98,13 @@ def initialize_browser():
     page = ChromiumPage(co)
     log_message("New browser instance created", "INFO")
 
-    if login():
+    if login(email, password):
         extract_session_data()
+    else:
+        log_message(f"Failed to login with account: {email}", "ERROR")
+        return False
+
+    return True
 
 
 def extract_session_data():
@@ -122,19 +164,24 @@ def load_session_data():
         return False
 
 
-def login():
+def login(email, password):
     """Login to Zacks using DrissionPage"""
     try:
-        log_message("Trying to login", "INFO")
+        log_message(f"Trying to login with account: {email}", "INFO")
         page.get("https://www.zacks.com/my-account/")
         sleep(2)
 
         if is_logged_in():
-            log_message("Already logged in....", "WARNING")
-            page.get("https://www.zacks.com/confidential")
-            sleep(2)
-
-            return True
+            log_message("Already logged in, logging out first", "WARNING")
+            try:
+                logout_ele = page.ele("#logout", timeout=2)
+                logout_ele.click()
+                sleep(2)
+            except:
+                log_message("Failed to logout, clearing cookies", "WARNING")
+                page.clear_cache()
+                page.get("https://www.zacks.com/my-account/")
+                sleep(2)
 
         username_input = page.ele("#username_default")
         password_input = page.ele("#password_default")
@@ -149,8 +196,8 @@ def login():
 
         login_input = login_div.ele("tag:input", timeout=0.1)
 
-        username_input.input(ZACKS_USERNAME)
-        password_input.input(ZACKS_PASSWORD)
+        username_input.input(email)
+        password_input.input(password)
 
         login_input.click()
 
@@ -158,16 +205,16 @@ def login():
 
         try:
             if is_logged_in():
-                log_message("Login successful", "INFO")
+                log_message(f"Login successful with account: {email}", "INFO")
                 page.get("https://www.zacks.com/confidential")
                 sleep(2)
                 return True
         except:
-            log_message("Login failed", "ERROR")
+            log_message(f"Login failed with account: {email}", "ERROR")
             return False
 
     except Exception as e:
-        log_message(f"Error during login: {e}", "ERROR")
+        log_message(f"Error during login with account {email}: {e}", "ERROR")
         return False
 
 
@@ -224,8 +271,8 @@ async def save_comment_id(comment_id: int):
 def is_logged_in():
     """Check if we are still logged in"""
     try:
-        loggout_ele = page.ele("#logout", timeout=5)
-        if "NoneElement" in str(loggout_ele):
+        logout_ele = page.ele("#logout", timeout=5)
+        if "NoneElement" in str(logout_ele):
             return False
         return True
     except:
@@ -303,10 +350,56 @@ def process_commentary(html: str):
         return None
 
 
+async def try_with_another_account():
+    """Try with another account when the current one fails"""
+    global current_account_index, accounts
+
+    # If we've tried all accounts and still failed, exit
+    accounts_tried = 0
+
+    while accounts_tried < total_accounts:
+        accounts_tried += 1
+        email, password = get_next_account()
+        log_message(f"Switching to account: {email}", "INFO")
+
+        # Clear cookies and cache
+        if page:
+            try:
+                page.clear_cache()
+                log_message("Browser cache cleared", "INFO")
+            except Exception as e:
+                log_message(f"Error clearing cache: {e}", "WARNING")
+                # Try to recreate the browser
+                try:
+                    page.quit()
+                except:
+                    pass
+                co = ChromiumOptions()
+                page = ChromiumPage(co)
+
+        # Try to login with the new account
+        if login(email, password):
+            if extract_session_data():
+                log_message(f"Successfully switched to account: {email}", "INFO")
+                return True
+
+        log_message(f"Failed to login with account: {email}", "ERROR")
+
+    log_message("All accounts have failed. Exiting.", "CRITICAL")
+    return False
+
+
 async def run_scraper():
     """Main scraper loop that respects market hours"""
     try:
-        initialize_browser()
+        load_credentials()
+
+        if not initialize_browser():
+            if not await try_with_another_account():
+                log_message(
+                    "Failed to initialize with any account. Exiting.", "CRITICAL"
+                )
+                return
 
         if not session_cookies or not session_headers:
             log_message("Failed to initialize session data. Exiting.", "CRITICAL")
@@ -314,6 +407,7 @@ async def run_scraper():
 
         current_comment_id = load_last_comment_id()
         last_browser_refresh_time = time()
+        consecutive_failures = 0
 
         while True:
             await sleep_until_market_open()
@@ -337,7 +431,12 @@ async def run_scraper():
                     log_message(
                         "Time to refresh browser instance and session data", "INFO"
                     )
-                    initialize_browser()
+                    if not initialize_browser():
+                        if not await try_with_another_account():
+                            log_message(
+                                "All accounts have failed. Exiting.", "CRITICAL"
+                            )
+                            return
                     last_browser_refresh_time = current_timestamp
 
                 start_time = time()
@@ -351,13 +450,20 @@ async def run_scraper():
                         "WARNING",
                     )
                     if not is_logged_in():
-                        if not login():
+                        email, password = (
+                            accounts[current_account_index - 1]["email"],
+                            accounts[current_account_index - 1]["password"],
+                        )
+                        if not login(email, password):
                             log_message(
-                                "Browser login failed too, skipping this iteration",
+                                "Browser login failed too, trying with another account",
                                 "ERROR",
                             )
-                            await asyncio.sleep(CHECK_INTERVAL)
-                            continue
+                            if not await try_with_another_account():
+                                log_message(
+                                    "All accounts have failed. Exiting.", "CRITICAL"
+                                )
+                                return
 
                     page.get(
                         f"https://www.zacks.com/confidential/commentary.php?cid={current_comment_id}"
@@ -372,8 +478,24 @@ async def run_scraper():
                             "Both request methods failed, skipping this comment",
                             "ERROR",
                         )
+                        consecutive_failures += 1
+
+                        if consecutive_failures >= 3:
+                            log_message(
+                                "Multiple consecutive failures, trying with another account",
+                                "WARNING",
+                            )
+                            if not await try_with_another_account():
+                                log_message(
+                                    "All accounts have failed. Exiting.", "CRITICAL"
+                                )
+                                return
+                            consecutive_failures = 0
+
                         await asyncio.sleep(CHECK_INTERVAL)
                         continue
+
+                consecutive_failures = 0
 
                 fetched_time = get_current_time()
                 commentary = process_commentary(html)
@@ -421,7 +543,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ZACKS_USERNAME, ZACKS_PASSWORD]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
