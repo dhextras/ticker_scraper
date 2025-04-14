@@ -121,6 +121,19 @@ def analyze_email_from_investors(subject):
     return None
 
 
+def analyze_email_from_fuzzypanda(email_body):
+    pattern = (
+        r"Fuzzy Panda Research is\s+\*?\*?Short\*?\*?\s+(?:[A-Za-z\s]+)?\(([A-Z]+)\)"
+    )
+
+    matches = re.findall(pattern, email_body)
+
+    if matches:
+        return matches[0]
+
+    return None
+
+
 async def process_email(service, message_id):
     msg = (
         service.users()
@@ -140,6 +153,8 @@ async def process_email(service, message_id):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
     stock_symbol = None
     sender_type = None
+    order_type = "Buy"  # Default order type
+    target = None
 
     if from_email in ["oxford@mp.oxfordclub.com", "oxford@mb.oxfordclub.com"]:
         sender_type = "oxfordclub"
@@ -147,30 +162,47 @@ async def process_email(service, message_id):
     elif from_email == "stewie@artoftrading.net":
         sender_type = "stewie"
         stock_symbol = analyze_email_from_artoftrading(subject)
+    elif from_email == "info@fuzzypandaresearch.com":
+        sender_type = "fuzzypanda"
+        stock_symbol = analyze_email_from_fuzzypanda(email_body)
+        order_type = "Sell"
+        target = "CSS"
     # elif from_email == "do-not-reply@mail.investors.com":
     #     stock_symbol = analyze_email_from_investors(subject)
 
     if stock_symbol and sender_type:
-        await send_stock_alert(timestamp, from_email, sender_type, stock_symbol)
+        await send_stock_alert(
+            timestamp, from_email, sender_type, stock_symbol, order_type, target
+        )
 
 
-async def send_stock_alert(timestamp, sender, sender_type, stock_symbol):
+async def send_stock_alert(
+    timestamp, sender, sender_type, stock_symbol, order_type="Buy", target=None
+):
     message = f"<b>New Stock Alert A1</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>Sender:</b> {sender}\n"
+    message += f"<b>Order Type:</b> {order_type}\n"
     message += f"<b>Stock Symbol:</b> {stock_symbol}\n"
 
+    ws_message = {
+        "name": f"{sender_type.capitalize()} G A1",
+        "type": order_type,
+        "ticker": stock_symbol,
+        "sender": sender_type,
+    }
+
+    if target:
+        ws_message["target"] = target
+
     await send_ws_message(
-        {
-            "name": f"{sender_type.capitalize()} G A1",
-            "type": "Buy",
-            "ticker": stock_symbol,
-            "sender": sender_type,
-        },
+        ws_message,
         WS_SERVER_URL,
     )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
-    log_message(f"Stock alert sent: {stock_symbol} from {sender}", "INFO")
+    log_message(
+        f"Stock alert sent: {stock_symbol} from {sender} ({order_type})", "INFO"
+    )
 
 
 async def run_gmail_scraper():
