@@ -132,8 +132,8 @@ pip install -r requirements.txt
    # Zacks Trading Service settings
    ZACKS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Zacks alerts
    ZACKS_TELEGRAM_GRP=  # Telegram group ID for Zacks alerts
-   ZACKS_USERNAME=  # Zacks login username
-   ZACKS_PASSWORD=  # Zacks login password
+   ZACKS_USERNAME=  # Zacks login username ts html scraper
+   ZACKS_PASSWORD=  # Zacks login password ts html
 
    # Youtube Channel Monitor settings
    YOUTUBE_TELEGRAM_BOT_TOKEN= # Telegram bot token for youtube channel monitor
@@ -353,7 +353,8 @@ ticker_scraper/
 │   ├── ibd_creds.json
 │   ├── proxies.json
 │   ├── substack_cookies.json
-│   └── youtube_api_keys.json
+│   ├── youtube_api_keys.json
+│   └── zacks_credentials.json
 ├── data/                         # Folder to save scraper data to access later
 ├── log/                          # Folder for log files
 ├── utils/                        # Utility functions
