@@ -3,7 +3,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -24,6 +23,7 @@ load_dotenv()
 AUTHOR_URL = "https://app.stocks.news/blogs/category/secret-alerts"
 CHECK_INTERVAL = 0.1
 PROCESSED_JSON_FILE = "data/stocknews_secret_html_processed_urls.json"
+TICKER_LIST_FILE = "data/stocksnews_processed_tickers.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
 
@@ -69,6 +69,19 @@ def save_processed_urls(urls):
         json.dump(urls, f, indent=2)
 
 
+def load_processed_tickers():
+    try:
+        with open(TICKER_LIST_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+
+def save_processed_tickers(tickers):
+    with open(TICKER_LIST_FILE, "w") as f:
+        json.dump(tickers, f, indent=2)
+
+
 async def fetch_blog_content(session, url):
     """
     Fetch the content of a blog post asynchronously to check for stock symbols.
@@ -97,33 +110,6 @@ async def fetch_blog_content(session, url):
         return {"url": url, "text_content": None, "error": str(e)}
 
 
-def check_for_date_in_url(url):
-    """
-    Check if a URL contains current date references in various formats.
-
-    Args:
-        url (str): The URL to check
-
-    Returns:
-        bool: True if URL contains current date, False otherwise
-    """
-    now = datetime.now()
-
-    date_patterns = [
-        # Formats like "116" for January 16
-        rf"{now.month}{now.day:02d}",
-        # Format like "12425" for 1/24/25
-        rf"{now.month}{now.day:02d}{now.year % 100:02d}",
-    ]
-
-    for pattern in date_patterns:
-        if pattern in url or pattern.replace("/", "") in url:
-            log_message(f"Date pattern {pattern} found in URL: {url}", "INFO")
-            return True
-
-    return False
-
-
 async def process_new_entries(session, current_entries, processed_urls):
     """
     Asynchronously process blog entries, checking for new or changed titles.
@@ -136,17 +122,7 @@ async def process_new_entries(session, current_entries, processed_urls):
     Returns:
         list: List of entries that are new or have changed titles
     """
-    # Get current date in various formats
-    now = datetime.now()
-    current_date_formats = [
-        now.strftime("%m/%d"),  # MM/DD (with leading zeros)
-        now.strftime("%m/%d/%Y"),  # MM/DD/YYYY (with leading zeros)
-        now.strftime("%m/%d/%y"),  # MM/DD/YY (with leading zeros)
-        now.strftime("%-m/%-d"),  # M/D (without leading zeros)
-        now.strftime("%-m/%-d/%Y"),  # M/D/YYYY (without leading zeros)
-        now.strftime("%-m/%-d/%y"),  # M/D/YY (without leading zeros)
-    ]
-
+    processed_tickers = load_processed_tickers()
     new_or_changed_entries = []
     content_fetch_entries = []
 
@@ -154,6 +130,11 @@ async def process_new_entries(session, current_entries, processed_urls):
     for entry in current_entries:
         url = entry["url"]
         title = entry["title"]
+
+        # Skip posts with "update" or "sponsored" in the title
+        if "update" in title.lower() or "sponsored" in title.lower():
+            log_message(f"Skipping update/sponsored post: {title}", "INFO")
+            continue
 
         if url not in processed_urls or processed_urls[url].get("title") != title:
             new_or_changed_entries.append(entry)
@@ -183,42 +164,39 @@ async def process_new_entries(session, current_entries, processed_urls):
         text_content = content_info["text_content"]
         stock_symbol = None
 
-        # Check for current date in URL
-        url_has_current_date = check_for_date_in_url(url)
-
-        # Check if title contains today's date
-        has_current_date = (
-            any(date_format in title for date_format in current_date_formats)
-            or url_has_current_date
+        # Check for stock symbols in title
+        nasdaq_ticker_match = re.search(
+            r"(?:NASDAQ|NYSE)[:;]\s*([A-Z]+)", title, re.IGNORECASE
         )
-
-        if has_current_date and "update" not in title.lower():
-            nasdaq_ticker_match = re.search(
-                r"(?:NASDAQ|NYSE)[:;]\s*([A-Z]+)", title, re.IGNORECASE
+        if nasdaq_ticker_match:
+            stock_symbol = nasdaq_ticker_match.group(1)
+            log_message(
+                f"Match found in title with NASDAQ/NYSE format: {stock_symbol} in {url}",
+                "INFO",
             )
-            if nasdaq_ticker_match:
-                stock_symbol = nasdaq_ticker_match.group(1)
-                log_message(
-                    f"Match found in title with NASDAQ/NYSE format: {stock_symbol} in {url}",
-                    "INFO",
-                )
 
-            # Only check content if a current date is in the title but no ticker was found there
-            if not stock_symbol and (
-                "nasdaq" in text_content.lower() or "nyse" in text_content.lower()
-            ):
-                match = re.search(
-                    r"(?:NASDAQ|NYSE)[:;]\s*([A-Z]+)",
-                    text_content,
-                    re.IGNORECASE,
-                )
-                if match:
-                    stock_symbol = match.group(1)
-                    log_message(
-                        f"Match found in content: {stock_symbol} in {url}", "INFO"
-                    )
+        if not stock_symbol and (
+            "nasdaq" in text_content.lower() or "nyse" in text_content.lower()
+        ):
+            match = re.search(
+                r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)",
+                text_content,
+                re.IGNORECASE,
+            )
+            if match:
+                stock_symbol = match.group(1)
+                log_message(f"Match found in content: {stock_symbol} in {url}", "INFO")
 
         if stock_symbol:
+            if stock_symbol in processed_tickers:
+                log_message(
+                    f"Ticker {stock_symbol} already processed, skipping", "INFO"
+                )
+                continue
+
+            processed_tickers.append(stock_symbol)
+            save_processed_tickers(processed_tickers)
+
             await send_match_to_telegram(url, stock_symbol, title)
             continue
 
