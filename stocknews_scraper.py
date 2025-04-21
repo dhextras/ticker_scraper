@@ -122,6 +122,33 @@ async def fetch_blog_content(session, url):
         }
 
 
+def check_for_date_in_url(url):
+    """
+    Check if a URL contains current date references in various formats.
+
+    Args:
+        url (str): The URL to check
+
+    Returns:
+        bool: True if URL contains current date, False otherwise
+    """
+    now = datetime.now()
+
+    date_patterns = [
+        # Formats like "116" for January 16
+        rf"{now.month}{now.day:02d}",
+        # Format like "12425" for 1/24/25
+        rf"{now.month}{now.day:02d}{now.year % 100:02d}",
+    ]
+
+    for pattern in date_patterns:
+        if pattern in url or pattern.replace("/", "") in url:
+            log_message(f"Date pattern {pattern} found in URL: {url}", "INFO")
+            return True
+
+    return False
+
+
 async def process_new_entries(session, new_urls, processed_urls):
     """
     Asynchronously process new blog entries, checking content changes and potential stock matches.
@@ -163,14 +190,18 @@ async def process_new_entries(session, new_urls, processed_urls):
             processed_urls[url] = {"content_snippet": current_snippet}
             stock_symbol = None
 
+            # Check for current date in URL
+            url_has_current_date = check_for_date_in_url(url)
+
             # Check if title contains today's date
-            has_current_date = any(
-                date_format in title for date_format in current_date_formats
+            has_current_date = (
+                any(date_format in title for date_format in current_date_formats)
+                or url_has_current_date
             )
 
-            if has_current_date:
+            if has_current_date and "update" not in title.lower():
                 nasdaq_ticker_match = re.search(
-                    r"(?:NASDAQ|NYSE)[:;]\s+([A-Z]+)", title, re.IGNORECASE
+                    r"(?:NASDAQ|NYSE)[:;]\s*([A-Z]+)", title, re.IGNORECASE
                 )
                 if nasdaq_ticker_match:
                     stock_symbol = nasdaq_ticker_match.group(1)
