@@ -23,6 +23,21 @@ class WebSocketManager:
         if cls._instance is None:
             cls._instance = cls()
 
+        # If a connection already exists, close and reset it
+        if cls._connected and cls._connection:
+            try:
+                await cls._connection.close()
+                log_message(
+                    "Existing WebSocket connection closed for reinitialization.", "INFO"
+                )
+            except Exception as e:
+                log_message(
+                    f"Error closing existing WebSocket connection: {e}", "ERROR"
+                )
+
+        cls._connection = None
+        cls._connected = False
+
         cls._url = url
         await cls._connect()
 
