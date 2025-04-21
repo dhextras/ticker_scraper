@@ -15,7 +15,7 @@ class WebSocketManager:
     _connected = False
     _reconnect_interval = 1
     _keep_alive_interval = 1800  # 30 min
-    _ping_interval = 60  # 1 minute ping-pong check
+    _ping_interval = 5  # 1 minute ping-pong check
     _lock = asyncio.Lock()
     _ping_task = None
 
@@ -80,15 +80,12 @@ class WebSocketManager:
 
                 # Send ping message (1)
                 await cls._connection.send(json.dumps("[1"))
-                log_message("Ping sent", "DEBUG")
 
                 try:
                     response = await asyncio.wait_for(cls._connection.recv(), timeout=5)
 
                     # Check if we got the expected pong value (2)
-                    if response == "[2":
-                        log_message("Pong received successfully", "DEBUG")
-                    else:
+                    if response != "[2":
                         log_message(f"Unexpected pong response: {response}", "WARNING")
                         await cls._reset_connection()
                 except asyncio.TimeoutError:
