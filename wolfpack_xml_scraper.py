@@ -19,7 +19,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -31,7 +31,6 @@ PROCESSED_URLS_FILE = "data/wolfpack_xml_processed_urls.json"
 ACCESS_TOKEN_FILE = "data/wolfpack_xml_access_token.json"
 TELEGRAM_BOT_TOKEN = os.getenv("WPR_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("WPR_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -229,7 +228,6 @@ async def send_to_telegram_and_ws(article_data, process_time):
             "sender": "wolfpack",
             "target": "CSS",
         },
-        WS_SERVER_URL,
     )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
@@ -253,6 +251,8 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
@@ -326,7 +326,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         return
 

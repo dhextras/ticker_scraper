@@ -18,7 +18,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -33,7 +33,6 @@ CHECK_INTERVAL = 0.3  # seconds
 PROCESSED_URLS_FILE = "data/paradigm_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ALTUCHER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ALTUCHER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 PROXY_FILE = "cred/proxies.json"
 
 subscriptions = [
@@ -235,7 +234,6 @@ async def send_matches_to_telegram(buy_recs):
                 "ticker": ticker,
                 "sender": "altucher",
             },
-            WS_SERVER_URL,
         )
         await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
         log_message(
@@ -280,6 +278,8 @@ async def run_scraper():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message(
                 "Market is open. Starting to check for new articles...", "DEBUG"
             )
@@ -322,7 +322,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

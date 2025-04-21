@@ -18,7 +18,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -33,7 +33,6 @@ BATCH_SIZE = 40  # Number of IDs to check in one batch
 LATEST_ID_FILE = "data/oxfordclub_post_latest_id.json"
 TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 STARTING_ID = 133350  # A bit higher than the highest in the known list
 
 os.makedirs("data", exist_ok=True)
@@ -252,6 +251,8 @@ async def run_scraper() -> None:
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 

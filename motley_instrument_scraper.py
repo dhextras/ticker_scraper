@@ -24,14 +24,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("FOOL_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("FOOL_SCRAPER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 FOOL_USERNAME = os.getenv("FOOL_USERNAME")
 FOOL_PASSWORD = os.getenv("FOOL_PASSWORD")
 FOOL_API_KEY = os.getenv("FOOL_API_KEY")
@@ -347,7 +346,6 @@ async def process_rec_article(article):
                             "sender": "motley_fool",
                             "target": "CSS",
                         },
-                        WS_SERVER_URL,
                     )
 
                 message += f"<b>Tickers:</b>\n{ticker_text}\n"
@@ -412,6 +410,8 @@ async def run_alert_monitor():
     while True:
         try:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message(
                 "Market is open. Starting to check for new articles...", "DEBUG"
             )
@@ -452,7 +452,6 @@ def main():
         [
             TELEGRAM_BOT_TOKEN,
             TELEGRAM_CHAT_ID,
-            WS_SERVER_URL,
             FOOL_USERNAME,
             FOOL_PASSWORD,
             FOOL_API_KEY,

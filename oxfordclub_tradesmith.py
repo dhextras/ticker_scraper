@@ -34,7 +34,6 @@ PROCESSED_DATA_FILE = "data/tradesmith_processed.json"
 BASE_URL = "https://publishers.tradesmith.com/Preview/Preview"
 TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 PROXY_FILE = CRED_DIR + "/proxies.json"
 
 # Create necessary directories
@@ -515,7 +514,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

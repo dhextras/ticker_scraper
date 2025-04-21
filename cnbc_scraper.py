@@ -29,14 +29,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("CNBC_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("CNBC_SCRAPER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 GMAIL_USERNAME = os.getenv("CNBC_SCRAPER_GMAIL_USERNAME")
 GMAIL_PASSWORD = os.getenv("CNBC_SCRAPER_GMAIL_PASSWORD")
 LATEST_ASSETS_SHA = os.getenv("CNBC_SCRAPER_LATEST_ASSETS_SHA")
@@ -440,7 +439,6 @@ async def process_article(article, uid, session_token, fetch_time):
                         "ticker": ticker,
                         "sender": "cnbc",
                     },
-                    WS_SERVER_URL,
                 )
 
             current_time = get_current_time().astimezone(article_timezone)
@@ -509,6 +507,8 @@ async def run_alert_monitor(uid, session_token):
         try:
             # Wait until market open
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message(
                 "Market is open. Starting to check for new blog posts...", "DEBUG"
             )
@@ -602,7 +602,6 @@ def main():
         [
             TELEGRAM_BOT_TOKEN,
             TELEGRAM_CHAT_ID,
-            WS_SERVER_URL,
             SESSION_TOKEN,
             GMAIL_USERNAME,
             GMAIL_PASSWORD,

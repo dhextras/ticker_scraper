@@ -19,7 +19,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -34,7 +34,6 @@ BATCH_SIZE = 40  # Number of IDs to check in one batch
 LATEST_ID_FILE = "data/oxfordclub_search_latest_id.json"
 TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 STARTING_ID = 133350  # A bit higher than the highest in the known list
 PROXY_FILE = "cred/proxies.json"
 PAGE_PROCESS_CONCURRENT_REQUESTS = (
@@ -444,7 +443,6 @@ async def send_match_to_telegram(
     #         "ticker": ticker,
     #         "sender": "oxfordclub",
     #     },
-    #     WS_SERVER_URL,
     # )
 
     message = f"<b>New Stock Match Found - Search ID</b>\n\n"
@@ -499,6 +497,8 @@ async def run_scraper() -> None:
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
@@ -537,7 +537,7 @@ async def run_scraper() -> None:
 
 
 def main() -> None:
-    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

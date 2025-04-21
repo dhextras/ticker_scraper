@@ -15,7 +15,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -25,7 +25,6 @@ CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/bearcave_html_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("BEARCAVE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("BEARCAVE_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -92,7 +91,6 @@ async def send_to_telegram(post_data, ticker=None):
                 "ticker": ticker,
                 "sender": "bearcave",
             },
-            WS_SERVER_URL,
         )
         log_message(
             f"Ticker sent to WebSocket: {ticker} - {post_data['canonical_url']}", "INFO"
@@ -107,6 +105,8 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
@@ -148,7 +148,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

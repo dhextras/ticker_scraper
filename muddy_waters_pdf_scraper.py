@@ -19,7 +19,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -30,7 +30,6 @@ TELEGRAM_GRP = os.getenv("MUDDY_WATERS_TELEGRAM_GRP")
 SESSION_FILE = "data/muddy_waters_session.json"
 PROCESSED_PDFS_FILE = "data/muddy_waters_processed_pdfs.json"
 CHECK_INTERVAL = 3  # seconds
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -102,7 +101,6 @@ async def send_telegram_notification(url, title, match):
                 "sender": "muddy_waters",
                 "target": "CSS",
             },
-            WS_SERVER_URL,
         )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
@@ -198,6 +196,8 @@ async def run_pdf_fetcher():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check for new posts...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 

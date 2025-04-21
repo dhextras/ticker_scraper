@@ -20,7 +20,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -28,7 +28,6 @@ load_dotenv()
 BETAVILLE_URL = "https://www.betaville.co.uk"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_POSTS_FILE = "data/betaville_processed_posts.json"
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 TELEGRAM_GRP = os.getenv("BETA_VILLE_TELEGRAM_GRP")
 TELEGRAM_BOT_TOKEN = os.getenv("BETA_VILLE_TELEGRAM_BOT_TOKEN")
 
@@ -155,7 +154,6 @@ async def send_to_telegram(
                 "ticker": ticker_obj.ticker,
                 "sender": "betaville",
             },
-            WS_SERVER_URL,
         )
 
         message += f"\n<b>Ticker:</b> {ticker_obj.ticker}\n"
@@ -173,6 +171,8 @@ async def run_scraper():
     try:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check for new posts...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 

@@ -17,7 +17,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -27,7 +27,6 @@ CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/hindenburg_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("HINDENBURG_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("HINDENBURG_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -132,7 +131,6 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
             "sender": "hindenburg",
             "target": "CSS",
         },
-        WS_SERVER_URL,
     )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Report sent to Telegram and WebSocket: {ticker} - {url}", "INFO")
@@ -144,6 +142,8 @@ async def run_scraper():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check for new posts...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 
@@ -189,7 +189,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

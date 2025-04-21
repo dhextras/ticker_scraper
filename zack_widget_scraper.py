@@ -19,14 +19,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 BATCH_SIZE = 250  # number of requests to run concurrently
 
 DATA_DIR = Path("data")
@@ -227,7 +226,6 @@ async def process_results(results):
             #                 "ticker": ticker,
             #                 "sender": "zacks",
             #             },
-            #             WS_SERVER_URL,
             #         )
             #     )
             # for ticker in new_sells:
@@ -239,7 +237,6 @@ async def process_results(results):
             #                 "ticker": ticker,
             #                 "sender": "zacks",
             #             },
-            #             WS_SERVER_URL,
             #         )
             #     )
             #
@@ -290,6 +287,8 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+
         log_message("Market is open. Starting ticker scanning...", "DEBUG")
 
         _, _, market_close_time = get_next_market_times()
@@ -352,7 +351,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, WS_SERVER_URL]):
+    if not all([TELEGRAM_BOT_TOKEN]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

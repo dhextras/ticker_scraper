@@ -13,7 +13,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -23,7 +23,6 @@ PROCESSED_ALERTS_FILE = "data/ibd_processed_leaderboard_alerts.json"
 CRED_FILE = "cred/ibd_creds.json"
 TELEGRAM_BOT_TOKEN = os.getenv("IBD_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("IBD_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -116,7 +115,6 @@ async def send_to_telegram(alert):
     #         "sender": "ibd_leaderboard",
     #         "target": "CSS",
     #     },
-    #     WS_SERVER_URL,
     # )
 
     current_time = get_current_time()
@@ -146,6 +144,8 @@ async def run_scraper():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open(start=8, end=15)
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check for new alerts...", "DEBUG")
             _, _, market_close_time = get_next_market_times(start=8, end=15)
 

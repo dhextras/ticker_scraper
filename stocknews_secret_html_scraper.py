@@ -16,7 +16,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -26,7 +26,6 @@ CHECK_INTERVAL = 0.1
 PROCESSED_JSON_FILE = "data/stocknews_secret_html_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("STOCKNEWS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("STOCKNEWS_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 os.makedirs("data", exist_ok=True)
 
@@ -212,7 +211,6 @@ async def send_match_to_telegram(url, stock_symbol, post_title):
             "ticker": stock_symbol,
             "sender": "stocknews",
         },
-        WS_SERVER_URL,
     )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Match sent to Telegram and WebSocket: {stock_symbol} - {url}", "INFO")
@@ -224,6 +222,8 @@ async def run_scraper():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message(
                 "Market is open. Starting to check for new blog posts...", "DEBUG"
             )
@@ -277,7 +277,7 @@ async def send_posts_to_telegram(entries, timestamp):
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, WS_SERVER_URL]):
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 

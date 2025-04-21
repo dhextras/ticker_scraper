@@ -27,14 +27,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN")
 HEDGEYE_SCRAPER_TELEGRAM_GRP = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 DATA_DIR = "data"
 RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_new_rate_limited_proxy.json")
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
@@ -592,7 +591,6 @@ async def process_fetched_alert(alert_details, last_alert_lock: asyncio.Lock):
                     "sender": "hedgeye",
                     "target": "CSS",
                 },
-                WS_SERVER_URL,
             )
 
             message = (
@@ -660,7 +658,6 @@ async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start
                         "sender": "hedgeye",
                         "target": "CSS",
                     },
-                    WS_SERVER_URL,
                 )
 
                 message = (
@@ -833,7 +830,6 @@ async def main():
         [
             HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
             HEDGEYE_SCRAPER_TELEGRAM_GRP,
-            WS_SERVER_URL,
         ]
     ):
         log_message("Missing required environment variables", "CRITICAL")
@@ -864,6 +860,8 @@ async def main():
 
         while True:
             await sleep_until_market_open(start=8, end=15)
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check for posts...", "DEBUG")
             _, _, market_close_time = get_next_market_times(start=8, end=15)
 

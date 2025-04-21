@@ -27,14 +27,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN")
 HEDGEYE_SCRAPER_TELEGRAM_GRP = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 
 DATA_DIR = Path("data")
 RATE_LIMIT_PROXY_FILE = DATA_DIR / "hedgeye_rate_limited_proxy.json"
@@ -364,7 +363,6 @@ async def monitor_feeds():
                                     "ticker": ticker,
                                     "sender": "hedgeye",
                                 },
-                                WS_SERVER_URL,
                             )
 
                             message = (
@@ -418,6 +416,7 @@ async def monitor_feeds():
                     "Market is closed. Waiting for next market open...", "DEBUG"
                 )
                 await sleep_until_market_open()
+                await initialize_websocket()
 
     except Exception as e:
         log_message(f"Critical error in monitor_feeds: {e}", "CRITICAL")
@@ -431,7 +430,6 @@ def main():
         [
             HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
             HEDGEYE_SCRAPER_TELEGRAM_GRP,
-            WS_SERVER_URL,
         ]
     ):
         log_message("Missing required environment variables", "CRITICAL")

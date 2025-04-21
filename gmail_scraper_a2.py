@@ -20,7 +20,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
-from utils.websocket_sender import send_ws_message
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -28,7 +28,6 @@ load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 TELEGRAM_BOT_TOKEN = os.getenv("GMAIL_SCRAPER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("GMAIL_SCRAPER_TELEGRAM_GRP")
-WS_SERVER_URL = os.getenv("WS_SERVER_URL")
 PROCESSED_IDS_FILE = "data/gmail_processed_ids_file_2.json"
 
 os.makedirs("cred", exist_ok=True)
@@ -197,7 +196,6 @@ async def send_stock_alert(
 
     await send_ws_message(
         ws_message,
-        WS_SERVER_URL,
     )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     log_message(
@@ -211,6 +209,8 @@ async def run_gmail_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+
         log_message("Market is open. Starting to check for new emails...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
@@ -252,7 +252,7 @@ async def run_gmail_scraper():
 
 
 def main():
-    if not all([SCOPES, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, WS_SERVER_URL]):
+    if not all([SCOPES, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
