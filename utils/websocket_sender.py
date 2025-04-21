@@ -15,14 +15,15 @@ class WebSocketManager:
     _connected = False
     _reconnect_interval = 1
     _keep_alive_interval = 1800  # 30 min
+    _ping_interval = 60  # 1 minute ping-pong check
     _lock = asyncio.Lock()
+    _ping_task = None
 
     @classmethod
     async def initialize(cls, url: str) -> None:
         """Initialize the WebSocket connection"""
         if cls._instance is None:
             cls._instance = cls()
-
         # If a connection already exists, close and reset it
         if cls._connected and cls._connection:
             try:
@@ -34,12 +35,14 @@ class WebSocketManager:
                 log_message(
                     f"Error closing existing WebSocket connection: {e}", "ERROR"
                 )
-
         cls._connection = None
         cls._connected = False
-
         cls._url = url
         await cls._connect()
+
+        # Start the keep-alive and ping-pong tasks
+        if cls._ping_task is None or cls._ping_task.done():
+            cls._ping_task = asyncio.create_task(cls._ping_pong_check())
 
         asyncio.create_task(cls._keep_alive())
 
@@ -48,11 +51,9 @@ class WebSocketManager:
         """Establish connection to WebSocket server"""
         if cls._connected:
             return
-
         async with cls._lock:
             if cls._connected:  # Double-check inside lock
                 return
-
             try:
                 cls._connection = await websockets.connect(
                     cls._url,
@@ -67,6 +68,55 @@ class WebSocketManager:
                 cls._connection = None
 
     @classmethod
+    async def _ping_pong_check(cls) -> None:
+        """Perform manual ping-pong check every minute"""
+        while True:
+            try:
+                await asyncio.sleep(cls._ping_interval)
+
+                if not cls._connected or cls._connection is None:
+                    log_message("Not connected during ping check, skipping", "WARNING")
+                    continue
+
+                # Send ping message (1)
+                await cls._connection.send(json.dumps("[1"))
+                log_message("Ping sent", "DEBUG")
+
+                try:
+                    response = await asyncio.wait_for(cls._connection.recv(), timeout=5)
+
+                    # Check if we got the expected pong value (2)
+                    if response == "[2":
+                        log_message("Pong received successfully", "DEBUG")
+                    else:
+                        log_message(f"Unexpected pong response: {response}", "WARNING")
+                        await cls._reset_connection()
+                except asyncio.TimeoutError:
+                    log_message("Ping-pong timeout - no response received", "WARNING")
+                    await cls._reset_connection()
+                except Exception as e:
+                    log_message(f"Error during ping-pong resetting: {e}", "WARNING")
+                    await cls._reset_connection()
+
+            except Exception as e:
+                log_message(f"Ping-pong check failed: {e}", "ERROR")
+                await asyncio.sleep(cls._reconnect_interval)
+
+    @classmethod
+    async def _reset_connection(cls) -> None:
+        """Reset and reconnect the WebSocket connection"""
+        if cls._connection:
+            try:
+                await cls._connection.close()
+                log_message("Closed connection due to failed ping-pong", "INFO")
+            except Exception as e:
+                log_message(f"Error closing connection: {e}", "ERROR")
+
+        cls._connected = False
+        cls._connection = None
+        await cls._connect()
+
+    @classmethod
     async def _keep_alive(cls) -> None:
         while True:
             try:
@@ -77,7 +127,6 @@ class WebSocketManager:
                     log_message(f"Connection is not alive reconnecting...", "CRITICAL")
                     cls._connected = False
                     cls._connection = None
-
                 if not cls._connected:
                     await cls._connect()
                     await asyncio.sleep(cls._reconnect_interval)
@@ -90,7 +139,6 @@ class WebSocketManager:
         """Send a message over the WebSocket connection"""
         if not cls._url:
             raise ValueError("WebSocket not initialized. Call initialize() first.")
-
         if not cls._connected:
             # TODO: Just make it a warning later on
             log_message(
@@ -98,7 +146,6 @@ class WebSocketManager:
                 "CRITICAL",
             )
             await cls._connect()
-
         try:
             await cls._connection.send(json.dumps(message))
         except Exception as e:
@@ -112,8 +159,7 @@ async def initialize_websocket() -> None:
     WS_SERVER_URL = os.getenv("WS_SERVER_URL")
     if not WS_SERVER_URL:
         log_message("Missing required WS server url", "CRITICAL")
-        raise
-
+        raise ValueError("Missing WS_SERVER_URL environment variable")
     await WebSocketManager.initialize(WS_SERVER_URL)
 
 
