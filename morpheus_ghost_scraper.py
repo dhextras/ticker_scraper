@@ -32,7 +32,7 @@ os.makedirs("data", exist_ok=True)
 
 
 class TickerInfo:
-    def __init__(self, ticker: str, exchange: str = "NYSE"):
+    def __init__(self, ticker: str, exchange: str):
         self.ticker = ticker
         self.exchange = exchange
 
@@ -55,17 +55,19 @@ def extract_ticker_from_html(html_content: str) -> Optional[TickerInfo]:
     soup = BeautifulSoup(html_content, "html.parser")
     text_content = soup.get_text()
 
-    # First pattern: Look for (NYSE: TICKER)
-    pattern1 = r"\(NYSE:\s*([A-Z]+)\)"
-    match = re.search(pattern1, text_content)
-    if match:
-        return TickerInfo(ticker=match.group(1), exchange="NYSE")
+    # Single pattern to match both NYSE and Nasdaq with case insensitivity
+    pattern = r"\(\s*((?:NYSE|NASDAQ))(?:\s*:\s*)([A-Z]+)\s*\)"
 
-    # Second pattern: Look for any ticker format in brackets with NYSE
-    pattern2 = r"\(.*?NYSE.*?[^A-Z]([A-Z]{1,5})[^A-Z].*?\)"
-    match = re.search(pattern2, text_content)
+    # Case insensitive search
+    match = re.search(pattern, text_content, re.IGNORECASE)
     if match:
-        return TickerInfo(ticker=match.group(1), exchange="NYSE")
+        exchange = match.group(1).upper()  # Normalize to uppercase
+        # Convert to standard form (NASDAQ instead of Nasdaq)
+        if exchange.upper() == "NASDAQ":
+            exchange = "NASDAQ"
+        else:
+            exchange = "NYSE"
+        return TickerInfo(ticker=match.group(2), exchange=exchange)
 
     return None
 
