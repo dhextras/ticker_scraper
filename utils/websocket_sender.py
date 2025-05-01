@@ -96,8 +96,9 @@ class WebSocketManager:
                     await cls._reset_connection()
 
             except Exception as e:
-                log_message(f"Ping-pong check failed: {e}", "ERROR")
+                log_message(f"Ping-pong check failed: {e}", "WARNING")
                 await asyncio.sleep(cls._reconnect_interval)
+                await cls._reset_connection()
 
     @classmethod
     async def _reset_connection(cls) -> None:
