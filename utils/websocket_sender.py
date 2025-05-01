@@ -85,7 +85,7 @@ class WebSocketManager:
                     response = await asyncio.wait_for(cls._connection.recv(), timeout=5)
 
                     # Check if we got the expected pong value (2)
-                    if response != "[2":
+                    if response != "[2" and "ticker" not in response:
                         log_message(f"Unexpected pong response: {response}", "WARNING")
                         await cls._reset_connection()
                 except asyncio.TimeoutError:
