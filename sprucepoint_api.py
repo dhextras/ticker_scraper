@@ -121,7 +121,7 @@ async def send_report_to_telegram(report_slug, ticker=None, fetch_time=None):
 
     message = f"<b>New report detected - Research API</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
-    message += f"<b> Article Fetch Time:</b> {fetch_time}\n"
+    message += f"<b>Article Fetch Time:</b> {fetch_time}\n"
     message += f"<b>Company:</b> {company_name}\n"
 
     if ticker:
