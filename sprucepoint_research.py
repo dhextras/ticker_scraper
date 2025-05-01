@@ -184,10 +184,6 @@ async def run_report_monitor():
                         await send_report_to_telegram(report)
                         processed_reports.add(report_url)
 
-                        date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S")
-                        with open(f"data/spruce_point_report_{date}.json", "w") as f:
-                            json.dump(report, f, indent=2)
-
                 if reports:
                     save_processed_reports(processed_reports)
 
