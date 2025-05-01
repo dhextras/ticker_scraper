@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import re
+import time
 from datetime import datetime
 
 import aiohttp
@@ -13,6 +15,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -75,22 +78,86 @@ async def fetch_reports_from_api(session):
         return []
 
 
-async def send_report_to_telegram(report_slug):
+async def fetch_report_content(session, report_slug):
+    """Fetch the HTML content of the report page to extract ticker information."""
+    try:
+        report_url = f"{REPORT_BASE_URL}{report_slug}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+
+        async with session.get(report_url, headers=headers) as response:
+            if response.status == 200:
+                content = await response.text()
+                return content
+            else:
+                log_message(
+                    f"Failed to fetch report content: HTTP {response.status}", "ERROR"
+                )
+                return None
+    except Exception as e:
+        log_message(f"Error fetching report content: {e}", "ERROR")
+        return None
+
+
+def extract_ticker(html_content):
+    """Extract the first stock ticker mentioned in the format (NYSE: ABC) or (NASDAQ: ABC)."""
+    if not html_content:
+        return None
+
+    pattern = r"\((?:NYSE|NASDAQ|Nasdaq|Nyse):\s*([A-Z]+)\)"
+    matches = re.findall(pattern, html_content, re.IGNORECASE)
+
+    if matches:
+        return matches[0]
+    return None
+
+
+async def send_report_to_telegram(report_slug, ticker=None, fetch_time=None):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
     report_url = f"{REPORT_BASE_URL}{report_slug}"
 
     company_name = " ".join(word.capitalize() for word in report_slug.split("-"))
 
-    message = f"<b>New Spruce Point Capital Report Detected</b>\n\n"
+    message = f"<b>New report detected - Research API</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
+    message += f"<b> Article Fetch Time:</b> {fetch_time}\n"
     message += f"<b>Company:</b> {company_name}\n"
-    message += f"<b>URL:</b> {report_url}\n\n"
-    message += "<i>Note: This alert is based on API detection. Visit the URL for full report details.</i>"
+
+    if ticker:
+        message += f"<b>Ticker:</b> {ticker}\n"
+
+    message += f"<b>URL:</b> {report_url}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(
-        f"New report detected via API and sent to Telegram: {company_name}", "INFO"
+        f"New report detected via API and sent to Telegram: {company_name}{' (' + ticker + ')' if ticker else ''}",
+        "INFO",
     )
+
+
+async def process_new_report(session, slug):
+    """Process a newly detected report."""
+    log_message(f"Processing new report: {slug}", "INFO")
+
+    start_fetch = time.time()
+    html_content = await fetch_report_content(session, slug)
+    ticker = extract_ticker(html_content)
+    fetch_time = time.time() - start_fetch
+
+    if ticker:
+        await send_ws_message(
+            {
+                "name": "SpruePoint - Research API",
+                "type": "Sell",
+                "ticker": ticker,
+                "sender": "sprucepoint",
+                "target": "CSS",
+            }
+        )
+        log_message(f"WebSocket message sent for ticker: {ticker}", "INFO")
+
+    await send_report_to_telegram(slug, ticker, fetch_time)
 
 
 async def run_api_monitor():
@@ -99,6 +166,8 @@ async def run_api_monitor():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message(
                 "Market is open. Starting to check API for new reports...", "DEBUG"
             )
@@ -118,17 +187,8 @@ async def run_api_monitor():
 
                 for slug in report_slugs:
                     if slug not in processed_reports:
-                        log_message(f"Found new report via API: {slug}", "INFO")
-                        await send_report_to_telegram(slug)
+                        await process_new_report(session, slug)
                         processed_reports.add(slug)
-
-                        date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S")
-                        with open(
-                            f"data/jetboost_detected_report_{date}.txt", "w"
-                        ) as f:
-                            f.write(
-                                f"Detected new report: {slug}\nFull URL: {REPORT_BASE_URL}{slug}"
-                            )
 
                 if report_slugs:
                     save_processed_reports(processed_reports)
