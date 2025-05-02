@@ -18,7 +18,7 @@ load_dotenv()
 
 # Constants
 REPORT_URL = "https://www.sprucepointcap.com/research"
-CHECK_INTERVAL = 0.5  # seconds
+CHECK_INTERVAL = 5  # seconds
 PROCESSED_REPORTS_FILE = "data/sprucepoint_processed_reports.json"
 TELEGRAM_BOT_TOKEN = os.getenv("SPRUCEPOINT_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("SPRUCEPOINT_TELEGRAM_GRP")
