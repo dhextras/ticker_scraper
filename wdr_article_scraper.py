@@ -124,7 +124,7 @@ async def send_to_telegram_and_ws(article_data):
     await send_ws_message(
         {
             "name": "White Diamond Article",
-            "type": "Buy",
+            "type": "Sell",
             "ticker": article_data["ticker"],
             "sender": "whitediamond",
             "target": "CSS",
