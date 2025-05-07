@@ -243,7 +243,7 @@ async def send_to_telegram(processed_items):
 
         await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
         log_message(
-            f"New {item['type']} sent to Telegram: {item['company']}{' (' + item['ticker'] + ')' if item['ticker'] else ''}",
+            f"New {item['type']} sent to Telegram: {' (' + item['ticker'] + ')' if item['ticker'] else ''}",
             "INFO",
         )
 
