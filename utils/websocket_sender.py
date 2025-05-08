@@ -75,7 +75,11 @@ class WebSocketManager:
                 await asyncio.sleep(cls._ping_interval)
 
                 if not cls._connected or cls._connection is None:
-                    log_message("Not connected during ping check, skipping", "WARNING")
+                    log_message(
+                        f"Not connected during ping check, reconnecting",
+                        "WARNING",
+                    )
+                    await cls._reset_connection()
                     continue
 
                 # Send ping message (1)
@@ -123,8 +127,7 @@ class WebSocketManager:
                 else:
                     # TODO: Change this to a warning as well and increase the sleep time if not warning detected
                     log_message(f"Connection is not alive reconnecting...", "CRITICAL")
-                    cls._connected = False
-                    cls._connection = None
+                    await cls._reset_connection()
                 if not cls._connected:
                     await cls._connect()
                     await asyncio.sleep(cls._reconnect_interval)
