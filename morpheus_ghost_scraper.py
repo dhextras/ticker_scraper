@@ -23,7 +23,7 @@ load_dotenv()
 # Constants
 API_URL = "https://morpheus-research.ghost.io/ghost/api/content/posts/"
 API_KEY = os.getenv("MORPHEUS_API_KEY")
-CHECK_INTERVAL = 0.3  # seconds
+CHECK_INTERVAL = 0.4  # seconds
 PROCESSED_POSTS_FILE = "data/morpheus_processed_posts.json"
 TELEGRAM_BOT_TOKEN = os.getenv("MORPHEUS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MORPHEUS_TELEGRAM_GRP")
