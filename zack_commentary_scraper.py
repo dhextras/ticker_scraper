@@ -5,6 +5,7 @@ import random
 import re
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 from time import sleep, time
 
@@ -30,12 +31,14 @@ TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 CHECK_INTERVAL = 0.5  # seconds
 STARTING_CID = 43250  # Starting comment ID
 BROWSER_REFRESH_INTERVAL = 1800  # Half an hour
+ACCOUNT_COOL_DOWN_DEFAULT = 15 * 60  # Default cool down period in seconds (15 minutes)
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
 COMMENT_ID_FILE = DATA_DIR / "zacks_last_comment_id.json"
 COOKIES_HEADERS_FILE = DATA_DIR / "zacks_session_data.json"
 CREDENTIALS_FILE = CRED_DIR / "zacks_credentials.json"
+ACCOUNT_STATUS_FILE = DATA_DIR / "zacks_account_status.json"
 
 # Initialize browser variables
 co = None
@@ -45,6 +48,7 @@ session_headers = {}
 current_account_index = 0
 accounts = []
 total_accounts = 0
+account_status = {}  # To track banned accounts and their cool-down periods
 
 
 def load_credentials():
@@ -71,21 +75,193 @@ def load_credentials():
         sys.exit(1)
 
 
-def get_next_account():
-    """Get the next account to use"""
-    global current_account_index, accounts, total_accounts
+def load_account_status():
+    """Load account status from file"""
+    global account_status
 
-    account = accounts[current_account_index]
-    current_account_index = (current_account_index + 1) % total_accounts
-    return account["email"], account["password"]
+    try:
+        if ACCOUNT_STATUS_FILE.exists():
+            with open(ACCOUNT_STATUS_FILE, "r") as f:
+                account_status = json.load(f)
+
+                current_time = datetime.now().timestamp()
+                for email in list(account_status.keys()):
+                    if account_status[email]["banned_until"] <= current_time:
+                        account_status[email]["banned"] = False
+                        account_status[email]["banned_until"] = 0
+
+                banned_accounts = [
+                    email
+                    for email, status in account_status.items()
+                    if status["banned"]
+                ]
+                if banned_accounts:
+                    log_message(
+                        f"Currently banned accounts: {', '.join(banned_accounts)}",
+                        "INFO",
+                    )
+
+                return True
+        else:
+            for account in accounts:
+                account_status[account["email"]] = {
+                    "banned": False,
+                    "banned_until": 0,
+                    "ban_count": 0,
+                }
+            save_account_status()
+    except Exception as e:
+        log_message(f"Error loading account status: {e}", "ERROR")
+        for account in accounts:
+            account_status[account["email"]] = {
+                "banned": False,
+                "banned_until": 0,
+                "ban_count": 0,
+            }
+        save_account_status()
+
+    return True
+
+
+def save_account_status():
+    """Save account status to file"""
+    try:
+        DATA_DIR.mkdir(exist_ok=True)
+        with open(ACCOUNT_STATUS_FILE, "w") as f:
+            json.dump(account_status, f)
+        return True
+    except Exception as e:
+        log_message(f"Error saving account status: {e}", "ERROR")
+        return False
+
+
+def get_next_account():
+    """Get the next available non-banned account to use"""
+    global current_account_index, accounts, total_accounts, account_status
+
+    # Check if all accounts are banned
+    current_time = datetime.now().timestamp()
+    all_banned = True
+
+    for i in range(total_accounts):
+        idx = (current_account_index + i) % total_accounts
+        email = accounts[idx]["email"]
+
+        if email not in account_status:
+            account_status[email] = {"banned": False, "banned_until": 0, "ban_count": 0}
+
+        if (
+            not account_status[email]["banned"]
+            or current_time > account_status[email]["banned_until"]
+        ):
+            if account_status[email]["banned"]:
+                account_status[email]["banned"] = False
+                account_status[email]["banned_until"] = 0
+                log_message(
+                    f"Account {email} ban period has expired, now available", "INFO"
+                )
+                save_account_status()
+
+            current_account_index = idx
+            all_banned = False
+            account = accounts[current_account_index]
+            current_account_index = (current_account_index + 1) % total_accounts
+            return account["email"], account["password"], False
+
+    if all_banned:
+        earliest_expiry = float("inf")
+        earliest_idx = 0
+
+        for i in range(total_accounts):
+            email = accounts[i]["email"]
+            if account_status[email]["banned_until"] < earliest_expiry:
+                earliest_expiry = account_status[email]["banned_until"]
+                earliest_idx = i
+
+        wait_time = max(0, earliest_expiry - current_time)
+        log_message(
+            f"All accounts are banned. Earliest available in {wait_time:.1f} seconds",
+            "ERROR",
+        )
+
+        # Return the account with the earliest expiration
+        current_account_index = earliest_idx
+        account = accounts[current_account_index]
+        current_account_index = (current_account_index + 1) % total_accounts
+        return account["email"], account["password"], True
+
+
+def ban_account(email, minutes=None):
+    """Mark an account as banned and set the cool-down period"""
+    global account_status
+
+    if email not in account_status:
+        account_status[email] = {"banned": False, "banned_until": 0, "ban_count": 0}
+
+    cool_down_seconds = ACCOUNT_COOL_DOWN_DEFAULT
+    if minutes:
+        cool_down_seconds = minutes * 60
+
+    current_time = datetime.now().timestamp()
+    banned_until = current_time + cool_down_seconds
+
+    account_status[email]["banned"] = True
+    account_status[email]["banned_until"] = banned_until
+    account_status[email]["ban_count"] += 1
+
+    ban_expiry_time = datetime.fromtimestamp(banned_until).strftime("%Y-%m-%d %H:%M:%S")
+    log_message(
+        f"Account {email} banned until {ban_expiry_time} ({cool_down_seconds/60:.1f} minutes)",
+        "ERROR",
+    )
+
+    save_account_status()
+    return True
+
+
+def simulate_human_browser_behavior():
+    """Simulate human-like browsing behavior"""
+    try:
+        log_message("Simulating human browsing behavior...", "INFO")
+
+        # Visit some common pages first
+        common_pages = [
+            "https://www.zacks.com/",
+            "https://www.zacks.com/stocks/",
+            "https://www.zacks.com/earnings/",
+        ]
+
+        for _ in range(random.randint(1, 2)):
+            random_page = random.choice(common_pages)
+            log_message(f"Visiting page: {random_page}", "DEBUG")
+            page.get(random_page)
+
+            for _ in range(random.randint(3, 8)):
+                scroll_amount = random.randint(100, 500)
+                page.scroll.down(scroll_amount)
+                sleep(random.uniform(0.5, 2.0))
+
+            sleep(random.uniform(3, 7))
+
+        log_message("Human browsing simulation complete", "DEBUG")
+
+    except Exception as e:
+        log_message(f"Error during human simulation: {e}", "WARNING")
 
 
 def initialize_browser():
     """Initialize a new browser instance and extract cookies/headers"""
     global co, page, session_cookies, session_headers
 
-    email, password = get_next_account()
-    log_message(f"Initializing new browser instance with account: {email}", "INFO")
+    email, password, is_banned = get_next_account()
+
+    if is_banned:
+        log_message(
+            f"Using account {email} even though it's banned as all accounts are unavailable",
+            "WARNING",
+        )
+    else:
+        log_message(f"Initializing new browser instance with account: {email}", "INFO")
 
     if page:
         try:
@@ -98,13 +274,16 @@ def initialize_browser():
     page = ChromiumPage(co)
     log_message("New browser instance created", "INFO")
 
+    # Simulate human behavior before login
+    simulate_human_browser_behavior()
+
+    # Now login
     if login(email, password):
         extract_session_data()
+        return True
     else:
         log_message(f"Failed to login with account: {email}", "ERROR")
         return False
-
-    return True
 
 
 def extract_session_data():
@@ -164,12 +343,58 @@ def load_session_data():
         return False
 
 
+def check_for_access_denied():
+    """Check if the page shows an access denied message"""
+    try:
+        # Look for access denied text
+        access_denied_text = page.ele("text:Access Denied", timeout=1)
+
+        if access_denied_text:
+            # Try to find the timeout minutes
+            timeout_text = page.ele(
+                "text:will be restored in approximately:", timeout=1
+            )
+            minutes = ACCOUNT_COOL_DOWN_DEFAULT // 60  # Default 15 minutes
+
+            if timeout_text:
+                # Try to extract the actual minutes
+                minutes_match = re.search(r"(\d+)\s*minutes", page.html)
+                if minutes_match:
+                    minutes = int(minutes_match.group(1))
+
+            # Get current account email
+            current_idx = (current_account_index - 1) % total_accounts
+            if current_idx < 0:
+                current_idx = total_accounts - 1
+
+            email = accounts[current_idx]["email"]
+
+            # Ban the account
+            ban_account(email, minutes)
+            return True, minutes
+
+        return False, 0
+
+    except Exception as e:
+        log_message(f"Error checking for access denied: {e}", "WARNING")
+        return False, 0
+
+
 def login(email, password):
     """Login to Zacks using DrissionPage"""
     try:
         log_message(f"Trying to login with account: {email}", "INFO")
         page.get("https://www.zacks.com/my-account/")
         sleep(2)
+
+        # Check if we're already redirected to an access denied page
+        denied, minutes = check_for_access_denied()
+        if denied:
+            log_message(
+                f"Account {email} is already banned. Access denied before login.",
+                "ERROR",
+            )
+            return False
 
         if is_logged_in():
             log_message("Already logged in, logging out first", "WARNING")
@@ -205,6 +430,12 @@ def login(email, password):
         login_input.click()
 
         sleep(3)
+
+        # Check if we got an access denied page after login
+        denied, minutes = check_for_access_denied()
+        if denied:
+            log_message(f"Account {email} banned after login attempt", "ERROR")
+            return False
 
         try:
             if is_logged_in():
@@ -282,45 +513,32 @@ def is_logged_in():
         return False
 
 
-def get_random_cache_buster():
-    cache_busters = [
-        ("cache_timestamp", lambda: int(time() * 10000)),
-        ("request_uuid", lambda: str(uuid.uuid4())),
-        ("cache_time", lambda: int(time())),
-        ("ran_time", lambda: int(time() * 1000)),
-        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
-        ("unique", lambda: f"{int(time())}-{random.randint(1000, 9999)}"),
-        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
-        ("tist", lambda: str(int(time()))),
-    ]
-
-    variable, value_generator = random.choice(cache_busters)
-    return variable, value_generator()
-
-
-def fetch_commentary_with_requests(comment_id: int):
-    """Fetch commentary using requests library instead of browser"""
-    global session_cookies, session_headers
-
+def fetch_commentary_with_browser(comment_id: int):
+    """Fetch commentary using the browser"""
     try:
-        key, value = get_random_cache_buster()
-        url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}&{key}={value}"
+        log_message(f"Fetching commentary with browser for ID: {comment_id}", "DEBUG")
 
-        response = requests.get(
-            url, cookies=session_cookies, headers=session_headers, timeout=10
-        )
+        # Add a cache buster to the URL
+        cache_buster = f"t={int(time() * 1000)}"
+        url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}&{cache_buster}"
 
-        if response.status_code == 200 and "About Zacks Confidential" in response.text:
-            return response.text
+        page.get(url)
+        sleep(2)
+
+        # Check for access denied
+        denied, _ = check_for_access_denied()
+        if denied:
+            log_message("Access denied when fetching commentary", "ERROR")
+            return None
+
+        if "About Zacks Confidential" in page.html:
+            return page.html
         else:
-            log_message(
-                f"Request failed or content not as expected: Status {response.status_code}",
-                "WARNING",
-            )
+            log_message("Fetched page doesn't contain expected content", "WARNING")
             return None
 
     except Exception as e:
-        log_message(f"Error fetching commentary with requests: {e}", "ERROR")
+        log_message(f"Error fetching commentary with browser: {e}", "ERROR")
         return None
 
 
@@ -362,8 +580,15 @@ async def try_with_another_account():
 
     while accounts_tried < total_accounts:
         accounts_tried += 1
-        email, password = get_next_account()
-        log_message(f"Switching to account: {email}", "INFO")
+        email, password, is_banned = get_next_account()
+
+        if is_banned:
+            log_message(
+                f"Account {email} is banned, but using it anyway as all accounts are unavailable",
+                "WARNING",
+            )
+        else:
+            log_message(f"Switching to account: {email}", "INFO")
 
         # Clear cookies and cache
         if page:
@@ -380,6 +605,9 @@ async def try_with_another_account():
                 co = ChromiumOptions()
                 page = ChromiumPage(co)
 
+        # Simulate human behavior before login
+        simulate_human_browser_behavior()
+
         # Try to login with the new account
         if login(email, password):
             if extract_session_data():
@@ -388,25 +616,61 @@ async def try_with_another_account():
 
         log_message(f"Failed to login with account: {email}", "ERROR")
 
-    log_message("All accounts have failed. Exiting.", "CRITICAL")
+    log_message(
+        "All accounts have failed. Waiting 5 minutes before trying again.", "CRITICAL"
+    )
+    await asyncio.sleep(300)  # Sleep for 5 minutes
     return False
+
+
+async def check_any_accounts_available():
+    """Check if any accounts are available, if not sleep and wait"""
+    current_time = datetime.now().timestamp()
+    all_banned = True
+    earliest_expiry = float("inf")
+
+    for account in accounts:
+        email = account["email"]
+        if email in account_status:
+            if (
+                not account_status[email]["banned"]
+                or current_time > account_status[email]["banned_until"]
+            ):
+                all_banned = False
+                break
+            elif account_status[email]["banned_until"] < earliest_expiry:
+                earliest_expiry = account_status[email]["banned_until"]
+
+    if all_banned and earliest_expiry != float("inf"):
+        wait_time = max(0, earliest_expiry - current_time)
+        next_available = datetime.fromtimestamp(earliest_expiry).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        log_message(
+            f"All accounts are banned. Waiting until {next_available} ({wait_time:.1f} seconds)",
+            "WARNING",
+        )
+        await asyncio.sleep(
+            min(wait_time, 300)
+        )  # Wait for the ban to expire or max 5 minutes
+        return False
+
+    return not all_banned
 
 
 async def run_scraper():
     """Main scraper loop that respects market hours"""
     try:
         load_credentials()
+        load_account_status()
 
         if not initialize_browser():
             if not await try_with_another_account():
                 log_message(
-                    "Failed to initialize with any account. Exiting.", "CRITICAL"
+                    "Failed to initialize with any account. Trying again later.",
+                    "CRITICAL",
                 )
-                return
-
-        if not session_cookies or not session_headers:
-            log_message("Failed to initialize session data. Exiting.", "CRITICAL")
-            return
+                await asyncio.sleep(300)  # Sleep for 5 minutes before trying again
 
         current_comment_id = load_last_comment_id()
         last_browser_refresh_time = time()
@@ -428,6 +692,15 @@ async def run_scraper():
                     )
                     break
 
+                # Check if any accounts are available
+                accounts_available = await check_any_accounts_available()
+                if not accounts_available:
+                    log_message(
+                        "No accounts available right now. Waiting...", "WARNING"
+                    )
+                    await asyncio.sleep(60)  # Wait a minute before checking again
+                    continue
+
                 current_timestamp = time()
                 if (
                     current_timestamp - last_browser_refresh_time
@@ -439,66 +712,67 @@ async def run_scraper():
                     if not initialize_browser():
                         if not await try_with_another_account():
                             log_message(
-                                "All accounts have failed. Exiting.", "CRITICAL"
+                                "All accounts have failed. Waiting before retrying.",
+                                "CRITICAL",
                             )
-                            return
+                            await asyncio.sleep(300)  # Sleep for 5 minutes
+                            continue
                     last_browser_refresh_time = current_timestamp
 
                 start_time = time()
                 log_message(f"Checking comment ID: {current_comment_id}")
 
-                html = fetch_commentary_with_requests(current_comment_id)
+                html = fetch_commentary_with_browser(current_comment_id)
 
                 if not html:
-                    log_message(
-                        "Requests fetch failed, trying with browser as fallback",
-                        "WARNING",
-                    )
-                    if not is_logged_in():
-                        email, password = (
-                            accounts[current_account_index - 1]["email"],
-                            accounts[current_account_index - 1]["password"],
+                    log_message("Browser fetch failed", "WARNING")
+
+                    # Check if access was denied
+                    denied, _ = check_for_access_denied()
+                    if denied:
+                        log_message(
+                            "Access denied detected, switching accounts", "WARNING"
                         )
+                        if not await try_with_another_account():
+                            log_message(
+                                "All accounts have failed. Waiting before retrying.",
+                                "CRITICAL",
+                            )
+                            await asyncio.sleep(300)  # Sleep for 5 minutes
+                            continue
+                    elif not is_logged_in():
+                        email, password, _ = get_next_account()
                         if not login(email, password):
                             log_message(
-                                "Browser login failed too, trying with another account",
+                                "Browser login failed, trying with another account",
                                 "ERROR",
                             )
                             if not await try_with_another_account():
                                 log_message(
-                                    "All accounts have failed. Exiting.", "CRITICAL"
+                                    "All accounts have failed. Waiting before retrying.",
+                                    "CRITICAL",
                                 )
-                                return
+                                await asyncio.sleep(300)  # Sleep for 5 minutes
+                                continue
 
-                    page.get(
-                        f"https://www.zacks.com/confidential/commentary.php?cid={current_comment_id}"
-                    )
+                    consecutive_failures += 1
 
-                    extract_session_data()
-
-                    html = fetch_commentary_with_requests(current_comment_id)
-
-                    if not html:
+                    if consecutive_failures >= 3:
                         log_message(
-                            "Both request methods failed, skipping this comment",
-                            "ERROR",
+                            "Multiple consecutive failures, trying with another account",
+                            "WARNING",
                         )
-                        consecutive_failures += 1
-
-                        if consecutive_failures >= 3:
+                        if not await try_with_another_account():
                             log_message(
-                                "Multiple consecutive failures, trying with another account",
-                                "WARNING",
+                                "All accounts have failed. Waiting before retrying.",
+                                "CRITICAL",
                             )
-                            if not await try_with_another_account():
-                                log_message(
-                                    "All accounts have failed. Exiting.", "CRITICAL"
-                                )
-                                return
-                            consecutive_failures = 0
+                            await asyncio.sleep(300)  # Sleep for 5 minutes
+                            continue
+                        consecutive_failures = 0
 
-                        await asyncio.sleep(CHECK_INTERVAL)
-                        continue
+                    await asyncio.sleep(CHECK_INTERVAL)
+                    continue
 
                 consecutive_failures = 0
 
@@ -556,6 +830,10 @@ def main():
             log_message(
                 "No saved session data found, will create after browser init", "INFO"
             )
+
+        # Create necessary directories
+        DATA_DIR.mkdir(exist_ok=True)
+        CRED_DIR.mkdir(exist_ok=True)
 
         asyncio.run(run_scraper())
     except KeyboardInterrupt:

@@ -77,7 +77,7 @@ async def fetch_posts(session):
         "key": API_KEY,
         "limit": 1,
         "filter": "status:draft",
-        "fields": "title,url,excerpt,created_at",
+        "fields": "id,title,url,excerpt,created_at",
     }
 
     try:
