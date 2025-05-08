@@ -23,7 +23,7 @@ load_dotenv()
 # Constants
 API_URL = "https://morpheus-research.ghost.io/ghost/api/content/posts/"
 API_KEY = os.getenv("MORPHEUS_API_KEY")
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 0.3  # seconds
 PROCESSED_POSTS_FILE = "data/morpheus_processed_posts.json"
 TELEGRAM_BOT_TOKEN = os.getenv("MORPHEUS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MORPHEUS_TELEGRAM_GRP")
@@ -75,6 +75,9 @@ def extract_ticker_from_html(html_content: str) -> Optional[TickerInfo]:
 async def fetch_posts(session):
     params = {
         "key": API_KEY,
+        "limit": 1,
+        "filter": "status:draft",
+        "fields": "title,url,excerpt,created_at",
     }
 
     try:
@@ -167,9 +170,10 @@ async def run_scraper():
 
                     for post in new_posts:
                         ticker_info = extract_ticker_from_html(post.get("excerpt", ""))
-                        if not ticker_info:
-                            ticker_info = extract_ticker_from_html(post.get("html", ""))
-
+                        # FIX: Make sure to handle this in the future if no page reutrns
+                        # if not ticker_info:
+                        #     ticker_info = extract_ticker_from_html(post.get("html", ""))
+                        #
                         await send_to_telegram(post, ticker_info)
                         processed_post_ids.add(post["id"])
 
