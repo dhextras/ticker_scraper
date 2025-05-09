@@ -20,7 +20,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://citronresearch.com/wp-json/wp/v2/media"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 10  # seconds
 PROCESSED_URLS_FILE = "data/citron_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("CITRON_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("CITRON_TELEGRAM_GRP")
