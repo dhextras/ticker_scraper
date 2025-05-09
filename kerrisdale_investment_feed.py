@@ -154,11 +154,14 @@ async def send_post_to_telegram(post_data):
     ticker = post_data["ticker"]
     creator = post_data["creator"]
 
+    current_time = get_current_time()
+
     message = f"<b>New Kerrisdale Investment Post</b>\n\n"
     message += f"<b>Title:</b> {title}\n"
     message += f"<b>Link:</b> {link}\n"
     message += f"<b>Ticker:</b> {ticker}\n"
     message += f"<b>Author:</b> {creator}\n"
+    message += f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     message += f"<b>Published (GMT):</b> {pub_date}\n"
     message += f"<b>Published (Chicago):</b> {chicago_time}\n"
 
