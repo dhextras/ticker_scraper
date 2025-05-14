@@ -3,12 +3,13 @@ import json
 import os
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Set
 
-import aiohttp
 import pytz
+import requests
 from dotenv import load_dotenv
 
 from utils.bypass_cloudflare import bypasser
@@ -145,42 +146,39 @@ def parse_rss_feed(rss_content: str) -> List[Dict[str, Any]]:
         return []
 
 
-async def fetch_rss_feed(
-    session, cookies: Dict[str, Any]
-) -> tuple[Optional[str], Optional[Dict]]:
+def fetch_rss_feed(cookies: Dict[str, Any]) -> tuple[Optional[str], Optional[Dict]]:
     try:
         headers = {
             "User-Agent": f"{cookies['user_agent']}",
             "Cache-Control": "max-age=0",
-            "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
         }
+        custom_cookies = {"cf_clearance": cookies["cf_clearance"]}
 
-        async with session.get(
-            RSS_FEED_URL, headers=headers, cookies=cookies
-        ) as response:
-            if response.status == 200:
-                content = await response.text()
-                log_message("Successfully fetched RSS feed", "INFO")
-                return content, None
-            elif response.status == 403:
-                log_message(
-                    "Cloudflare clearance expired, refreshing cookies...", "WARNING"
-                )
-                cookies = load_cookies(frash=True)
-                if not cookies:
-                    raise Exception("CF_CLEARANCE Failed: Feed")
-                return None, cookies
-            elif 500 <= response.status < 600:
-                log_message(
-                    f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
-                    "WARNING",
-                )
-                return None, None
-            else:
-                log_message(
-                    f"Failed to fetch RSS feed: HTTP {response.status}", "ERROR"
-                )
-                return None, None
+        response = requests.get(RSS_FEED_URL, headers=headers, cookies=custom_cookies)
+
+        if response.status_code == 200:
+            content = response.text
+            log_message("Successfully fetched RSS feed", "INFO")
+            return content, None
+        elif response.status_code == 403:
+            log_message(
+                "Cloudflare clearance expired, refreshing cookies...", "WARNING"
+            )
+            cookies = load_cookies(frash=True)
+            if not cookies:
+                raise Exception("CF_CLEARANCE Failed: Feed")
+            return None, cookies
+        elif 500 <= response.status_code < 600:
+            log_message(
+                f"Server error {response.status_code}: Temporary issue, safe to ignore if infrequent.",
+                "WARNING",
+            )
+            return None, None
+        else:
+            log_message(
+                f"Failed to fetch RSS feed: HTTP {response.status_code}", "ERROR"
+            )
+            return None, None
     except Exception as e:
         if "CF_CLEARANCE Failed" in str(e):
             raise
@@ -220,51 +218,48 @@ async def run_scraper() -> None:
         log_message("Failed to get valid cf_clearance", "CRITICAL")
         return
 
-    async with aiohttp.ClientSession() as session:
+    while True:
+        await sleep_until_market_open()
+
+        log_message(
+            "Market is open. Starting to check RSS feed for new posts...", "DEBUG"
+        )
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
+            current_time = get_current_time()
 
-            log_message(
-                "Market is open. Starting to check RSS feed for new posts...", "DEBUG"
-            )
-            _, _, market_close_time = get_next_market_times()
+            if current_time > market_close_time:
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
+                break
 
-            while True:
-                current_time = get_current_time()
+            log_message("Checking RSS feed for new posts...")
+            rss_content, pos_cookies = fetch_rss_feed(cookies)
 
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    break
+            cookies = pos_cookies if pos_cookies is not None else cookies
 
-                log_message("Checking RSS feed for new posts...")
-                rss_content, pos_cookies = await fetch_rss_feed(session, cookies)
+            if rss_content:
+                posts = parse_rss_feed(rss_content)
+                new_posts = [
+                    post
+                    for post in posts
+                    if post.get("guid") and post["guid"] not in processed_guids
+                ]
 
-                cookies = pos_cookies if pos_cookies is not None else cookies
+                if new_posts:
+                    log_message(f"Found {len(new_posts)} new posts in RSS feed", "INFO")
+                    for post in new_posts:
+                        await send_post_to_telegram(post)
+                        if post.get("guid"):
+                            processed_guids.add(post["guid"])
 
-                if rss_content:
-                    posts = parse_rss_feed(rss_content)
-                    new_posts = [
-                        post
-                        for post in posts
-                        if post.get("guid") and post["guid"] not in processed_guids
-                    ]
+                    save_processed_guids(processed_guids)
+                else:
+                    log_message("No new posts found in RSS feed", "INFO")
 
-                    if new_posts:
-                        log_message(
-                            f"Found {len(new_posts)} new posts in RSS feed", "INFO"
-                        )
-                        for post in new_posts:
-                            await send_post_to_telegram(post)
-                            if post.get("guid"):
-                                processed_guids.add(post["guid"])
-
-                        save_processed_guids(processed_guids)
-                    else:
-                        log_message("No new posts found in RSS feed", "INFO")
-
-                await asyncio.sleep(CHECK_INTERVAL)
+            time.sleep(CHECK_INTERVAL)
 
 
 def main() -> None:
