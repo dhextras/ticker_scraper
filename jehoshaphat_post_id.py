@@ -21,7 +21,7 @@ load_dotenv()
 # Constants
 BASE_URL = "https://jehoshaphatresearch.com/wp-json/wp/v2/posts"
 START_ID = 649
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 5  # seconds
 PROCESSED_IDS_FILE = "data/jehoshaphat_processed_ids.json"
 SESSION_FILE = "data/jehoshaphat_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JEHOSHAPHAT_TELEGRAM_BOT_TOKEN")
