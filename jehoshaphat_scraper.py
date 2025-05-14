@@ -24,7 +24,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://jehoshaphatresearch.com/wp-json/wp/v2/media"
-CHECK_INTERVAL = 3  # seconds
+CHECK_INTERVAL = 10  # seconds
 PROCESSED_URLS_FILE = "data/jehoshaphat_processed_urls.json"
 SESSION_FILE = "data/jehoshaphat_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JEHOSHAPHAT_TELEGRAM_BOT_TOKEN")
