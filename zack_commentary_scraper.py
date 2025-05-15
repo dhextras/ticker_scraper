@@ -219,32 +219,119 @@ def ban_account(email, minutes=None):
     return True
 
 
-def simulate_human_browser_behavior():
-    """Simulate human-like browsing behavior"""
-    try:
-        log_message("Simulating human browsing behavior...", "INFO")
+def simulate_human_browser_behavior(max_pages=4, sleep_interval=10):
+    """
+    Simulate human-like browsing behavior
 
-        # Visit some common pages first
-        common_pages = [
+    Args:
+        max_pages (int): Maximum number of pages to visit (default: 4)
+        sleep_interval (int): Maximum sleep time in seconds (default: 10)
+                              Sleep times will be random between 0 and this value
+    """
+    try:
+        log_message(
+            f"Simulating human browsing behavior with max_pages={max_pages}, sleep_interval={sleep_interval}...",
+            "INFO",
+        )
+
+        tickers = [
+            "AAPL",
+            "MSFT",
+            "AMZN",
+            "TSLA",
+            "GOOG",
+            "GOOGL",
+            "META",
+            "NVDA",
+            "BRK.B",
+            "JPM",
+            "V",
+            "JNJ",
+            "WMT",
+            "PG",
+            "MA",
+            "UNH",
+            "HD",
+            "BAC",
+            "XOM",
+            "AVGO",
+            "LLY",
+            "COST",
+            "PFE",
+            "CSCO",
+            "TMO",
+            "MRK",
+            "ABT",
+            "PEP",
+            "CVX",
+            "KO",
+            "ADBE",
+            "NKE",
+            "CRM",
+            "CMCSA",
+            "NFLX",
+            "AMD",
+            "VZ",
+            "INTC",
+            "DIS",
+            "QCOM",
+            "T",
+            "IBM",
+            "TXN",
+            "PYPL",
+            "MCD",
+            "TMUS",
+            "AMAT",
+            "GS",
+            "BLK",
+            "MS",
+        ]
+
+        # Base URLs with placeholders for tickers
+        base_pages = [
             "https://www.zacks.com/",
             "https://www.zacks.com/stocks/",
             "https://www.zacks.com/earnings/",
+            "https://www.zacks.com/stock/quote/{ticker}?q={ticker}",
+            "https://www.zacks.com/stock/research/equity-research.php?icid=quote-temp_overview-zp_internal-zacks_premium-research_reports-all_reports",
+            "https://www.zacks.com/research-daily/2426383/top-analyst-reports-for-unitedhealth-sap-toyota-motor?q={ticker}",
+            "https://www.zacks.com/stock/quote/{ticker}/dashboard?art_rec=quote-temp_overview-dashboard_preview-zcom-preview_bar-stock_dashboard_{ticker}",
+            "https://www.zacks.com/stocksunder10/",
+            "https://www.zacks.com/homerun/?adid=TOP_ONLINE_NAV",
         ]
 
-        for _ in range(random.randint(1, 2)):
-            random_page = random.choice(common_pages)
-            log_message(f"Visiting page: {random_page}", "DEBUG")
-            page.get(random_page)
+        # Generate actual pages to visit by replacing {ticker} with random tickers
+        common_pages = []
+        for base_url in base_pages:
+            if "{ticker}" in base_url:
+                ticker = random.choice(tickers)
+                page_url = base_url.format(ticker=ticker)
+            else:
+                page_url = base_url
+            common_pages.append(page_url)
 
-            for _ in range(random.randint(3, 8)):
+        pages_to_visit = random.sample(common_pages, min(max_pages, len(common_pages)))
+
+        for page_url in pages_to_visit:
+            log_message(f"Visiting page: {page_url}", "INFO")
+            page.get(page_url)
+
+            # Random scrolling behavior
+            scroll_count = random.randint(3, 8)
+            for _ in range(scroll_count):
                 scroll_amount = random.randint(100, 500)
                 page.scroll.down(scroll_amount)
-                sleep(random.uniform(0.5, 2.0))
 
-            sleep(random.uniform(3, 7))
+                scroll_pause = random.uniform(0.5, min(2.0, sleep_interval / 5))
+                sleep(scroll_pause)
 
-        log_message("Human browsing simulation complete", "DEBUG")
+            between_pages_sleep = random.uniform(1, sleep_interval)
+            log_message(
+                f"Sleeping for {between_pages_sleep:.2f} seconds between pages", "INFO"
+            )
+            sleep(between_pages_sleep)
 
+        log_message("Human browsing simulation complete", "INFO")
     except Exception as e:
         log_message(f"Error during human simulation: {e}", "WARNING")
 
@@ -401,7 +488,7 @@ def login(email, password):
             try:
                 logout_ele = page.ele("#logout", timeout=2)
                 logout_ele.click()
-                sleep(2)
+                sleep(4)
             except:
                 log_message("Failed to logout, clearing cookies", "WARNING")
                 page.clear_cache()
@@ -424,6 +511,8 @@ def login(email, password):
 
         login_input = login_div.ele("tag:input", timeout=0.1)
 
+        username_input.clear()
+        password_input.clear()
         username_input.input(email)
         password_input.input(password)
 
@@ -516,7 +605,6 @@ def is_logged_in():
 def fetch_commentary_with_browser(comment_id: int):
     """Fetch commentary using the browser"""
     try:
-        log_message(f"Fetching commentary with browser for ID: {comment_id}", "DEBUG")
 
         # Add a cache buster to the URL
         cache_buster = f"t={int(time() * 1000)}"
@@ -534,7 +622,7 @@ def fetch_commentary_with_browser(comment_id: int):
         if "About Zacks Confidential" in page.html:
             return page.html
         else:
-            log_message("Fetched page doesn't contain expected content", "WARNING")
+            log_message("Fetched page doesn't contain expected content", "ERROR")
             return None
 
     except Exception as e:
@@ -573,7 +661,7 @@ def process_commentary(html: str):
 
 async def try_with_another_account():
     """Try with another account when the current one fails"""
-    global current_account_index, accounts
+    global co, page, current_account_index, accounts
 
     # If we've tried all accounts and still failed, exit
     accounts_tried = 0
@@ -718,6 +806,14 @@ async def run_scraper():
                             await asyncio.sleep(300)  # Sleep for 5 minutes
                             continue
                     last_browser_refresh_time = current_timestamp
+
+                if (
+                    random.randint(1, 500) == 1
+                ):  # 1/400 chance of execution. So like 3 to 4 times every 30 min
+                    simulate_human_browser_behavior(
+                        max_pages=1,
+                        sleep_interval=1,
+                    )
 
                 start_time = time()
                 log_message(f"Checking comment ID: {current_comment_id}")
