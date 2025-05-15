@@ -44,7 +44,7 @@ LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
 FETCH_PER_ACCOUNT = (
     25  # Max is 30 so we can adjust this accordingly if needed ( We will use -+2)
 )
-SLEEP_BETWEEN_REQUESTS = 0.4  # Adjust this depend on how they rate limit
+SLEEP_BETWEEN_REQUESTS = 0.36  # Adjust this depend on how they rate limit
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
