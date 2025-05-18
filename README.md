@@ -134,6 +134,7 @@ pip install -r requirements.txt
    ZACKS_TELEGRAM_GRP=  # Telegram group ID for Zacks alerts
    ZACKS_USERNAME=  # Zacks login username ts html scraper
    ZACKS_PASSWORD=  # Zacks login password ts html
+   ZACKS_WEBSOCKET_URL= # Websocket url fore the zacks commentary websocket server
 
    # Youtube Channel Monitor settings
    YOUTUBE_TELEGRAM_BOT_TOKEN= # Telegram bot token for youtube channel monitor
