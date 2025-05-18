@@ -4,12 +4,10 @@ import os
 import random
 import re
 import sys
-import uuid
 from datetime import datetime
 from pathlib import Path
 from time import sleep, time
 
-import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
@@ -28,10 +26,11 @@ load_dotenv()
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("ZACKS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
-CHECK_INTERVAL = 0.5  # seconds
+CHECK_INTERVAL = 0.6  # seconds
 STARTING_CID = 43250  # Starting comment ID
 BROWSER_REFRESH_INTERVAL = 1800  # Half an hour
 ACCOUNT_COOL_DOWN_DEFAULT = 15 * 60  # Default cool down period in seconds (15 minutes)
+NUM_TABS = 5  # Number of tabs to use
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -49,6 +48,7 @@ current_account_index = 0
 accounts = []
 total_accounts = 0
 account_status = {}  # To track banned accounts and their cool-down periods
+tab_ids = []  # Store tab IDs
 
 
 def load_credentials():
@@ -219,7 +219,7 @@ def ban_account(email, minutes=None):
     return True
 
 
-def simulate_human_browser_behavior(max_pages=4, sleep_interval=10):
+def simulate_human_browser_behavior(max_pages=3, sleep_interval=10):
     """
     Simulate human-like browsing behavior
 
@@ -521,7 +521,7 @@ def login(email, password):
         sleep(3)
 
         # Check if we got an access denied page after login
-        denied, minutes = check_for_access_denied()
+        denied, _ = check_for_access_denied()
         if denied:
             log_message(f"Account {email} banned after login attempt", "ERROR")
             return False
@@ -602,16 +602,29 @@ def is_logged_in():
         return False
 
 
-def fetch_commentary_with_browser(comment_id: int):
-    """Fetch commentary using the browser"""
+def fetch_commentary_with_browser(tab, comment_id: int):
+    """Fetch commentary using the browser with efficient content loading check"""
     try:
-
-        # Add a cache buster to the URL
+        timeout = 5  # seconds to wait for content
         cache_buster = f"t={int(time() * 1000)}"
         url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}&{cache_buster}"
 
-        page.get(url)
-        sleep(2)
+        start_time = time()
+        tab.get(url)
+
+        while time() - start_time < timeout:
+            try:
+                # Check if the target element exists
+                content_elem = tab.ele("#cdate-most-recent", timeout=0.1)
+                if content_elem:
+                    log_message(
+                        f"Content loaded for comment ID {comment_id} in {time() - start_time:.2f} seconds"
+                    )
+                    return tab.html
+            except:
+                pass
+
+            sleep(0.1)
 
         # Check for access denied
         denied, _ = check_for_access_denied()
@@ -619,11 +632,12 @@ def fetch_commentary_with_browser(comment_id: int):
             log_message("Access denied when fetching commentary", "ERROR")
             return None
 
-        if "About Zacks Confidential" in page.html:
-            return page.html
-        else:
-            log_message("Fetched page doesn't contain expected content", "ERROR")
-            return None
+        # FIX: Move this into a warning later
+        log_message(
+            f"Timeout waiting for content to load for comment ID {comment_id}",
+            "ERROR",
+        )
+        return None
 
     except Exception as e:
         log_message(f"Error fetching commentary with browser: {e}", "ERROR")
@@ -659,9 +673,35 @@ def process_commentary(html: str):
         return None
 
 
+def initialize_tabs():
+    """Initialize multiple tabs for parallel processing"""
+    global page, tab_ids
+
+    # Clear existing tabs
+    if tab_ids:
+        for tab_id in tab_ids[1:]:  # Skip the first tab
+            try:
+                page.get_tab(tab_id).close()
+            except Exception as e:
+                log_message(f"Error closing tab: {e}", "WARNING")
+
+    # Create additional tabs
+    for _ in range(1, NUM_TABS):
+        page.new_tab()
+        page.get("https://www.zacks.com")
+
+    tab_ids = page.tab_ids
+    log_message(f"Initialized {len(tab_ids)} tabs", "INFO")
+
+    # Return to the first tab
+    page.activate_tab(tab_ids[0])
+
+    return tab_ids
+
+
 async def try_with_another_account():
     """Try with another account when the current one fails"""
-    global co, page, current_account_index, accounts
+    global co, page, current_account_index, accounts, tab_ids
 
     # If we've tried all accounts and still failed, exit
     accounts_tried = 0
@@ -692,6 +732,7 @@ async def try_with_another_account():
                     pass
                 co = ChromiumOptions()
                 page = ChromiumPage(co)
+                tab_ids = []
 
         # Simulate human behavior before login
         simulate_human_browser_behavior()
@@ -762,7 +803,6 @@ async def run_scraper():
 
         current_comment_id = load_last_comment_id()
         last_browser_refresh_time = time()
-        consecutive_failures = 0
 
         while True:
             await sleep_until_market_open()
@@ -771,6 +811,8 @@ async def run_scraper():
             log_message("Market is open. Starting commentary monitoring...", "DEBUG")
 
             _, _, market_close_time = get_next_market_times()
+
+            tab_ids = initialize_tabs()
 
             while True:
                 current_time = get_current_time()
@@ -797,6 +839,10 @@ async def run_scraper():
                     log_message(
                         "Time to refresh browser instance and session data", "INFO"
                     )
+                    # Close all tabs and reinitialize
+                    if page:
+                        page.quit()
+
                     if not initialize_browser():
                         if not await try_with_another_account():
                             log_message(
@@ -805,112 +851,96 @@ async def run_scraper():
                             )
                             await asyncio.sleep(300)  # Sleep for 5 minutes
                             continue
+
+                    if (
+                        random.randint(1, 500) == 1
+                    ):  # 1/400 chance of execution. So like 3 to 4 times every 30 min
+                        simulate_human_browser_behavior(
+                            max_pages=1,
+                            sleep_interval=1,
+                        )
+
+                    tab_ids = initialize_tabs()
+
                     last_browser_refresh_time = current_timestamp
 
-                if (
-                    random.randint(1, 500) == 1
-                ):  # 1/400 chance of execution. So like 3 to 4 times every 30 min
-                    simulate_human_browser_behavior(
-                        max_pages=1,
-                        sleep_interval=1,
+                for tab_idx, tab_id in enumerate(tab_ids):
+                    log_message(
+                        f"Processing tab {tab_idx+1} with comment ID: {current_comment_id}"
                     )
 
-                start_time = time()
-                log_message(f"Checking comment ID: {current_comment_id}")
+                    # Switch to this tab
+                    page.activate_tab(tab_id)
+                    current_tab = page.get_tab(tab_id)
 
-                html = fetch_commentary_with_browser(current_comment_id)
-
-                if not html:
-                    log_message("Browser fetch failed", "WARNING")
-
-                    # Check if access was denied
-                    denied, _ = check_for_access_denied()
-                    if denied:
+                    html = fetch_commentary_with_browser(
+                        current_tab, current_comment_id
+                    )
+                    if not html:
                         log_message(
-                            "Access denied detected, switching accounts", "WARNING"
+                            f"Failed to fetch commentary for comment ID {current_comment_id}",
+                            "WARNING",
                         )
-                        if not await try_with_another_account():
+
+                        # Check if we need to switch accounts
+                        denied, _ = check_for_access_denied()
+                        if denied or not is_logged_in():
                             log_message(
-                                "All accounts have failed. Waiting before retrying.",
-                                "CRITICAL",
-                            )
-                            await asyncio.sleep(300)  # Sleep for 5 minutes
-                            continue
-                    elif not is_logged_in():
-                        email, password, _ = get_next_account()
-                        if not login(email, password):
-                            log_message(
-                                "Browser login failed, trying with another account",
-                                "ERROR",
+                                "Access denied or logged out, switching accounts",
+                                "WARNING",
                             )
                             if not await try_with_another_account():
                                 log_message(
-                                    "All accounts have failed. Waiting before retrying.",
+                                    "All accounts failed, waiting before retry",
                                     "CRITICAL",
                                 )
-                                await asyncio.sleep(300)  # Sleep for 5 minutes
-                                continue
+                                await asyncio.sleep(300)
+                                break
 
-                    consecutive_failures += 1
+                            # Reinitialize tabs after account switch
+                            tab_ids = initialize_tabs()
+                            break
 
-                    if consecutive_failures >= 3:
-                        log_message(
-                            "Multiple consecutive failures, trying with another account",
-                            "WARNING",
-                        )
-                        if not await try_with_another_account():
-                            log_message(
-                                "All accounts have failed. Waiting before retrying.",
-                                "CRITICAL",
+                        # Continue to next tab
+                        continue
+
+                    # Process the commentary
+                    commentary = process_commentary(html)
+                    if commentary:
+                        fetched_time = get_current_time()
+                        ticker_info = ""
+                        if commentary["ticker"] and commentary["action"]:
+                            ticker_info = f"\n<b>Action:</b> {commentary['action']} {commentary['ticker']}"
+
+                            await send_ws_message(
+                                {
+                                    "name": "Zacks - Commentary",
+                                    "type": commentary["action"],
+                                    "ticker": commentary["ticker"],
+                                    "sender": "zacks",
+                                    "target": "CSS",
+                                },
                             )
-                            await asyncio.sleep(300)  # Sleep for 5 minutes
-                            continue
-                        consecutive_failures = 0
 
-                    await asyncio.sleep(CHECK_INTERVAL)
-                    continue
-
-                consecutive_failures = 0
-
-                fetched_time = get_current_time()
-                commentary = process_commentary(html)
-                if commentary:
-                    log_message(
-                        f"Found comment: {current_comment_id}, Title: {commentary['title']}",
-                        "INFO",
-                    )
-
-                    ticker_info = ""
-                    if commentary["ticker"] and commentary["action"]:
-                        ticker_info = f"\n<b>Action:</b> {commentary['action']} {commentary['ticker']}"
-
-                        await send_ws_message(
-                            {
-                                "name": "Zacks - Commentary",
-                                "type": commentary["action"],
-                                "ticker": commentary["ticker"],
-                                "sender": "zacks",
-                                "target": "CSS",
-                            },
+                        log_message(
+                            f"Found comment: {current_comment_id}, Title: {commentary['title']}",
+                            "INFO",
+                        )
+                        message = (
+                            f"<b>New Zacks Commentary!</b>\n"
+                            f"<b>Current Time:</b> {fetched_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                            f"<b>Comment Id:</b> {current_comment_id}{ticker_info}\n\n"
+                            f"<b>Title:</b> {commentary['title']}\n\n"
+                            f"{commentary['content'][:600]}\n\n\nthere is more......."
                         )
 
-                    message = (
-                        f"<b>New Zacks Commentary!</b>\n"
-                        f"<b>Current Time:</b> {fetched_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                        f"<b>Comment Id:</b> {current_comment_id}{ticker_info}\n\n"
-                        f"<b>Title:</b> {commentary['title']}\n\n"
-                        f"{commentary['content'][:600]}\n\n\nthere is more......."
-                    )
+                        await send_telegram_message(
+                            message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+                        )
 
-                    await send_telegram_message(
-                        message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-                    )
+                        current_comment_id += 1
+                        await save_comment_id(current_comment_id)
 
-                    current_comment_id += 1
-                    await save_comment_id(current_comment_id)
-
-                total_time = time() - start_time
-                log_message(f"Checking comment completed in {total_time:.2f} seconds")
                 await asyncio.sleep(CHECK_INTERVAL)
     except Exception as e:
         log_message(f"Critical error in run_scraper: {e}", "CRITICAL")
