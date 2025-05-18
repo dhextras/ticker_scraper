@@ -273,7 +273,7 @@ def extract_ticker(title, content):
     return None, None
 
 
-async def handle_client(websocket, _):
+async def handle_client(websocket, path):
     """Handle WebSocket client connections"""
     client_id = None
 
