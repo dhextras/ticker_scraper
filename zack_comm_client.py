@@ -192,7 +192,8 @@ def login(email, password):
         page.get("https://www.zacks.com/my-account/")
         time.sleep(2)
 
-        if check_for_access_denied():
+        denied, _ = check_for_access_denied()
+        if denied:
             log_message(
                 f"Account {email} is already banned. Access denied before login.",
                 "ERROR",
@@ -237,8 +238,8 @@ def login(email, password):
 
         time.sleep(3)
 
-        # Check if we got an access denied page after login
-        if check_for_access_denied():
+        denied, _ = check_for_access_denied()
+        if denied:
             log_message(f"Account {email} banned after login attempt", "ERROR")
             return False
 
