@@ -273,7 +273,7 @@ def extract_ticker(title, content):
     return None, None
 
 
-async def handle_client(websocket, path):
+async def handle_client(websocket):
     """Handle WebSocket client connections"""
     client_id = None
 
@@ -424,72 +424,86 @@ async def job_distributor():
     current_cid_being_processed = False
 
     while True:
-        try:
-            client_id = await processing_queue.get()
+        await sleep_until_market_open()
+        await initialize_websocket()
+        log_message("Market is open. Starting commentary monitoring...", "INFO")
 
-            if (
-                client_id not in connected_clients
-                or client_id not in client_status
-                or client_status[client_id]["status"] != "available"
-            ):
-                continue
+        _, _, market_close_time = get_next_market_times()
 
-            if current_cid_being_processed:
-                # Put the client back in the queue for later and continue
-                await asyncio.sleep(2)
-                await processing_queue.put(client_id)
-                continue
+        while True:
+            current_time = get_current_time()
+            if current_time > market_close_time:
+                log_message("Market is closed. Waiting for next market open.", "INFO")
+                break
 
-            current_time = time.time()
-            if current_time - last_assignment_time < MIN_ASSIGNMENT_INTERVAL:
-                await asyncio.sleep(MIN_ASSIGNMENT_INTERVAL)
+            try:
+                client_id = await processing_queue.get()
 
-            websocket = connected_clients[client_id]
+                if (
+                    client_id not in connected_clients
+                    or client_id not in client_status
+                    or client_status[client_id]["status"] != "available"
+                ):
+                    continue
 
-            account_idx, email, password, is_banned = get_available_account(client_id)
+                if current_cid_being_processed:
+                    await asyncio.sleep(2)
+                    await processing_queue.put(client_id)
+                    continue
 
-            if account_idx is None:
-                log_message(f"No accounts available for client {client_id}", "ERROR")
-                await asyncio.sleep(10)  # Wait before trying again
-                await processing_queue.put(client_id)
-                continue
+                current_time = time.time()
+                if current_time - last_assignment_time < MIN_ASSIGNMENT_INTERVAL:
+                    await asyncio.sleep(MIN_ASSIGNMENT_INTERVAL)
 
-            cid_to_check = current_comment_id
+                websocket = connected_clients[client_id]
 
-            log_message(
-                f"Assigning comment ID {cid_to_check} to `{client_id}` with account `{email}`",
-                "INFO",
-            )
-
-            # Update client status
-            client_status[client_id]["status"] = "busy"
-            client_status[client_id]["current_cid"] = cid_to_check
-            client_status[client_id]["account_index"] = account_idx
-
-            # Mark this CID as being processed
-            current_cid_being_processed = True
-
-            # Update the last assignment time
-            last_assignment_time = time.time()
-
-            # Send job to client
-            await websocket.send(
-                json.dumps(
-                    {
-                        "type": "job",
-                        "comment_id": cid_to_check,
-                        "account_index": account_idx,
-                        "email": email,
-                        "password": password,
-                        "is_banned": is_banned,
-                    }
+                account_idx, email, password, is_banned = get_available_account(
+                    client_id
                 )
-            )
 
-        except Exception as e:
-            log_message(f"Error in job distributor: {e}", "ERROR")
-            current_cid_being_processed = False  # Reset in case of error
-            await asyncio.sleep(5)  # Wait bef
+                if account_idx is None:
+                    log_message(
+                        f"No accounts available for client {client_id}", "ERROR"
+                    )
+                    await asyncio.sleep(10)
+                    await processing_queue.put(client_id)
+                    continue
+
+                cid_to_check = current_comment_id
+
+                log_message(
+                    f"Assigning comment ID {cid_to_check} to `{client_id}` with account `{email}`",
+                    "INFO",
+                )
+
+                # Update client status
+                client_status[client_id]["status"] = "busy"
+                client_status[client_id]["current_cid"] = cid_to_check
+                client_status[client_id]["account_index"] = account_idx
+
+                # Mark this CID as being processed
+                current_cid_being_processed = True
+
+                # Update the last assignment time
+                last_assignment_time = time.time()
+
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "job",
+                            "comment_id": cid_to_check,
+                            "account_index": account_idx,
+                            "email": email,
+                            "password": password,
+                            "is_banned": is_banned,
+                        }
+                    )
+                )
+
+            except Exception as e:
+                log_message(f"Error in job distributor: {e}", "ERROR")
+                current_cid_being_processed = False
+                await asyncio.sleep(5)
 
 
 async def cleanup_inactive_clients():
@@ -523,27 +537,10 @@ async def cleanup_inactive_clients():
         await asyncio.sleep(60)  # Check every minute
 
 
-async def market_hours_manager():
-    """Manage market hours operation"""
-    global current_comment_id
-
-    while True:
-        await sleep_until_market_open()
-        await initialize_websocket()
-        log_message("Market is open. Starting commentary monitoring...", "INFO")
-
-        current_comment_id = load_last_comment_id()
-
-        _, _, market_close_time = get_next_market_times()
-
-        while get_current_time() <= market_close_time:
-            await asyncio.sleep(5)
-
-        log_message("Market is closed. Waiting for next market open.", "INFO")
-
-
 async def main():
     """Main server function"""
+    global current_comment_id
+
     if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
@@ -555,6 +552,8 @@ async def main():
         load_credentials()
         load_account_status()
 
+        current_comment_id = load_last_comment_id()
+
         # Start the WebSocket server
         server = await websockets.serve(handle_client, "0.0.0.0", WEBSOCKET_PORT)
 
@@ -563,11 +562,8 @@ async def main():
         # Start background tasks
         distributor_task = asyncio.create_task(job_distributor())
         cleanup_task = asyncio.create_task(cleanup_inactive_clients())
-        market_task = asyncio.create_task(market_hours_manager())
 
-        await asyncio.gather(
-            server.wait_closed(), distributor_task, cleanup_task, market_task
-        )
+        await asyncio.gather(server.wait_closed(), distributor_task, cleanup_task)
 
     except KeyboardInterrupt:
         log_message("Server shutting down gracefully...", "INFO")

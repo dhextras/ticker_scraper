@@ -6,6 +6,7 @@ import re
 import sys
 import time
 from datetime import datetime
+from time import sleep
 
 import websockets
 from bs4 import BeautifulSoup
