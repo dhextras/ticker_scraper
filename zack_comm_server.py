@@ -380,6 +380,7 @@ async def handle_client_pong(websocket, client_id):
 
 async def browser_initialization_manager():
     """Manage browser initialization for all connected clients"""
+    global initializing_clients
     try:
         while True:
             current_time = time.time()
@@ -467,7 +468,7 @@ async def browser_initialization_manager():
 
 async def handle_client(websocket):
     """Handle WebSocket client connections"""
-    global current_comment_id
+    global current_comment_id, initializing_clients
     client_id = None
 
     try:
@@ -726,7 +727,7 @@ async def process_commentary_result(comment_id, data):
 
 async def job_distributor():
     """Distribute jobs to available clients"""
-    global current_comment_id
+    global current_comment_id, initializing_clients
     last_assignment_time = 0
     MIN_ASSIGNMENT_INTERVAL = 0.8  # NOTE: Increase this shit too if needed
 
@@ -747,13 +748,9 @@ async def job_distributor():
                 # To avoid getting stuck in the queue, use timeout
                 try:
                     client_id = await asyncio.wait_for(
-                        processing_queue.get(), timeout=5
+                        processing_queue.get(), timeout=10
                     )
                 except asyncio.TimeoutError:
-                    log_message(
-                        "Time out happening too freaking quick so wtf check it",
-                        "WARNING",
-                    )
                     continue
 
                 if (
