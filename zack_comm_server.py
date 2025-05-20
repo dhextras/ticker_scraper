@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 import websockets
-from aiohttp import client
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -38,7 +37,9 @@ ACCOUNT_STATUS_FILE = DATA_DIR / "zacks_account_status.json"
 
 # Global state
 connected_clients = {}  # client_id -> websocket
-client_status = {}  # client_id -> {status, last_active, current_cid, account_index}
+client_status = (
+    {}
+)  # client_id -> {status, last_active, current_cid, account_index, account_email, account_assigned_time}
 current_comment_id = STARTING_CID
 accounts = []
 total_accounts = 0
@@ -49,6 +50,7 @@ client_browser_restart = {}  # client_id -> next_restart_time
 account_usage_queue = []  # Queue of available account emails
 account_in_use = set()  # Set of emails currently in use
 initializing_clients = set()  # Set of clients currently initializing
+account_usage_count = {}  # email -> count of
 
 
 def load_credentials():
@@ -138,7 +140,7 @@ def save_account_status():
 
 def init_account_rotation():
     """Initialize the account rotation system"""
-    global account_usage_queue, account_in_use
+    global account_usage_queue, account_in_use, account_usage_count
 
     # Start with all accounts in the queue
     account_usage_queue = [account["email"] for account in accounts]
@@ -146,16 +148,60 @@ def init_account_rotation():
     random.shuffle(account_usage_queue)
     account_in_use = set()
 
+    # Initialize usage counter for each account
+    account_usage_count = {account["email"]: 0 for account in accounts}
+
     log_message(
         f"Initialized account rotation with {len(account_usage_queue)} accounts", "INFO"
     )
 
 
 def get_available_account(client_id):
-    """Get an available account using a global rotation system"""
-    global account_usage_queue, account_in_use
+    """Get an available account using a rotation system with 30-minute persistence per client"""
+    global account_usage_queue, account_in_use, client_status, account_usage_count
 
     current_time = datetime.now().timestamp()
+
+    # Check if client already has an assigned account and it hasn't been 30 minutes yet
+    if client_id in client_status and "account_email" in client_status[client_id]:
+        assigned_email = client_status[client_id].get("account_email")
+        assignment_time = client_status[client_id].get("account_assigned_time", 0)
+
+        # If the client has an account assigned less than 30 minutes ago, reuse it
+        if (
+            assigned_email and current_time - assignment_time < 1800
+        ):  # 30 minutes = 1800 seconds
+            # Make sure the account isn't banned
+            is_banned = (
+                assigned_email in account_status
+                and account_status[assigned_email]["banned"]
+                and current_time < account_status[assigned_email]["banned_until"]
+            )
+
+            if not is_banned:
+                # Find the account index
+                account_idx = None
+                for idx, account in enumerate(accounts):
+                    if account["email"] == assigned_email:
+                        account_idx = idx
+                        break
+
+                if account_idx is not None:
+                    log_message(
+                        f"Reusing assigned account {assigned_email} for client {client_id} (assigned {(current_time - assignment_time)/60:.1f} minutes ago)",
+                        "INFO",
+                    )
+                    return account_idx, assigned_email, False
+            else:
+                # Account is banned, clear the assignment
+                log_message(
+                    f"Previously assigned account {assigned_email} is now banned, assigning new account to client {client_id}",
+                    "WARNING",
+                )
+                client_status[client_id].pop("account_email", None)
+                client_status[client_id].pop("account_assigned_time", None)
+
+    # If we need a new account, continue with the rotation system
 
     # If queue is empty but we have accounts in use, wait for releases
     if not account_usage_queue and len(account_in_use) >= total_accounts:
@@ -164,24 +210,9 @@ def get_available_account(client_id):
         )
         return None, None, None
 
-    # First, try to get a non-banned account from the queue
-    original_queue_size = len(account_usage_queue)
-    attempts = 0
-
-    while account_usage_queue and attempts < original_queue_size:
-        attempts += 1
-        email = account_usage_queue.pop(0)
-
-        # Find the account details
-        account_idx = None
-        for idx, account in enumerate(accounts):
-            if account["email"] == email:
-                account_idx = idx
-                break
-
-        if account_idx is None:
-            continue  # Account not found (shouldn't happen)
-
+    # Find the least used accounts that are available
+    available_accounts = []
+    for email in account_usage_queue:
         # Check if account is banned
         if email not in account_status:
             account_status[email] = {
@@ -195,27 +226,48 @@ def get_available_account(client_id):
             and current_time < account_status[email]["banned_until"]
         )
 
-        if is_banned:
-            account_usage_queue.append(email)
-            continue
+        if not is_banned:
+            available_accounts.append((email, account_usage_count.get(email, 0)))
 
+    # If we have available accounts, select the least used one
+    if available_accounts:
+        # Sort by usage count (ascending)
+        available_accounts.sort(key=lambda x: x[1])
+
+        # Get the email with the lowest usage count
+        email, _ = available_accounts[0]
+
+        # Remove this email from the queue
+        account_usage_queue.remove(email)
+
+        # Find the account details
+        account_idx = None
+        for idx, account in enumerate(accounts):
+            if account["email"] == email:
+                account_idx = idx
+                break
+
+        if account_idx is None:
+            log_message(f"Account {email} not found in accounts list", "ERROR")
+            return None, None, None
+
+        # Increment usage count
+        account_usage_count[email] = account_usage_count.get(email, 0) + 1
+
+        # Add to in-use set
         account_in_use.add(email)
 
-        # If account was banned but ban period expired
-        if account_status[email]["banned"]:
-            account_status[email]["banned"] = False
-            account_status[email]["banned_until"] = 0
-            log_message(
-                f"Account {email} ban period has expired, now available", "INFO"
-            )
-            save_account_status()
+        # Store the assignment info in client_status for future reference
+        client_status[client_id]["account_email"] = email
+        client_status[client_id]["account_assigned_time"] = current_time
 
         log_message(
-            f"Assigned account {email} to client {client_id} (rotation system)", "INFO"
+            f"Assigned account {email} to client {client_id} (usage count: {account_usage_count[email]})",
+            "INFO",
         )
         return account_idx, email, False
 
-    # Try to find the account with earliest ban expiration
+    # If no non-banned accounts in queue, try to find the account with earliest ban expiration
     earliest_expiry = float("inf")
     earliest_email = None
     earliest_idx = None
@@ -243,11 +295,20 @@ def get_available_account(client_id):
     if earliest_email:
         wait_time = max(0, earliest_expiry - current_time)
 
+        # Increment usage count
+        account_usage_count[earliest_email] = (
+            account_usage_count.get(earliest_email, 0) + 1
+        )
+
         # Add to in-use set
         account_in_use.add(earliest_email)
 
+        # Store the assignment info in client_status for future reference
+        client_status[client_id]["account_email"] = earliest_email
+        client_status[client_id]["account_assigned_time"] = current_time
+
         log_message(
-            f"All non-banned accounts are in use or none available. Using {earliest_email} for client {client_id}, available in {wait_time:.1f} seconds",
+            f"All non-banned accounts are in use or none available. Using {earliest_email} for client {client_id}, available in {wait_time:.1f} seconds (usage count: {account_usage_count[earliest_email]})",
             "WARNING",
         )
         return earliest_idx, earliest_email, True
@@ -279,6 +340,20 @@ def release_account(email):
                 "INFO",
             )
             return True
+    return False
+
+
+def release_client_account(client_id):
+    """Release the account assigned to a client"""
+    if client_id in client_status and "account_email" in client_status[client_id]:
+        email = client_status[client_id]["account_email"]
+        result = release_account(email)
+
+        # Clear the assignment
+        client_status[client_id].pop("account_email", None)
+        client_status[client_id].pop("account_assigned_time", None)
+
+        return result
     return False
 
 
@@ -432,7 +507,7 @@ async def browser_initialization_manager():
                     ):
                         initializing_clients.add(client_id)
 
-                        # Get an account for restart
+                        release_client_account(client_id)
                         account_idx, email, _ = get_available_account(client_id)
 
                         if account_idx is not None:
@@ -849,7 +924,7 @@ async def cleanup_inactive_clients():
 
 async def main():
     """Main server function"""
-    global current_comment_id
+    global current_comment_id, account_usage_count
 
     if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
         log_message("Missing required environment variables", "CRITICAL")
