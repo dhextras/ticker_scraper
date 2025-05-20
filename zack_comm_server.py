@@ -866,14 +866,13 @@ async def main():
 
         log_message(f"Server started on port {WEBSOCKET_PORT}", "INFO")
 
-        # Start background tasks
+        browser_init_task = asyncio.create_task(browser_initialization_manager())
+        await asyncio.gather(browser_init_task)
+
         distributor_task = asyncio.create_task(job_distributor())
         cleanup_task = asyncio.create_task(cleanup_inactive_clients())
-        browser_init_task = asyncio.create_task(browser_initialization_manager())
 
-        await asyncio.gather(
-            server.wait_closed(), distributor_task, cleanup_task, browser_init_task
-        )
+        await asyncio.gather(server.wait_closed(), distributor_task, cleanup_task)
 
     except KeyboardInterrupt:
         log_message("Server shutting down gracefully...", "INFO")
