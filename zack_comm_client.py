@@ -368,7 +368,7 @@ def process_commentary(html):
         return None, None
 
 
-async def handle_job(websocket, job_data):
+async def handle_job(websocket, job_data, processing_start_time):
     """Handle a job assignment from the server"""
     global consecutive_failures, current_login_email, current_login_password
 
@@ -377,8 +377,6 @@ async def handle_job(websocket, job_data):
     email = job_data["email"]
     password = job_data["password"]
     is_banned = job_data.get("is_banned", False)
-
-    start_time = time.time()
 
     try:
         log_message(
@@ -435,7 +433,7 @@ async def handle_job(websocket, job_data):
                         "title": title,
                         "content": content,
                         "html_content": html_content is not None,
-                        "start_time": start_time,
+                        "processing_start_time": processing_start_time,
                     }
                 )
             )
@@ -448,17 +446,15 @@ async def handle_job(websocket, job_data):
                         "type": "result",
                         "comment_id": comment_id,
                         "html_content": False,
-                        "start_time": start_time,
+                        "processing_start_time": processing_start_time,
                     }
                 )
             )
 
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             log_message(
-                f"Too many consecutive failures ({consecutive_failures}), restarting browser",
-                "ERROR",
+                f"Too many consecutive failures ({consecutive_failures})", "ERROR"
             )
-            setup_browser()
 
     except Exception as e:
         log_message(f"Error handling job: {e}", "ERROR")
@@ -472,6 +468,7 @@ async def handle_job(websocket, job_data):
                     "comment_id": comment_id,
                     "error": str(e),
                     "html_content": False,
+                    "processing_start_time": processing_start_time,
                 }
             )
         )
@@ -479,7 +476,7 @@ async def handle_job(websocket, job_data):
 
 async def main(CLIENT_ID):
     """Main client function"""
-    global last_browser_restart, current_login_email, current_login_password
+    global last_browser_restart, current_login_email, current_login_password, consecutive_failures
 
     if not setup_browser():
         log_message("Failed to set up browser, exiting", "CRITICAL")
@@ -507,47 +504,121 @@ async def main(CLIENT_ID):
                 log_message(f"Registered with server as client: {CLIENT_ID}", "INFO")
                 reconnect_delay = RECONNECT_DELAY
 
+                # Initial status update
                 await websocket.send(
                     json.dumps({"type": "status_update", "status": "available"})
                 )
 
+                # Handle pings and messages
+                last_pong_time = time.time()
+
                 while True:
-                    message = await websocket.recv()
-                    data = json.loads(message)
+                    try:
+                        # Use a timeout to receive messages so we can check for ping timeouts
+                        message = await asyncio.wait_for(websocket.recv(), timeout=5)
+                        data = json.loads(message)
 
-                    if data["type"] == "job":
-                        await handle_job(websocket, data)
+                        if data["type"] == "ping":
+                            await websocket.send(
+                                json.dumps({"type": "pong", "client_id": CLIENT_ID})
+                            )
+                            last_pong_time = time.time()
 
-                        current_time = time.time()
-                        if (
-                            current_time - last_browser_restart
-                            > BROWSER_RESTART_INTERVAL
-                        ):
-                            log_message("Performing scheduled browser restart", "INFO")
-                            temp_email = current_login_email
-                            temp_password = current_login_password
+                        elif data["type"] == "job":
+                            processing_start_time = data.get(
+                                "processing_start_time", time.time()
+                            )
+                            await handle_job(websocket, data, processing_start_time)
 
-                            setup_browser()
-                            last_browser_restart = current_time
+                            if random.random() < HUMAN_SIMULATION_PROBABILITY:
+                                await asyncio.to_thread(simulate_human_browser_behavior)
 
-                            if temp_email and temp_password:
-                                log_message(
-                                    f"Re-logging in after browser restart with account: {temp_email}",
-                                    "INFO",
+                            await websocket.send(
+                                json.dumps(
+                                    {"type": "status_update", "status": "available"}
                                 )
-                                login(temp_email, temp_password)
+                            )
 
-                        if random.random() < HUMAN_SIMULATION_PROBABILITY:
-                            await asyncio.to_thread(simulate_human_browser_behavior)
+                        elif data["type"] == "initialize_login":
+                            account_index = data["account_index"]
+                            email = data["email"]
+                            password = data["password"]
 
-                        await websocket.send(
-                            json.dumps({"type": "status_update", "status": "available"})
-                        )
+                            log_message(
+                                f"Received initial login request for account {email}",
+                                "INFO",
+                            )
+                            login_success = await asyncio.to_thread(
+                                login, email, password
+                            )
 
-                    elif data["type"] == "ping":
-                        await websocket.send(
-                            json.dumps({"type": "pong", "client_id": CLIENT_ID})
-                        )
+                            if login_success:
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "login_result",
+                                            "account_index": account_index,
+                                            "success": True,
+                                        }
+                                    )
+                                )
+                            else:
+                                # Check if banned and for how long
+                                denied, minutes = await asyncio.to_thread(
+                                    check_for_access_denied
+                                )
+                                ban_minutes = minutes if denied else 15
+
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "login_result",
+                                            "account_index": account_index,
+                                            "success": False,
+                                            "minutes": ban_minutes,
+                                        }
+                                    )
+                                )
+
+                        elif data["type"] == "restart_browser":
+                            log_message("Received request to restart browser", "INFO")
+                            account_index = data["account_index"]
+                            email = data["email"]
+                            password = data["password"]
+
+                            # Store credentials before restart
+                            temp_email = email
+                            temp_password = password
+
+                            await asyncio.to_thread(setup_browser)
+
+                            # Try to login after restart
+                            login_success = await asyncio.to_thread(
+                                login, temp_email, temp_password
+                            )
+
+                            await websocket.send(
+                                json.dumps(
+                                    {
+                                        "type": "browser_restart_complete",
+                                        "success": login_success,
+                                        "account_index": account_index,
+                                    }
+                                )
+                            )
+
+                            # Reset consecutive failures after browser restart
+                            consecutive_failures = 0
+
+                    except asyncio.TimeoutError:
+                        # Check if we've gone too long without a pong (30 seconds)
+                        if time.time() - last_pong_time > 30:
+                            log_message(
+                                "No ping from server for 30 seconds, reconnecting",
+                                "WARNING",
+                            )
+                            break
+                        continue
 
         except websockets.exceptions.ConnectionClosed:
             log_message("Connection to server closed", "WARNING")

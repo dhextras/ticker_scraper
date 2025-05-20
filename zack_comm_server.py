@@ -275,7 +275,10 @@ def extract_ticker(title, content):
 
 async def handle_client(websocket):
     """Handle WebSocket client connections"""
+    global current_comment_id
     client_id = None
+    last_ping_time = time.time()
+    ping_interval = 5  # Send ping every 5 seconds
 
     try:
         # Wait for client registration
@@ -291,6 +294,7 @@ async def handle_client(websocket):
                 "current_cid": None,
                 "account_index": None,
                 "processing_time": [],
+                "browser_restart_time": time.time(),  # Track browser restart time
             }
             log_message(f"Client {client_id} connected", "INFO")
 
@@ -299,60 +303,184 @@ async def handle_client(websocket):
                 json.dumps({"type": "registration_ack", "client_id": client_id})
             )
 
-            # Main client interaction loop
+            # Initiate login immediately after registration
+            account_idx, email, password, _ = get_available_account(client_id)
+            if account_idx is not None:
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "initialize_login",
+                            "account_index": account_idx,
+                            "email": email,
+                            "password": password,
+                        }
+                    )
+                )
+                log_message(
+                    f"Sent initial login request to client {client_id} with account {email}",
+                    "INFO",
+                )
+                await asyncio.sleep(
+                    60
+                )  # FIX: Again do the same fix below try to initiate for all clients
+
             while True:
-                message = await websocket.recv()
-                data = json.loads(message)
+                # Check if it's time to send a ping
+                current_time = time.time()
+                if current_time - last_ping_time >= ping_interval:
+                    await websocket.send(json.dumps({"type": "ping"}))
+                    last_ping_time = current_time
 
-                if data["type"] == "status_update":
-                    client_status[client_id]["status"] = data["status"]
-                    client_status[client_id]["last_active"] = time.time()
-
-                    if data["status"] == "available":
-                        await processing_queue.put(client_id)
-
-                elif data["type"] == "result":
-                    cid = data["comment_id"]
-
-                    if "start_time" in data:
-                        processing_time = time.time() - data["start_time"]
-                        client_status[client_id]["processing_time"].append(
-                            processing_time
-                        )
-
-                        # Check if processing is consistently slow
-                        recent_times = client_status[client_id]["processing_time"][-1:]
-                        if (
-                            len(recent_times) >= 1
-                            and sum(recent_times) / len(recent_times) > 5.0
-                        ):
-                            # NOTE: Later change this to warning instead of error also change 1 to 5
-                            log_message(
-                                f"Client {client_id} is consistently slow (avg: {sum(recent_times)/len(recent_times):.2f}s)",
-                                "ERROR",
+                # Check if browser restart is needed (every 30 minutes)
+                if (
+                    current_time - client_status[client_id]["browser_restart_time"]
+                    >= 1800
+                ):  # 30 minutes
+                    account_idx = client_status[client_id].get("account_index")
+                    if account_idx is not None and account_idx < len(accounts):
+                        email = accounts[account_idx]["email"]
+                        password = accounts[account_idx]["password"]
+                        await websocket.send(
+                            json.dumps(
+                                {
+                                    "type": "restart_browser",
+                                    "account_index": account_idx,
+                                    "email": email,
+                                    "password": password,
+                                }
                             )
-
-                    if "html_content" in data and data["html_content"]:
-                        await process_commentary_result(cid, data)
-                    else:
+                        )
+                        client_status[client_id]["browser_restart_time"] = current_time
                         log_message(
-                            f"No content found for comment ID {cid} from client {client_id}",
+                            f"Sent browser restart request to client {client_id}",
                             "INFO",
                         )
+                        await asyncio.sleep(
+                            60
+                        )  # FIX: Either increase reduce this some how or wait for confirmation if the restart was success also maybe we can just send it to another client and use it i dont know
 
-                    client_status[client_id]["status"] = "available"
-                    client_status[client_id]["current_cid"] = None
-                    await processing_queue.put(client_id)
+                try:
+                    message = await asyncio.wait_for(websocket.recv(), timeout=0.5)
+                    data = json.loads(message)
 
-                elif data["type"] == "account_banned":
-                    account_index = data.get("account_index")
-                    if account_index is not None and account_index < len(accounts):
-                        email = accounts[account_index]["email"]
-                        minutes = data.get("minutes", None)
-                        ban_account(email, minutes)
+                    if data["type"] == "status_update":
+                        client_status[client_id]["status"] = data["status"]
+                        client_status[client_id]["last_active"] = time.time()
 
-                    client_status[client_id]["status"] = "available"
-                    await processing_queue.put(client_id)
+                        if data["status"] == "available":
+                            await processing_queue.put(client_id)
+
+                    elif data["type"] == "result":
+                        cid = data["comment_id"]
+
+                        if "processing_start_time" in data and not data.get(
+                            "browser_restart", False
+                        ):
+                            processing_time = (
+                                time.time() - data["processing_start_time"]
+                            )
+                            client_status[client_id]["processing_time"].append(
+                                processing_time
+                            )
+
+                            # Check if processing is consistently slow
+                            recent_times = client_status[client_id]["processing_time"][
+                                -1:
+                            ]
+                            if (
+                                len(recent_times) >= 1
+                                and sum(recent_times) / len(recent_times) > 5.0
+                            ):
+                                # NOTE: Later change this to warning instead of error also change 1 to 5
+                                log_message(
+                                    f"Client {client_id} is consistently slow (avg: {sum(recent_times)/len(recent_times):.2f}s)",
+                                    "WARNING",
+                                )
+
+                        if "html_content" in data and data["html_content"]:
+                            await process_commentary_result(cid, data)
+                        else:
+                            log_message(
+                                f"No content found for comment ID {cid} from client {client_id}",
+                                "INFO",
+                            )
+
+                        client_status[client_id]["status"] = "available"
+                        client_status[client_id]["current_cid"] = None
+                        await processing_queue.put(client_id)
+
+                    elif data["type"] == "account_banned":
+                        account_index = data.get("account_index")
+                        if account_index is not None and account_index < len(accounts):
+                            email = accounts[account_index]["email"]
+                            minutes = data.get("minutes", None)
+                            ban_account(email, minutes)
+
+                        client_status[client_id]["status"] = "available"
+                        await processing_queue.put(client_id)
+
+                    elif data["type"] == "pong":
+                        # Update last active time on pong response
+                        client_status[client_id]["last_active"] = time.time()
+
+                    elif data["type"] == "login_result":
+                        account_index = data.get("account_index")
+                        success = data.get("success", False)
+                        email = (
+                            accounts[account_index]["email"]
+                            if account_index < len(accounts)
+                            else "unknown"
+                        )
+
+                        if success:
+                            log_message(
+                                f"Client {client_id} successfully logged in with account {email}",
+                                "INFO",
+                            )
+                            client_status[client_id]["status"] = "available"
+                            await processing_queue.put(client_id)
+                        else:
+                            ban_minutes = data.get("minutes", 15)
+                            log_message(
+                                f"Client {client_id} failed to login with account {email}, banned for {ban_minutes} mins",
+                                "ERROR",
+                            )
+                            ban_account(email, ban_minutes)
+
+                            # Try another account
+                            new_account_idx, new_email, new_password, _ = (
+                                get_available_account(client_id)
+                            )
+                            if new_account_idx is not None:
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "initialize_login",
+                                            "account_index": new_account_idx,
+                                            "email": new_email,
+                                            "password": new_password,
+                                        }
+                                    )
+                                )
+                                log_message(
+                                    f"Sent new login request to client {client_id} with account {new_email}",
+                                    "INFO",
+                                )
+                            else:
+                                client_status[client_id]["status"] = "available"
+                                await processing_queue.put(client_id)
+
+                    elif data["type"] == "browser_restart_complete":
+                        log_message(
+                            f"Client {client_id} completed browser restart", "INFO"
+                        )
+                        client_status[client_id]["browser_restart_time"] = time.time()
+                        client_status[client_id]["status"] = "available"
+                        await processing_queue.put(client_id)
+
+                except asyncio.TimeoutError:
+                    # This is expected behavior, continue the loop
+                    pass
 
     except websockets.exceptions.ConnectionClosed:
         log_message(f"Connection closed for client {client_id}", "WARNING")
@@ -367,8 +495,6 @@ async def handle_client(websocket):
 
 async def process_commentary_result(comment_id, data):
     """Process commentary result from client"""
-    global current_comment_id
-
     title = data.get("title")
     content = data.get("content")
 
@@ -384,7 +510,6 @@ async def process_commentary_result(comment_id, data):
         ticker_info = f"\n<b>Action:</b> {action} {ticker}"
 
         try:
-
             await send_ws_message(
                 {
                     "name": "Zacks - Commentary",
@@ -409,19 +534,12 @@ async def process_commentary_result(comment_id, data):
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
-    if comment_id >= current_comment_id:
-        current_comment_id = comment_id + 1
-        await save_comment_id(current_comment_id)
-
 
 async def job_distributor():
     """Distribute jobs to available clients"""
     global current_comment_id
     last_assignment_time = 0
     MIN_ASSIGNMENT_INTERVAL = 0.8  # NOTE: Increase this shit too if needed
-
-    # Keep track of whether the current CID is being processed
-    current_cid_being_processed = False
 
     while True:
         await sleep_until_market_open()
@@ -437,7 +555,17 @@ async def job_distributor():
                 break
 
             try:
-                client_id = await processing_queue.get()
+                # To avoid getting stuck in the queue, use timeout
+                try:
+                    client_id = await asyncio.wait_for(
+                        processing_queue.get(), timeout=5
+                    )
+                except asyncio.TimeoutError:
+                    log_message(
+                        "Time out happening too freaking quick so wtf check it", "ERROR"
+                    )  # NOTE: Remove this log
+                    # If timeout, just restart the loop
+                    continue
 
                 if (
                     client_id not in connected_clients
@@ -446,14 +574,11 @@ async def job_distributor():
                 ):
                     continue
 
-                if current_cid_being_processed:
-                    await asyncio.sleep(2)
-                    await processing_queue.put(client_id)
-                    continue
-
                 current_time = time.time()
                 if current_time - last_assignment_time < MIN_ASSIGNMENT_INTERVAL:
-                    await asyncio.sleep(MIN_ASSIGNMENT_INTERVAL)
+                    await asyncio.sleep(
+                        MIN_ASSIGNMENT_INTERVAL - (current_time - last_assignment_time)
+                    )
 
                 websocket = connected_clients[client_id]
 
@@ -481,9 +606,6 @@ async def job_distributor():
                 client_status[client_id]["current_cid"] = cid_to_check
                 client_status[client_id]["account_index"] = account_idx
 
-                # Mark this CID as being processed
-                current_cid_being_processed = True
-
                 # Update the last assignment time
                 last_assignment_time = time.time()
 
@@ -496,13 +618,17 @@ async def job_distributor():
                             "email": email,
                             "password": password,
                             "is_banned": is_banned,
+                            "processing_start_time": time.time(),
                         }
                     )
                 )
 
+                # Increment comment ID for next check after sending job
+                current_comment_id += 1
+                await save_comment_id(current_comment_id)
+
             except Exception as e:
                 log_message(f"Error in job distributor: {e}", "ERROR")
-                current_cid_being_processed = False
                 await asyncio.sleep(5)
 
 
