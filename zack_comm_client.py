@@ -611,10 +611,10 @@ async def main(CLIENT_ID):
                             consecutive_failures = 0
 
                     except asyncio.TimeoutError:
-                        # Check if we've gone too long without a pong (30 seconds)
-                        if time.time() - last_pong_time > 30:
+                        # Check if we've gone too long without a pong (120 seconds)
+                        if time.time() - last_pong_time > 120:
                             log_message(
-                                "No ping from server for 30 seconds, reconnecting",
+                                "No ping from server for 120 seconds, reconnecting",
                                 "WARNING",
                             )
                             break
