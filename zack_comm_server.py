@@ -729,7 +729,7 @@ async def handle_client(websocket):
 
                 except asyncio.TimeoutError:
                     pass
-                except websockets.exceptions.ConnectionClosedOk:
+                except websockets.exceptions.ConnectionClosed:
                     log_message(f"Connection closed for client {client_id}", "WARNING")
                 except Exception as e:
                     log_message(
