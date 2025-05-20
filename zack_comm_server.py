@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import websockets
+from aiohttp import client
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -458,6 +459,8 @@ async def browser_initialization_manager():
                                     release_account(email)
                                 if client_id in initializing_clients:
                                     initializing_clients.remove(client_id)
+                elif client_id in initializing_clients:
+                    initializing_clients.remove(client_id)
 
             await asyncio.sleep(10)  # Check every 10 seconds
     except Exception as e:
@@ -487,6 +490,7 @@ async def handle_client(websocket):
                 "processing_time": [],
             }
             log_message(f"Client {client_id} connected", "INFO")
+            initializing_clients.add(client_id)
 
             # Send acknowledgment
             await websocket.send(
@@ -867,12 +871,12 @@ async def main():
         log_message(f"Server started on port {WEBSOCKET_PORT}", "INFO")
 
         browser_init_task = asyncio.create_task(browser_initialization_manager())
-        await asyncio.gather(browser_init_task)
-
         distributor_task = asyncio.create_task(job_distributor())
         cleanup_task = asyncio.create_task(cleanup_inactive_clients())
 
-        await asyncio.gather(server.wait_closed(), distributor_task, cleanup_task)
+        await asyncio.gather(
+            server.wait_closed(), browser_init_task, distributor_task, cleanup_task
+        )
 
     except KeyboardInterrupt:
         log_message("Server shutting down gracefully...", "INFO")
