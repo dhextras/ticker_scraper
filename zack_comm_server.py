@@ -731,8 +731,11 @@ async def handle_client(websocket):
                     pass
                 except websockets.exceptions.ConnectionClosed:
                     log_message(f"Connection closed for client {client_id}", "WARNING")
-                    client_status.pop(client_id)
-                    del connected_clients[client_id]
+                    try:
+                        client_status.pop(client_id)
+                        del connected_clients[client_id]
+                    except:
+                        pass
                 except Exception as e:
                     log_message(
                         f"Error processing message from client {client_id}: {e}",
@@ -743,8 +746,11 @@ async def handle_client(websocket):
 
     except websockets.exceptions.ConnectionClosed:
         log_message(f"Connection closed for client {client_id}", "WARNING")
-        client_status.pop(client_id)
-        del connected_clients[client_id]
+        try:
+            client_status.pop(client_id)
+            del connected_clients[client_id]
+        except:
+            pass
     except Exception as e:
         log_message(f"Error handling client {client_id}: {e}", "ERROR")
     finally:
