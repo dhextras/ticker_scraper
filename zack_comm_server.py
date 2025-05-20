@@ -576,6 +576,7 @@ async def handle_client(websocket):
             ping_pong_task = asyncio.create_task(
                 handle_client_pong(websocket, client_id)
             )
+            await ping_pong_task
 
             while True:
                 try:
@@ -728,6 +729,8 @@ async def handle_client(websocket):
 
                 except asyncio.TimeoutError:
                     pass
+                except websockets.exceptions.ConnectionClosedOk:
+                    log_message(f"Connection closed for client {client_id}", "WARNING")
                 except Exception as e:
                     log_message(
                         f"Error processing message from client {client_id}: {e}",

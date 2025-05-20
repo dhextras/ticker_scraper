@@ -562,7 +562,25 @@ async def main(CLIENT_ID):
                 log_message(f"Registered with server as client: {CLIENT_ID}", "INFO")
                 reconnect_delay = RECONNECT_DELAY
 
-                ping_task = asyncio.create_task(ping_server(websocket))
+                message_queue = asyncio.Queue()
+
+                async def message_handler():
+                    try:
+                        while True:
+                            message = await websocket.recv()
+                            data = json.loads(message)
+
+                            if data["type"] == "ping":
+                                await websocket.send(
+                                    json.dumps({"type": "pong", "client_id": CLIENT_ID})
+                                )
+                            else:
+                                await message_queue.put(data)
+                    except Exception as e:
+                        log_message(f"Error in message handler: {e}", "ERROR")
+                        await message_queue.put(None)
+
+                message_task = asyncio.create_task(message_handler())
 
                 # Initial status update
                 await websocket.send(
@@ -571,15 +589,12 @@ async def main(CLIENT_ID):
 
                 try:
                     while True:
-                        message = await websocket.recv()
-                        data = json.loads(message)
+                        data = await message_queue.get()
+                        if data is None:
+                            break
 
-                        if data["type"] == "ping":
-                            await websocket.send(
-                                json.dumps({"type": "pong", "client_id": CLIENT_ID})
-                            )
-
-                        elif data["type"] == "job":
+                        # No need to handle ping/pong here as it's done in message_handler
+                        if data["type"] == "job":
                             processing_start_time = data.get(
                                 "processing_start_time", time.time()
                             )
@@ -698,15 +713,17 @@ async def main(CLIENT_ID):
                     log_message(f"Error in main connection loop: {e}", "ERROR")
 
                 finally:
-                    # Cancel ping task when connection is lost
-                    if ping_task:
-                        ping_task.cancel()
-                        try:
-                            await ping_task
-                        except asyncio.CancelledError:
-                            pass
+                    # Cancel all tasks when connection is lost
+                    if message_task:
+                        message_task.cancel()
 
-        except websockets.exceptions.ConnectionClosed:
+                    try:
+                        if message_task:
+                            await message_task
+                    except asyncio.CancelledError:
+                        pass
+
+        except websockets.exceptions.ConnectionClosedOk:
             log_message("Connection to server closed", "WARNING")
         except Exception as e:
             log_message(f"Connection error: {e}", "ERROR")
