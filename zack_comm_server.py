@@ -44,6 +44,10 @@ total_accounts = 0
 account_status = {}  # email -> {banned, banned_until, ban_count}
 processing_queue = asyncio.Queue()  # Queue for comment IDs to process
 account_locks = {}  # email -> client_id that's using this account
+client_browser_restart = {}  # client_id -> next_restart_time
+account_usage_queue = []  # Queue of available account emails
+account_in_use = set()  # Set of emails currently in use
+initializing_clients = set()  # Set of clients currently initializing
 
 
 def load_credentials():
@@ -129,11 +133,6 @@ def save_account_status():
     except Exception as e:
         log_message(f"Error saving account status: {e}", "ERROR")
         return False
-
-
-# Add these global variables to track account usage
-account_usage_queue = []  # Queue of available account emails
-account_in_use = set()  # Set of emails currently in use
 
 
 def init_account_rotation():
@@ -372,12 +371,108 @@ def extract_ticker(title, content):
     return None, None
 
 
+async def handle_client_pong(websocket, client_id):
+    """Handle ping-pong mechanism for a client"""
+    try:
+        while client_id in connected_clients:
+            await websocket.send(json.dumps({"type": "ping"}))
+            client_status[client_id]["last_active"] = time.time()
+            await asyncio.sleep(5)  # Send ping every 5 seconds
+    except Exception as e:
+        log_message(f"Error in ping-pong handler for client {client_id}: {e}", "ERROR")
+
+
+async def browser_initialization_manager():
+    """Manage browser initialization for all connected clients"""
+    try:
+        while True:
+            current_time = time.time()
+
+            # Check all connected clients
+            for client_id in list(connected_clients.keys()):
+                if client_id not in client_browser_restart:
+                    # New client needs initial setup
+                    client_browser_restart[client_id] = current_time
+                    initializing_clients.add(client_id)
+
+                    # Get an account for initialization
+                    account_idx, email, _, _ = get_available_account(client_id)
+
+                    if account_idx is not None and client_id in connected_clients:
+                        try:
+                            await connected_clients[client_id].send(
+                                json.dumps(
+                                    {
+                                        "type": "initialize_login",
+                                        "account_index": account_idx,
+                                        "email": email,
+                                    }
+                                )
+                            )
+                            log_message(
+                                f"Sent initial login request to client {client_id} with account {email}",
+                                "INFO",
+                            )
+                        except Exception as e:
+                            log_message(
+                                f"Error sending initialization to client {client_id}: {e}",
+                                "ERROR",
+                            )
+                            if email:
+                                release_account(email)
+                            if client_id in initializing_clients:
+                                initializing_clients.remove(client_id)
+
+                # Check if it's time for a browser restart (every 30 minutes)
+                elif (
+                    client_id in client_browser_restart
+                    and current_time - client_browser_restart[client_id] >= 1800
+                ):
+                    if (
+                        client_id not in initializing_clients
+                        and client_id in connected_clients
+                    ):
+                        initializing_clients.add(client_id)
+
+                        # Get an account for restart
+                        account_idx, email, _, _ = get_available_account(client_id)
+
+                        if account_idx is not None:
+                            try:
+                                await connected_clients[client_id].send(
+                                    json.dumps(
+                                        {
+                                            "type": "restart_browser",
+                                            "account_index": account_idx,
+                                            "email": email,
+                                        }
+                                    )
+                                )
+                                log_message(
+                                    f"Sent browser restart request to client {client_id}",
+                                    "INFO",
+                                )
+                            except Exception as e:
+                                log_message(
+                                    f"Error sending restart to client {client_id}: {e}",
+                                    "ERROR",
+                                )
+                                if email:
+                                    release_account(email)
+                                if client_id in initializing_clients:
+                                    initializing_clients.remove(client_id)
+
+            await asyncio.sleep(10)  # Check every 10 seconds
+    except Exception as e:
+        log_message(f"Error in browser initialization manager: {e}", "ERROR")
+        await asyncio.sleep(30)
+        asyncio.create_task(browser_initialization_manager())
+
+
 async def handle_client(websocket):
     """Handle WebSocket client connections"""
     global current_comment_id
     client_id = None
-    last_ping_time = time.time()
-    ping_interval = 5  # Send ping every 5 seconds
 
     try:
         # Wait for client registration
@@ -393,7 +488,6 @@ async def handle_client(websocket):
                 "current_cid": None,
                 "account_index": None,
                 "processing_time": [],
-                "browser_restart_time": time.time(),  # Track browser restart time
             }
             log_message(f"Client {client_id} connected", "INFO")
 
@@ -402,71 +496,24 @@ async def handle_client(websocket):
                 json.dumps({"type": "registration_ack", "client_id": client_id})
             )
 
-            # Initiate login immediately after registration
-            account_idx, email, password, _ = get_available_account(client_id)
-            if account_idx is not None:
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "initialize_login",
-                            "account_index": account_idx,
-                            "email": email,
-                            "password": password,
-                        }
-                    )
-                )
-                log_message(
-                    f"Sent initial login request to client {client_id} with account {email}",
-                    "INFO",
-                )
-                await asyncio.sleep(
-                    60
-                )  # FIX: Again do the same fix below try to initiate for all clients
+            # Start ping-pong handler for this client
+            ping_pong_task = asyncio.create_task(
+                handle_client_pong(websocket, client_id)
+            )
 
             while True:
-                # Check if it's time to send a ping
-                current_time = time.time()
-                if current_time - last_ping_time >= ping_interval:
-                    await websocket.send(json.dumps({"type": "ping"}))
-                    last_ping_time = current_time
-
-                # Check if browser restart is needed (every 30 minutes)
-                if (
-                    current_time - client_status[client_id]["browser_restart_time"]
-                    >= 1800
-                ):  # 30 minutes
-                    account_idx = client_status[client_id].get("account_index")
-                    if account_idx is not None and account_idx < len(accounts):
-                        email = accounts[account_idx]["email"]
-                        password = accounts[account_idx]["password"]
-                        await websocket.send(
-                            json.dumps(
-                                {
-                                    "type": "restart_browser",
-                                    "account_index": account_idx,
-                                    "email": email,
-                                    "password": password,
-                                }
-                            )
-                        )
-                        client_status[client_id]["browser_restart_time"] = current_time
-                        log_message(
-                            f"Sent browser restart request to client {client_id}",
-                            "INFO",
-                        )
-                        await asyncio.sleep(
-                            60
-                        )  # FIX: Either increase reduce this some how or wait for confirmation if the restart was success also maybe we can just send it to another client and use it i dont know
-
                 try:
-                    message = await asyncio.wait_for(websocket.recv(), timeout=0.5)
+                    message = await websocket.recv()
                     data = json.loads(message)
 
                     if data["type"] == "status_update":
                         client_status[client_id]["status"] = data["status"]
                         client_status[client_id]["last_active"] = time.time()
 
-                        if data["status"] == "available":
+                        if (
+                            data["status"] == "available"
+                            and client_id not in initializing_clients
+                        ):
                             await processing_queue.put(client_id)
 
                     elif data["type"] == "result":
@@ -512,7 +559,9 @@ async def handle_client(websocket):
                         client_status[client_id]["status"] = "available"
                         client_status[client_id]["current_cid"] = None
                         client_status[client_id]["account_index"] = None
-                        await processing_queue.put(client_id)
+
+                        if client_id not in initializing_clients:
+                            await processing_queue.put(client_id)
 
                     elif data["type"] == "account_banned":
                         account_index = data.get("account_index")
@@ -523,7 +572,9 @@ async def handle_client(websocket):
 
                         client_status[client_id]["status"] = "available"
                         client_status[client_id]["account_index"] = None
-                        await processing_queue.put(client_id)
+
+                        if client_id not in initializing_clients:
+                            await processing_queue.put(client_id)
 
                     elif data["type"] == "pong":
                         # Update last active time on pong response
@@ -532,49 +583,53 @@ async def handle_client(websocket):
                     elif data["type"] == "login_result":
                         account_index = data.get("account_index")
                         success = data.get("success", False)
-                        email = (
-                            accounts[account_index]["email"]
-                            if account_index < len(accounts)
-                            else "unknown"
-                        )
 
-                        if success:
-                            log_message(
-                                f"Client {client_id} successfully logged in with account {email}",
-                                "INFO",
-                            )
-                            client_status[client_id]["status"] = "available"
-                            await processing_queue.put(client_id)
-                        else:
-                            ban_minutes = data.get("minutes", 15)
-                            log_message(
-                                f"Client {client_id} failed to login with account {email}, banned for {ban_minutes} mins",
-                                "ERROR",
-                            )
-                            ban_account(email, ban_minutes)
+                        if account_index is not None and account_index < len(accounts):
+                            email = accounts[account_index]["email"]
 
-                            # Try another account
-                            new_account_idx, new_email, new_password, _ = (
-                                get_available_account(client_id)
-                            )
-                            if new_account_idx is not None:
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "initialize_login",
-                                            "account_index": new_account_idx,
-                                            "email": new_email,
-                                            "password": new_password,
-                                        }
-                                    )
-                                )
+                            if success:
                                 log_message(
-                                    f"Sent new login request to client {client_id} with account {new_email}",
+                                    f"Client {client_id} successfully logged in with account {email}",
                                     "INFO",
                                 )
-                            else:
                                 client_status[client_id]["status"] = "available"
+                                if client_id in initializing_clients:
+                                    initializing_clients.remove(client_id)
                                 await processing_queue.put(client_id)
+                            else:
+                                ban_minutes = data.get("minutes", 15)
+                                log_message(
+                                    f"Client {client_id} failed to login with account {email}, banned for {ban_minutes} mins",
+                                    "ERROR",
+                                )
+                                ban_account(email, ban_minutes)
+
+                                # Get another account for this client
+                                if client_id in initializing_clients:
+                                    new_account_idx, new_email, _, _ = (
+                                        get_available_account(client_id)
+                                    )
+                                    if new_account_idx is not None:
+                                        await websocket.send(
+                                            json.dumps(
+                                                {
+                                                    "type": "initialize_login",
+                                                    "account_index": new_account_idx,
+                                                    "email": new_email,
+                                                }
+                                            )
+                                        )
+                                        log_message(
+                                            f"Sent new login request to client {client_id} with account {new_email}",
+                                            "INFO",
+                                        )
+                                    else:
+                                        initializing_clients.remove(client_id)
+                                        client_status[client_id]["status"] = "available"
+                                        await processing_queue.put(client_id)
+                        else:
+                            if client_id in initializing_clients:
+                                initializing_clients.remove(client_id)
 
                     elif data["type"] == "browser_restart_complete":
                         account_index = client_status[client_id].get("account_index")
@@ -586,13 +641,25 @@ async def handle_client(websocket):
                         log_message(
                             f"Client {client_id} completed browser restart", "INFO"
                         )
-                        client_status[client_id]["browser_restart_time"] = time.time()
+                        client_browser_restart[client_id] = (
+                            time.time()
+                        )  # Reset restart timer
+                        if client_id in initializing_clients:
+                            initializing_clients.remove(client_id)
                         client_status[client_id]["status"] = "available"
                         client_status[client_id]["account_index"] = None
                         await processing_queue.put(client_id)
+
                 except asyncio.TimeoutError:
-                    # This is expected behavior, continue the loop
                     pass
+                except Exception as e:
+                    log_message(
+                        f"Error processing message from client {client_id}: {e}",
+                        "ERROR",
+                    )
+
+            # Cancel the ping-pong task when the loop exits
+            ping_pong_task.cancel()
 
     except websockets.exceptions.ConnectionClosed:
         log_message(f"Connection closed for client {client_id}", "WARNING")
@@ -606,6 +673,12 @@ async def handle_client(websocket):
                     email = accounts[account_index]["email"]
                     release_account(email)
                 del client_status[client_id]
+
+            if client_id in initializing_clients:
+                initializing_clients.remove(client_id)
+
+            if client_id in client_browser_restart:
+                del client_browser_restart[client_id]
 
             del connected_clients[client_id]
 
@@ -657,6 +730,7 @@ async def job_distributor():
     global current_comment_id
     last_assignment_time = 0
     MIN_ASSIGNMENT_INTERVAL = 0.8  # NOTE: Increase this shit too if needed
+    found_posts = set()  # Track found comments to avoid duplicate increments
 
     while True:
         await sleep_until_market_open()
@@ -681,14 +755,14 @@ async def job_distributor():
                     log_message(
                         "Time out happening too freaking quick so wtf check it",
                         "WARNING",
-                    )  # NOTE: Remove this log
-                    # If timeout, just restart the loop
+                    )
                     continue
 
                 if (
                     client_id not in connected_clients
                     or client_id not in client_status
                     or client_status[client_id]["status"] != "available"
+                    or client_id in initializing_clients
                 ):
                     continue
 
@@ -734,16 +808,17 @@ async def job_distributor():
                             "comment_id": cid_to_check,
                             "account_index": account_idx,
                             "email": email,
-                            "password": password,
                             "is_banned": is_banned,
                             "processing_start_time": time.time(),
                         }
                     )
                 )
 
-                # Increment comment ID for next check after sending job
-                current_comment_id += 1
-                await save_comment_id(current_comment_id)
+                # Only increment comment ID when a post is found and processed
+                if cid_to_check not in found_posts:
+                    found_posts.add(cid_to_check)
+                    current_comment_id += 1
+                    await save_comment_id(current_comment_id)
 
             except Exception as e:
                 log_message(f"Error in job distributor: {e}", "ERROR")
@@ -807,8 +882,11 @@ async def main():
         # Start background tasks
         distributor_task = asyncio.create_task(job_distributor())
         cleanup_task = asyncio.create_task(cleanup_inactive_clients())
+        browser_init_task = asyncio.create_task(browser_initialization_manager())
 
-        await asyncio.gather(server.wait_closed(), distributor_task, cleanup_task)
+        await asyncio.gather(
+            server.wait_closed(), distributor_task, cleanup_task, browser_init_task
+        )
 
     except KeyboardInterrupt:
         log_message("Server shutting down gracefully...", "INFO")

@@ -27,14 +27,39 @@ MAX_CONSECUTIVE_FAILURES = (
 )
 RECONNECT_DELAY = 3  # Seconds to wait before reconnecting to server
 BROWSER_RESTART_INTERVAL = 1800  # Restart browser every 30 minutes
+CREDENTIALS_FILE = os.path.join("cred", "zacks_credentials.json")
 
 # Initialize browser variables
 co = None
 page = None
 consecutive_failures = 0
-last_browser_restart = time.time()
 current_login_email = None
 current_login_password = None
+accounts = []
+
+
+def load_credentials():
+    """Load credentials from file to get passwords when needed"""
+    global accounts
+    try:
+        if os.path.exists(CREDENTIALS_FILE):
+            with open(CREDENTIALS_FILE, "r") as f:
+                accounts = json.load(f)
+                return True
+        else:
+            log_message(f"Credentials file not found at {CREDENTIALS_FILE}", "CRITICAL")
+            sys.exit(1)
+    except Exception as e:
+        log_message(f"Error loading credentials: {e}", "CRITICAL")
+        sys.exit(1)
+
+
+def get_password_for_email(email):
+    """Get password for a given email from loaded credentials"""
+    for account in accounts:
+        if account["email"] == email:
+            return account["password"]
+    return None
 
 
 def setup_browser():
@@ -189,6 +214,10 @@ def login(email, password):
 
     try:
         log_message(f"Logging in with account: {email}", "INFO")
+
+        # Simulate human behavior before login
+        simulate_human_browser_behavior(max_pages=2, sleep_interval=5)
+
         page.get("https://www.zacks.com/my-account/")
         time.sleep(2)
 
@@ -368,6 +397,16 @@ def process_commentary(html):
         return None, None
 
 
+async def ping_server(websocket):
+    """Send periodic pings to the server"""
+    try:
+        while True:
+            await websocket.send(json.dumps({"type": "ping"}))
+            await asyncio.sleep(5)
+    except Exception as e:
+        log_message(f"Error in ping task: {e}", "ERROR")
+
+
 async def handle_job(websocket, job_data, processing_start_time):
     """Handle a job assignment from the server"""
     global consecutive_failures, current_login_email, current_login_password
@@ -375,8 +414,24 @@ async def handle_job(websocket, job_data, processing_start_time):
     comment_id = job_data["comment_id"]
     account_index = job_data["account_index"]
     email = job_data["email"]
-    password = job_data["password"]
     is_banned = job_data.get("is_banned", False)
+
+    # Get password from loaded credentials
+    password = get_password_for_email(email)
+    if not password:
+        log_message(f"Could not find password for email {email}", "ERROR")
+        await websocket.send(
+            json.dumps(
+                {
+                    "type": "result",
+                    "comment_id": comment_id,
+                    "error": "Password not found",
+                    "html_content": False,
+                    "processing_start_time": processing_start_time,
+                }
+            )
+        )
+        return
 
     try:
         log_message(
@@ -476,7 +531,10 @@ async def handle_job(websocket, job_data, processing_start_time):
 
 async def main(CLIENT_ID):
     """Main client function"""
-    global last_browser_restart, current_login_email, current_login_password, consecutive_failures
+    global consecutive_failures, current_login_email, current_login_password
+
+    # Load credentials
+    load_credentials()
 
     if not setup_browser():
         log_message("Failed to set up browser, exiting", "CRITICAL")
@@ -504,25 +562,22 @@ async def main(CLIENT_ID):
                 log_message(f"Registered with server as client: {CLIENT_ID}", "INFO")
                 reconnect_delay = RECONNECT_DELAY
 
+                ping_task = asyncio.create_task(ping_server(websocket))
+
                 # Initial status update
                 await websocket.send(
                     json.dumps({"type": "status_update", "status": "available"})
                 )
 
-                # Handle pings and messages
-                last_pong_time = time.time()
-
-                while True:
-                    try:
-                        # Use a timeout to receive messages so we can check for ping timeouts
-                        message = await asyncio.wait_for(websocket.recv(), timeout=5)
+                try:
+                    while True:
+                        message = await websocket.recv()
                         data = json.loads(message)
 
                         if data["type"] == "ping":
                             await websocket.send(
                                 json.dumps({"type": "pong", "client_id": CLIENT_ID})
                             )
-                            last_pong_time = time.time()
 
                         elif data["type"] == "job":
                             processing_start_time = data.get(
@@ -542,59 +597,92 @@ async def main(CLIENT_ID):
                         elif data["type"] == "initialize_login":
                             account_index = data["account_index"]
                             email = data["email"]
-                            password = data["password"]
+                            password = get_password_for_email(email)
 
-                            log_message(
-                                f"Received initial login request for account {email}",
-                                "INFO",
-                            )
-                            login_success = await asyncio.to_thread(
-                                login, email, password
-                            )
-
-                            if login_success:
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "login_result",
-                                            "account_index": account_index,
-                                            "success": True,
-                                        }
-                                    )
+                            if not password:
+                                log_message(
+                                    f"Could not find password for email {email}",
+                                    "ERROR",
                                 )
-                            else:
-                                # Check if banned and for how long
-                                denied, minutes = await asyncio.to_thread(
-                                    check_for_access_denied
-                                )
-                                ban_minutes = minutes if denied else 15
-
                                 await websocket.send(
                                     json.dumps(
                                         {
                                             "type": "login_result",
                                             "account_index": account_index,
                                             "success": False,
-                                            "minutes": ban_minutes,
+                                            "minutes": 0,
                                         }
+                                    )
+                                )
+                                continue
+
+                            log_message(
+                                f"Received initial login request for account {email}",
+                                "INFO",
+                            )
+
+                            login_success = await asyncio.to_thread(
+                                login, email, password
+                            )
+
+                            await websocket.send(
+                                json.dumps(
+                                    {
+                                        "type": "login_result",
+                                        "account_index": account_index,
+                                        "success": login_success,
+                                        "minutes": 0 if login_success else 15,
+                                    }
+                                )
+                            )
+
+                            if login_success:
+                                await websocket.send(
+                                    json.dumps(
+                                        {"type": "status_update", "status": "available"}
                                     )
                                 )
 
                         elif data["type"] == "restart_browser":
-                            log_message("Received request to restart browser", "INFO")
                             account_index = data["account_index"]
                             email = data["email"]
-                            password = data["password"]
+                            password = get_password_for_email(email)
 
-                            # Store credentials before restart
-                            temp_email = email
-                            temp_password = password
+                            if not password:
+                                log_message(
+                                    f"Could not find password for email {email}",
+                                    "ERROR",
+                                )
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "browser_restart_complete",
+                                            "success": False,
+                                        }
+                                    )
+                                )
+                                continue
 
-                            await asyncio.to_thread(setup_browser)
+                            log_message(
+                                f"Restarting browser with account {email}", "INFO"
+                            )
 
-                            # Try to login after restart
+                            # Actually restart the browser
+                            if not setup_browser():
+                                log_message("Failed to restart browser", "ERROR")
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "browser_restart_complete",
+                                            "success": False,
+                                        }
+                                    )
+                                )
+                                continue
+
+                            # Try to login with the new account
                             login_success = await asyncio.to_thread(
-                                login, temp_email, temp_password
+                                login, email, password
                             )
 
                             await websocket.send(
@@ -602,59 +690,46 @@ async def main(CLIENT_ID):
                                     {
                                         "type": "browser_restart_complete",
                                         "success": login_success,
-                                        "account_index": account_index,
                                     }
                                 )
                             )
 
-                            # Reset consecutive failures after browser restart
-                            consecutive_failures = 0
+                except Exception as e:
+                    log_message(f"Error in main connection loop: {e}", "ERROR")
 
-                    except asyncio.TimeoutError:
-                        # Check if we've gone too long without a pong (120 seconds)
-                        if time.time() - last_pong_time > 120:
-                            log_message(
-                                "No ping from server for 120 seconds, reconnecting",
-                                "WARNING",
-                            )
-                            break
-                        continue
+                finally:
+                    # Cancel ping task when connection is lost
+                    if ping_task:
+                        ping_task.cancel()
+                        try:
+                            await ping_task
+                        except asyncio.CancelledError:
+                            pass
 
         except websockets.exceptions.ConnectionClosed:
             log_message("Connection to server closed", "WARNING")
         except Exception as e:
-            log_message(f"Error in main loop: {e}", "ERROR")
+            log_message(f"Connection error: {e}", "ERROR")
 
         log_message(f"Reconnecting in {reconnect_delay} seconds...", "INFO")
         await asyncio.sleep(reconnect_delay)
         reconnect_delay = min(
-            reconnect_delay * 1.5, 30
-        )  # Increase delay but cap at 30 seconds
+            reconnect_delay * 2, 60
+        )  # Exponential backoff capped at 60s
 
 
 if __name__ == "__main__":
-    try:
-        if not WEBSOCKET_URL:
-            log_message("Couldn't found the websocket server url", "CRITICAL")
-            sys.exit(1)
-        if len(sys.argv) >= 1:
-            try:
-                argument = int(sys.argv[1])
-            except Exception as e:
-                log_message(f"Failed to get the client id: {e}", "CRITICAL")
-                sys.exit(1)
-        else:
-            log_message("Add a client id 1 through 5", "CRITICAL")
-            sys.exit(1)
+    if len(sys.argv) != 2:
+        print("Usage: python client.py <client_id>")
+        sys.exit(1)
 
-        log_message("Starting Zacks client...", "INFO")
-        asyncio.run(main(f"client-{argument}"))
+    CLIENT_ID = sys.argv[1]
+    log_message(f"Starting client with ID: {CLIENT_ID}", "INFO")
+
+    try:
+        asyncio.run(main(CLIENT_ID))
     except KeyboardInterrupt:
-        log_message("Shutting down gracefully...", "INFO")
-        if page:
-            page.quit()
+        log_message("Client shutting down gracefully...", "INFO")
     except Exception as e:
-        log_message(f"Critical error in main: {e}", "CRITICAL")
-        if page:
-            page.quit()
+        log_message(f"Critical error in client: {e}", "CRITICAL")
         sys.exit(1)
