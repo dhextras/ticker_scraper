@@ -161,7 +161,7 @@ def get_available_account(client_id):
         log_message(
             f"All accounts are in use, client {client_id} will have to wait", "WARNING"
         )
-        return None, None, None, None
+        return None, None, None
 
     # First, try to get a non-banned account from the queue
     original_queue_size = len(account_usage_queue)
@@ -173,11 +173,9 @@ def get_available_account(client_id):
 
         # Find the account details
         account_idx = None
-        password = None
         for idx, account in enumerate(accounts):
             if account["email"] == email:
                 account_idx = idx
-                password = account["password"]
                 break
 
         if account_idx is None:
@@ -214,13 +212,12 @@ def get_available_account(client_id):
         log_message(
             f"Assigned account {email} to client {client_id} (rotation system)", "INFO"
         )
-        return account_idx, email, password, False
+        return account_idx, email, False
 
     # Try to find the account with earliest ban expiration
     earliest_expiry = float("inf")
     earliest_email = None
     earliest_idx = None
-    earliest_password = None
 
     for idx, account in enumerate(accounts):
         email = account["email"]
@@ -241,7 +238,6 @@ def get_available_account(client_id):
             earliest_expiry = ban_until
             earliest_email = email
             earliest_idx = idx
-            earliest_password = account["password"]
 
     if earliest_email:
         wait_time = max(0, earliest_expiry - current_time)
@@ -253,10 +249,10 @@ def get_available_account(client_id):
             f"All non-banned accounts are in use or none available. Using {earliest_email} for client {client_id}, available in {wait_time:.1f} seconds",
             "WARNING",
         )
-        return earliest_idx, earliest_email, earliest_password, True
+        return earliest_idx, earliest_email, True
 
     log_message(f"No accounts available for client {client_id}", "ERROR")
-    return None, None, None, None
+    return None, None, None
 
 
 def release_account(email):
@@ -396,7 +392,7 @@ async def browser_initialization_manager():
                     initializing_clients.add(client_id)
 
                     # Get an account for initialization
-                    account_idx, email, _, _ = get_available_account(client_id)
+                    account_idx, email, _ = get_available_account(client_id)
 
                     if account_idx is not None and client_id in connected_clients:
                         try:
@@ -435,7 +431,7 @@ async def browser_initialization_manager():
                         initializing_clients.add(client_id)
 
                         # Get an account for restart
-                        account_idx, email, _, _ = get_available_account(client_id)
+                        account_idx, email, _ = get_available_account(client_id)
 
                         if account_idx is not None:
                             try:
@@ -606,7 +602,7 @@ async def handle_client(websocket):
 
                                 # Get another account for this client
                                 if client_id in initializing_clients:
-                                    new_account_idx, new_email, _, _ = (
+                                    new_account_idx, new_email, _ = (
                                         get_available_account(client_id)
                                     )
                                     if new_account_idx is not None:
@@ -657,9 +653,8 @@ async def handle_client(websocket):
                         f"Error processing message from client {client_id}: {e}",
                         "ERROR",
                     )
-
-            # Cancel the ping-pong task when the loop exits
-            ping_pong_task.cancel()
+                finally:
+                    ping_pong_task.cancel()
 
     except websockets.exceptions.ConnectionClosed:
         log_message(f"Connection closed for client {client_id}", "WARNING")
@@ -685,6 +680,7 @@ async def handle_client(websocket):
 
 async def process_commentary_result(comment_id, data):
     """Process commentary result from client"""
+    global current_comment_id
     title = data.get("title")
     content = data.get("content")
 
@@ -722,6 +718,9 @@ async def process_commentary_result(comment_id, data):
         f"{content[:600]}\n\n\nthere is more......."
     )
 
+    current_comment_id += 1
+    await save_comment_id(current_comment_id)
+
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
 
@@ -730,7 +729,6 @@ async def job_distributor():
     global current_comment_id
     last_assignment_time = 0
     MIN_ASSIGNMENT_INTERVAL = 0.8  # NOTE: Increase this shit too if needed
-    found_posts = set()  # Track found comments to avoid duplicate increments
 
     while True:
         await sleep_until_market_open()
@@ -774,9 +772,7 @@ async def job_distributor():
 
                 websocket = connected_clients[client_id]
 
-                account_idx, email, password, is_banned = get_available_account(
-                    client_id
-                )
+                account_idx, email, is_banned = get_available_account(client_id)
 
                 if account_idx is None:
                     log_message(
@@ -813,12 +809,6 @@ async def job_distributor():
                         }
                     )
                 )
-
-                # Only increment comment ID when a post is found and processed
-                if cid_to_check not in found_posts:
-                    found_posts.add(cid_to_check)
-                    current_comment_id += 1
-                    await save_comment_id(current_comment_id)
 
             except Exception as e:
                 log_message(f"Error in job distributor: {e}", "ERROR")
