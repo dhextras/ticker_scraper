@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -42,6 +43,7 @@ accounts = []
 total_accounts = 0
 account_status = {}  # email -> {banned, banned_until, ban_count}
 processing_queue = asyncio.Queue()  # Queue for comment IDs to process
+account_locks = {}  # email -> client_id that's using this account
 
 
 def load_credentials():
@@ -129,24 +131,103 @@ def save_account_status():
         return False
 
 
+# Add these global variables to track account usage
+account_usage_queue = []  # Queue of available account emails
+account_in_use = set()  # Set of emails currently in use
+
+
+def init_account_rotation():
+    """Initialize the account rotation system"""
+    global account_usage_queue, account_in_use
+
+    # Start with all accounts in the queue
+    account_usage_queue = [account["email"] for account in accounts]
+    # Shuffle the queue for fairness
+    random.shuffle(account_usage_queue)
+    account_in_use = set()
+
+    log_message(
+        f"Initialized account rotation with {len(account_usage_queue)} accounts", "INFO"
+    )
+
+
 def get_available_account(client_id):
-    """Get an available account for a specific client"""
-    # Calculate which accounts this client should use
-    client_index = int(client_id.split("-")[-1]) if "-" in client_id else 0
-    client_accounts = []
+    """Get an available account using a global rotation system"""
+    global account_usage_queue, account_in_use
 
-    accounts_per_client = max(1, total_accounts // max(1, len(connected_clients)))
-
-    for i in range(accounts_per_client):
-        account_index = (client_index * accounts_per_client + i) % total_accounts
-        client_accounts.append(account_index)
-
-    # Try to find a non-banned account for this client
     current_time = datetime.now().timestamp()
 
-    for account_idx in client_accounts:
-        account = accounts[account_idx]
+    # If queue is empty but we have accounts in use, wait for releases
+    if not account_usage_queue and len(account_in_use) >= total_accounts:
+        log_message(
+            f"All accounts are in use, client {client_id} will have to wait", "WARNING"
+        )
+        return None, None, None, None
+
+    # First, try to get a non-banned account from the queue
+    original_queue_size = len(account_usage_queue)
+    attempts = 0
+
+    while account_usage_queue and attempts < original_queue_size:
+        attempts += 1
+        email = account_usage_queue.pop(0)
+
+        # Find the account details
+        account_idx = None
+        password = None
+        for idx, account in enumerate(accounts):
+            if account["email"] == email:
+                account_idx = idx
+                password = account["password"]
+                break
+
+        if account_idx is None:
+            continue  # Account not found (shouldn't happen)
+
+        # Check if account is banned
+        if email not in account_status:
+            account_status[email] = {
+                "banned": False,
+                "banned_until": 0,
+                "ban_count": 0,
+            }
+
+        is_banned = (
+            account_status[email]["banned"]
+            and current_time < account_status[email]["banned_until"]
+        )
+
+        if is_banned:
+            account_usage_queue.append(email)
+            continue
+
+        account_in_use.add(email)
+
+        # If account was banned but ban period expired
+        if account_status[email]["banned"]:
+            account_status[email]["banned"] = False
+            account_status[email]["banned_until"] = 0
+            log_message(
+                f"Account {email} ban period has expired, now available", "INFO"
+            )
+            save_account_status()
+
+        log_message(
+            f"Assigned account {email} to client {client_id} (rotation system)", "INFO"
+        )
+        return account_idx, email, password, False
+
+    # Try to find the account with earliest ban expiration
+    earliest_expiry = float("inf")
+    earliest_email = None
+    earliest_idx = None
+    earliest_password = None
+
+    for idx, account in enumerate(accounts):
         email = account["email"]
+
+        if email in account_in_use:
+            continue
 
         if email not in account_status:
             account_status[email] = {
@@ -155,49 +236,59 @@ def get_available_account(client_id):
                 "ban_count": 0,
             }
 
-        if (
-            not account_status[email]["banned"]
-            or current_time > account_status[email]["banned_until"]
-        ):
-            if account_status[email]["banned"]:
-                account_status[email]["banned"] = False
-                account_status[email]["banned_until"] = 0
-                log_message(
-                    f"Account {email} ban period has expired, now available", "INFO"
-                )
-                save_account_status()
+        ban_until = account_status[email]["banned_until"]
 
-            return account_idx, account["email"], account["password"], False
+        if ban_until < earliest_expiry:
+            earliest_expiry = ban_until
+            earliest_email = email
+            earliest_idx = idx
+            earliest_password = account["password"]
 
-    # If all assigned accounts are banned, find the one with earliest expiration
-    earliest_expiry = float("inf")
-    earliest_idx = -1
+    if earliest_email:
+        wait_time = max(0, earliest_expiry - current_time)
 
-    for account_idx in client_accounts:
-        account = accounts[account_idx]
-        email = account["email"]
-        if account_status[email]["banned_until"] < earliest_expiry:
-            earliest_expiry = account_status[email]["banned_until"]
-            earliest_idx = account_idx
+        # Add to in-use set
+        account_in_use.add(earliest_email)
 
-    if earliest_idx >= 0:
-        account = accounts[earliest_idx]
-        wait_time = max(
-            0, account_status[account["email"]]["banned_until"] - current_time
-        )
-        # NOTE: Later turn this into warning
         log_message(
-            f"All accounts for client {client_id} are banned. Earliest available in {wait_time:.1f} seconds",
-            "ERROR",
+            f"All non-banned accounts are in use or none available. Using {earliest_email} for client {client_id}, available in {wait_time:.1f} seconds",
+            "WARNING",
         )
-        return earliest_idx, account["email"], account["password"], True
+        return earliest_idx, earliest_email, earliest_password, True
 
+    log_message(f"No accounts available for client {client_id}", "ERROR")
     return None, None, None, None
+
+
+def release_account(email):
+    """Release an account back to the rotation queue"""
+    global account_usage_queue, account_in_use
+
+    if email in account_in_use:
+        account_in_use.remove(email)
+
+        current_time = datetime.now().timestamp()
+        is_banned = account_status.get(email, {}).get(
+            "banned", False
+        ) and current_time < account_status.get(email, {}).get("banned_until", 0)
+
+        if not is_banned:
+            # Add to the end of the queue
+            account_usage_queue.append(email)
+            log_message(f"Released account {email} back to rotation queue", "INFO")
+            return True
+        else:
+            log_message(
+                f"Released banned account {email} (not added back to queue until ban expires)",
+                "INFO",
+            )
+            return True
+    return False
 
 
 def ban_account(email, minutes=None):
     """Mark an account as banned and set the cool-down period"""
-    global account_status
+    global account_status, account_usage_queue, account_in_use
 
     if email not in account_status:
         account_status[email] = {"banned": False, "banned_until": 0, "ban_count": 0}
@@ -212,6 +303,14 @@ def ban_account(email, minutes=None):
     account_status[email]["banned"] = True
     account_status[email]["banned_until"] = banned_until
     account_status[email]["ban_count"] += 1
+
+    # When banning an account, remove from in-use set
+    if email in account_in_use:
+        account_in_use.remove(email)
+
+    # Remove from rotation queue if present
+    if email in account_usage_queue:
+        account_usage_queue.remove(email)
 
     ban_expiry_time = datetime.fromtimestamp(banned_until).strftime("%Y-%m-%d %H:%M:%S")
     log_message(
@@ -372,6 +471,12 @@ async def handle_client(websocket):
 
                     elif data["type"] == "result":
                         cid = data["comment_id"]
+                        account_index = client_status[client_id].get("account_index")
+
+                        # Release the account back to the rotation queue
+                        if account_index is not None and account_index < len(accounts):
+                            email = accounts[account_index]["email"]
+                            release_account(email)
 
                         if "processing_start_time" in data and not data.get(
                             "browser_restart", False
@@ -383,7 +488,6 @@ async def handle_client(websocket):
                                 processing_time
                             )
 
-                            # Check if processing is consistently slow
                             recent_times = client_status[client_id]["processing_time"][
                                 -1:
                             ]
@@ -407,6 +511,7 @@ async def handle_client(websocket):
 
                         client_status[client_id]["status"] = "available"
                         client_status[client_id]["current_cid"] = None
+                        client_status[client_id]["account_index"] = None
                         await processing_queue.put(client_id)
 
                     elif data["type"] == "account_banned":
@@ -417,6 +522,7 @@ async def handle_client(websocket):
                             ban_account(email, minutes)
 
                         client_status[client_id]["status"] = "available"
+                        client_status[client_id]["account_index"] = None
                         await processing_queue.put(client_id)
 
                     elif data["type"] == "pong":
@@ -471,13 +577,19 @@ async def handle_client(websocket):
                                 await processing_queue.put(client_id)
 
                     elif data["type"] == "browser_restart_complete":
+                        account_index = client_status[client_id].get("account_index")
+
+                        if account_index is not None and account_index < len(accounts):
+                            email = accounts[account_index]["email"]
+                            release_account(email)
+
                         log_message(
                             f"Client {client_id} completed browser restart", "INFO"
                         )
                         client_status[client_id]["browser_restart_time"] = time.time()
                         client_status[client_id]["status"] = "available"
+                        client_status[client_id]["account_index"] = None
                         await processing_queue.put(client_id)
-
                 except asyncio.TimeoutError:
                     # This is expected behavior, continue the loop
                     pass
@@ -488,9 +600,14 @@ async def handle_client(websocket):
         log_message(f"Error handling client {client_id}: {e}", "ERROR")
     finally:
         if client_id and client_id in connected_clients:
-            del connected_clients[client_id]
             if client_id in client_status:
+                account_index = client_status[client_id].get("account_index")
+                if account_index is not None and account_index < len(accounts):
+                    email = accounts[account_index]["email"]
+                    release_account(email)
                 del client_status[client_id]
+
+            del connected_clients[client_id]
 
 
 async def process_commentary_result(comment_id, data):
@@ -562,7 +679,8 @@ async def job_distributor():
                     )
                 except asyncio.TimeoutError:
                     log_message(
-                        "Time out happening too freaking quick so wtf check it", "ERROR"
+                        "Time out happening too freaking quick so wtf check it",
+                        "WARNING",
                     )  # NOTE: Remove this log
                     # If timeout, just restart the loop
                     continue
@@ -677,6 +795,7 @@ async def main():
 
         load_credentials()
         load_account_status()
+        init_account_rotation()
 
         current_comment_id = load_last_comment_id()
 
