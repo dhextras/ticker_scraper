@@ -573,8 +573,12 @@ async def handle_client(websocket):
                 json.dumps({"type": "registration_ack", "client_id": client_id})
             )
 
-            # Create a separate task for handling incoming messages
-            # This task will separate ping messages from other messages
+            # Start ping-pong handler for this client
+            ping_pong_task = asyncio.create_task(
+                handle_client_pong(websocket, client_id)
+            )
+            await ping_pong_task
+
             async def message_handler():
                 try:
                     while True:
@@ -582,14 +586,12 @@ async def handle_client(websocket):
                             message = await websocket.recv()
                             data = json.loads(message)
 
-                            # Handle ping messages immediately
-                            if data["type"] == "ping":
+                            if data["type"] == "pong":
+                                print("ponging??", client_id)
                                 client_status[client_id]["last_active"] = time.time()
-                                await websocket.send(
-                                    json.dumps({"type": "pong", "client_id": client_id})
-                                )
-                            # Queue all other messages for processing
+                            # NOTE: HANDLE ALL shits here if needed print too
                             else:
+                                print(data)
                                 await message_queue.put(data)
                         except websockets.exceptions.ConnectionClosed as e:
                             log_message(
@@ -608,18 +610,14 @@ async def handle_client(websocket):
                         f"Fatal error in message handler for client {client_id}: {e}",
                         "ERROR",
                     )
-                    await message_queue.put(None)  # Signal main loop to exit
+                    await message_queue.put(None)
 
-            # Start the message handler task
             message_task = asyncio.create_task(message_handler())
 
-            # Main processing loop for non-ping messages
             try:
                 while True:
-                    # Get next message from queue
                     data = await message_queue.get()
 
-                    # None is our signal to exit
                     if data is None:
                         break
 
@@ -659,6 +657,7 @@ async def handle_client(websocket):
                                 len(recent_times) >= 1
                                 and sum(recent_times) / len(recent_times) > 5.0
                             ):
+                                # NOTE: Later change this to warning instead of error also change 1 to 5
                                 log_message(
                                     f"Client {client_id} is consistently slow (avg: {sum(recent_times)/len(recent_times):.2f}s)",
                                     "WARNING",
@@ -691,10 +690,6 @@ async def handle_client(websocket):
 
                         if client_id not in initializing_clients:
                             await processing_queue.put(client_id)
-
-                    elif data["type"] == "pong":
-                        # Update last active time on pong response
-                        client_status[client_id]["last_active"] = time.time()
 
                     elif data["type"] == "login_result":
                         account_index = data.get("account_index")
@@ -766,7 +761,6 @@ async def handle_client(websocket):
                         client_status[client_id]["account_index"] = None
                         await processing_queue.put(client_id)
 
-                    # Mark message as processed
                     message_queue.task_done()
 
             except Exception as e:
@@ -775,7 +769,6 @@ async def handle_client(websocket):
                     "ERROR",
                 )
             finally:
-                # Ensure message handler is cleaned up
                 if "message_task" in locals() and not message_task.done():
                     message_task.cancel()
                     try:
