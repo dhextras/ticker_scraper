@@ -851,7 +851,7 @@ async def job_distributor():
     """Distribute jobs to available clients"""
     global current_comment_id, initializing_clients
     last_assignment_time = 0
-    MIN_ASSIGNMENT_INTERVAL = 0.8  # NOTE: Increase this shit too if needed
+    MIN_ASSIGNMENT_INTERVAL = 1.0  # NOTE: Increase this shit too if needed
 
     while True:
         await sleep_until_market_open()
