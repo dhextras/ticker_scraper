@@ -325,7 +325,7 @@ def is_logged_in():
 def fetch_commentary(comment_id):
     """Fetch commentary using the browser"""
     try:
-        timeout = 6  # FIX: Increase this if we get banned
+        timeout = 7  # FIX: Increase this if we get banned
         cache_buster = f"t={int(time.time() * 1000)}"
         url = f"https://www.zacks.com/confidential/commentary.php?cid={comment_id}&{cache_buster}"
 
@@ -356,10 +356,9 @@ def fetch_commentary(comment_id):
             )
             return False, None, minutes
 
-        # FIX: Make this a warning later on
         log_message(
             f"Timeout waiting for content to load for comment ID {comment_id}",
-            "ERROR",
+            "WARNING",
         )
         return True, None
 
