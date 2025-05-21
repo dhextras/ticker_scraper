@@ -19,9 +19,6 @@ load_dotenv()
 
 # Constants
 WEBSOCKET_URL = os.getenv("ZACKS_WEBSOCKET_URL")
-HUMAN_SIMULATION_PROBABILITY = (
-    0.1  # 10% chance of simulating human behavior between jobs
-)
 MAX_CONSECUTIVE_FAILURES = (
     3  # Maximum number of consecutive failures before restarting browser
 )
@@ -589,9 +586,6 @@ async def main(CLIENT_ID):
                                 "processing_start_time", time.time()
                             )
                             await handle_job(websocket, data, processing_start_time)
-
-                            if random.random() < HUMAN_SIMULATION_PROBABILITY:
-                                await asyncio.to_thread(simulate_human_browser_behavior)
 
                             await websocket.send(
                                 json.dumps(
