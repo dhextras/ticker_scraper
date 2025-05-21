@@ -727,7 +727,7 @@ async def main(CLIENT_ID):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python client.py <client_id>")
+        log_message("Usage: python client.py <client_id>")
         sys.exit(1)
 
     CLIENT_ID = sys.argv[1]

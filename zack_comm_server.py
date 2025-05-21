@@ -573,12 +573,6 @@ async def handle_client(websocket):
                 json.dumps({"type": "registration_ack", "client_id": client_id})
             )
 
-            # Start ping-pong handler for this client
-            ping_pong_task = asyncio.create_task(
-                handle_client_pong(websocket, client_id)
-            )
-            await ping_pong_task
-
             async def message_handler():
                 try:
                     while True:
@@ -587,11 +581,8 @@ async def handle_client(websocket):
                             data = json.loads(message)
 
                             if data["type"] == "pong":
-                                print("ponging??", client_id)
                                 client_status[client_id]["last_active"] = time.time()
-                            # NOTE: HANDLE ALL shits here if needed print too
                             else:
-                                print(data)
                                 await message_queue.put(data)
                         except websockets.exceptions.ConnectionClosed as e:
                             log_message(
@@ -612,7 +603,13 @@ async def handle_client(websocket):
                     )
                     await message_queue.put(None)
 
+            # Start ping-pong handler for this client
+            ping_pong_task = asyncio.create_task(
+                handle_client_pong(websocket, client_id)
+            )
             message_task = asyncio.create_task(message_handler())
+            # NOTE: Do not fucking await this shit
+            asyncio.gather(ping_pong_task, message_task)
 
             try:
                 while True:
