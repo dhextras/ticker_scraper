@@ -804,6 +804,10 @@ async def handle_client(websocket):
 async def process_commentary_result(comment_id, data):
     """Process commentary result from client"""
     global current_comment_id
+
+    if current_comment_id != comment_id:
+        return
+
     title = data.get("title")
     content = data.get("content")
 
