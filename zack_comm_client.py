@@ -397,16 +397,6 @@ def process_commentary(html):
         return None, None
 
 
-async def ping_server(websocket):
-    """Send periodic pings to the server"""
-    try:
-        while True:
-            await websocket.send(json.dumps({"type": "ping"}))
-            await asyncio.sleep(5)
-    except Exception as e:
-        log_message(f"Error in ping task: {e}", "ERROR")
-
-
 async def handle_job(websocket, job_data, processing_start_time):
     """Handle a job assignment from the server"""
     global consecutive_failures, current_login_email, current_login_password

@@ -548,6 +548,7 @@ async def handle_client(websocket):
     """Handle WebSocket client connections"""
     global current_comment_id, initializing_clients
     client_id = None
+    message_queue = asyncio.Queue()
 
     try:
         # Wait for client registration
@@ -572,16 +573,55 @@ async def handle_client(websocket):
                 json.dumps({"type": "registration_ack", "client_id": client_id})
             )
 
-            # Start ping-pong handler for this client
-            ping_pong_task = asyncio.create_task(
-                handle_client_pong(websocket, client_id)
-            )
-            await ping_pong_task
-
-            while True:
+            # Create a separate task for handling incoming messages
+            # This task will separate ping messages from other messages
+            async def message_handler():
                 try:
-                    message = await websocket.recv()
-                    data = json.loads(message)
+                    while True:
+                        try:
+                            message = await websocket.recv()
+                            data = json.loads(message)
+
+                            # Handle ping messages immediately
+                            if data["type"] == "ping":
+                                client_status[client_id]["last_active"] = time.time()
+                                await websocket.send(
+                                    json.dumps({"type": "pong", "client_id": client_id})
+                                )
+                            # Queue all other messages for processing
+                            else:
+                                await message_queue.put(data)
+                        except websockets.exceptions.ConnectionClosed as e:
+                            log_message(
+                                f"Connection closed in message handler for client {client_id}: code={e.code} reason='{e.reason}'",
+                                "WARNING",
+                            )
+                            await message_queue.put(None)  # Signal main loop to exit
+                            break
+                        except Exception as e:
+                            log_message(
+                                f"Error in message handler for client {client_id}: {e}",
+                                "ERROR",
+                            )
+                except Exception as e:
+                    log_message(
+                        f"Fatal error in message handler for client {client_id}: {e}",
+                        "ERROR",
+                    )
+                    await message_queue.put(None)  # Signal main loop to exit
+
+            # Start the message handler task
+            message_task = asyncio.create_task(message_handler())
+
+            # Main processing loop for non-ping messages
+            try:
+                while True:
+                    # Get next message from queue
+                    data = await message_queue.get()
+
+                    # None is our signal to exit
+                    if data is None:
+                        break
 
                     if data["type"] == "status_update":
                         client_status[client_id]["status"] = data["status"]
@@ -619,7 +659,6 @@ async def handle_client(websocket):
                                 len(recent_times) >= 1
                                 and sum(recent_times) / len(recent_times) > 5.0
                             ):
-                                # NOTE: Later change this to warning instead of error also change 1 to 5
                                 log_message(
                                     f"Client {client_id} is consistently slow (avg: {sum(recent_times)/len(recent_times):.2f}s)",
                                     "WARNING",
@@ -727,40 +766,38 @@ async def handle_client(websocket):
                         client_status[client_id]["account_index"] = None
                         await processing_queue.put(client_id)
 
-                except asyncio.TimeoutError:
-                    pass
-                except websockets.exceptions.ConnectionClosed:
-                    log_message(f"Connection closed for client {client_id}", "WARNING")
-                    try:
-                        client_status.pop(client_id)
-                        del connected_clients[client_id]
-                    except:
-                        pass
-                except Exception as e:
-                    log_message(
-                        f"Error processing message from client {client_id}: {e}",
-                        "ERROR",
-                    )
-                finally:
-                    ping_pong_task.cancel()
+                    # Mark message as processed
+                    message_queue.task_done()
 
-    except websockets.exceptions.ConnectionClosed:
-        log_message(f"Connection closed for client {client_id}", "WARNING")
-        try:
-            client_status.pop(client_id)
-            del connected_clients[client_id]
-        except:
-            pass
+            except Exception as e:
+                log_message(
+                    f"Error in main processing loop for client {client_id}: {e}",
+                    "ERROR",
+                )
+            finally:
+                # Ensure message handler is cleaned up
+                if "message_task" in locals() and not message_task.done():
+                    message_task.cancel()
+                    try:
+                        await message_task
+                    except asyncio.CancelledError:
+                        pass
+
+    except websockets.exceptions.ConnectionClosed as e:
+        log_message(
+            f"Connection closed during setup for client {client_id}: code={e.code} reason='{e.reason}'",
+            "WARNING",
+        )
     except Exception as e:
         log_message(f"Error handling client {client_id}: {e}", "ERROR")
     finally:
-        if client_id and client_id in connected_clients:
+        if client_id:
             if client_id in client_status:
                 account_index = client_status[client_id].get("account_index")
                 if account_index is not None and account_index < len(accounts):
                     email = accounts[account_index]["email"]
                     release_account(email)
-                del client_status[client_id]
+                client_status.pop(client_id, None)
 
             if client_id in initializing_clients:
                 initializing_clients.remove(client_id)
@@ -768,7 +805,10 @@ async def handle_client(websocket):
             if client_id in client_browser_restart:
                 del client_browser_restart[client_id]
 
-            del connected_clients[client_id]
+            if client_id in connected_clients:
+                connected_clients.pop(client_id, None)
+
+            log_message(f"Cleaned up all resources for client {client_id}", "INFO")
 
 
 async def process_commentary_result(comment_id, data):
