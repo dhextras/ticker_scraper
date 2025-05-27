@@ -455,17 +455,27 @@ async def handle_client_pong(websocket, client_id):
 
 
 async def browser_initialization_manager():
-    """Manage browser initialization for all connected clients"""
+    """Manage browser initialization for all connected clients with market handling"""
     global initializing_clients
+
     try:
         while True:
-            current_time = time.time()
+            # Check if market is open before processing
+            current_time = get_current_time()
+            _, _, market_close_time = get_next_market_times()
+
+            # If market is closed, don't initialize any browsers
+            if current_time > market_close_time:
+                await asyncio.sleep(60)  # Check every minute during market closure
+                continue
+
+            current_time_timestamp = time.time()
 
             # Check all connected clients
             for client_id in list(connected_clients.keys()):
                 if client_id not in client_browser_restart:
                     # New client needs initial setup
-                    client_browser_restart[client_id] = current_time
+                    client_browser_restart[client_id] = current_time_timestamp
                     initializing_clients.add(client_id)
 
                     # Get an account for initialization
@@ -499,7 +509,8 @@ async def browser_initialization_manager():
                 # Check if it's time for a browser restart (every 30 minutes)
                 elif (
                     client_id in client_browser_restart
-                    and current_time - client_browser_restart[client_id] >= 1800
+                    and current_time_timestamp - client_browser_restart[client_id]
+                    >= 1800
                 ):
                     if (
                         client_id not in initializing_clients
@@ -538,6 +549,7 @@ async def browser_initialization_manager():
                     initializing_clients.remove(client_id)
 
             await asyncio.sleep(10)  # Check every 10 seconds
+
     except Exception as e:
         log_message(f"Error in browser initialization manager: {e}", "ERROR")
         await asyncio.sleep(30)
@@ -851,97 +863,184 @@ async def process_commentary_result(comment_id, data):
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
 
+async def disconnect_all_clients():
+    """Disconnect all connected clients gracefully"""
+    global connected_clients, client_status, initializing_clients, client_browser_restart
+
+    log_message("Disconnecting all clients for market closure...", "INFO")
+
+    # Send disconnect message to all clients first
+    disconnect_tasks = []
+    for client_id, websocket in list(connected_clients.items()):
+        try:
+            disconnect_tasks.append(
+                websocket.send(
+                    json.dumps(
+                        {
+                            "type": "market_closed",
+                            "message": "Market is closed, disconnecting...",
+                        }
+                    )
+                )
+            )
+        except Exception as e:
+            log_message(
+                f"Error sending disconnect message to client {client_id}: {e}",
+                "WARNING",
+            )
+
+    # Wait for all disconnect messages to be sent
+    if disconnect_tasks:
+        await asyncio.gather(*disconnect_tasks, return_exceptions=True)
+        await asyncio.sleep(2)  # Give clients time to process the message
+
+    # Close all connections
+    close_tasks = []
+    for client_id, websocket in list(connected_clients.items()):
+        try:
+            close_tasks.append(websocket.close())
+        except Exception as e:
+            log_message(
+                f"Error closing connection for client {client_id}: {e}", "WARNING"
+            )
+
+    # Wait for all connections to close
+    if close_tasks:
+        await asyncio.gather(*close_tasks, return_exceptions=True)
+
+    # Clean up all client data
+    for client_id in list(connected_clients.keys()):
+        # Release any assigned accounts
+        release_client_account(client_id)
+
+    # Clear all global state
+    connected_clients.clear()
+    client_status.clear()
+    initializing_clients.clear()
+    client_browser_restart.clear()
+
+    # Clear the processing queue
+    while not processing_queue.empty():
+        try:
+            processing_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
+
+    log_message("All clients disconnected and cleaned up", "INFO")
+
+
 async def job_distributor():
-    """Distribute jobs to available clients"""
+    """Distribute jobs to available clients with proper market handling"""
     global current_comment_id, initializing_clients
     last_assignment_time = 0
-    MIN_ASSIGNMENT_INTERVAL = 1.0  # NOTE: Increase this shit too if needed
+    MIN_ASSIGNMENT_INTERVAL = 1.0
 
     while True:
+        # Wait until market opens
         await sleep_until_market_open()
         await initialize_websocket()
         log_message("Market is open. Starting commentary monitoring...", "INFO")
 
         _, _, market_close_time = get_next_market_times()
 
-        while True:
-            current_time = get_current_time()
-            if current_time > market_close_time:
-                log_message("Market is closed. Waiting for next market open.", "INFO")
-                break
-
-            try:
-                # To avoid getting stuck in the queue, use timeout
-                try:
-                    client_id = await asyncio.wait_for(
-                        processing_queue.get(), timeout=10
-                    )
-                except asyncio.TimeoutError:
-                    continue
-
-                if (
-                    client_id not in connected_clients
-                    or client_id not in client_status
-                    or client_status[client_id]["status"] != "available"
-                    or client_id in initializing_clients
-                ):
-                    continue
-
-                current_time = time.time()
-                if current_time - last_assignment_time < MIN_ASSIGNMENT_INTERVAL:
-                    await asyncio.sleep(
-                        MIN_ASSIGNMENT_INTERVAL - (current_time - last_assignment_time)
-                    )
-
-                websocket = connected_clients[client_id]
-
-                account_idx, email, is_banned = get_available_account(client_id)
-
-                if account_idx is None:
+        try:
+            while True:
+                current_time = get_current_time()
+                if current_time > market_close_time:
                     log_message(
-                        f"No accounts available for client {client_id}", "ERROR"
+                        "Market is closed. Disconnecting clients and waiting for next market open.",
+                        "INFO",
                     )
-                    await asyncio.sleep(10)
-                    await processing_queue.put(client_id)
-                    continue
+                    # Disconnect all clients before sleeping
+                    await disconnect_all_clients()
+                    break
 
-                cid_to_check = current_comment_id
+                try:
+                    # To avoid getting stuck in the queue, use timeout
+                    try:
+                        client_id = await asyncio.wait_for(
+                            processing_queue.get(), timeout=10
+                        )
+                    except asyncio.TimeoutError:
+                        continue
 
-                log_message(
-                    f"Assigning comment ID {cid_to_check} to `{client_id}` with account `{email}`",
-                    "INFO",
-                )
+                    if (
+                        client_id not in connected_clients
+                        or client_id not in client_status
+                        or client_status[client_id]["status"] != "available"
+                        or client_id in initializing_clients
+                    ):
+                        continue
 
-                # Update client status
-                client_status[client_id]["status"] = "busy"
-                client_status[client_id]["current_cid"] = cid_to_check
-                client_status[client_id]["account_index"] = account_idx
+                    current_time = time.time()
+                    if current_time - last_assignment_time < MIN_ASSIGNMENT_INTERVAL:
+                        await asyncio.sleep(
+                            MIN_ASSIGNMENT_INTERVAL
+                            - (current_time - last_assignment_time)
+                        )
 
-                # Update the last assignment time
-                last_assignment_time = time.time()
+                    websocket = connected_clients[client_id]
 
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "job",
-                            "comment_id": cid_to_check,
-                            "account_index": account_idx,
-                            "email": email,
-                            "is_banned": is_banned,
-                            "processing_start_time": time.time(),
-                        }
+                    account_idx, email, is_banned = get_available_account(client_id)
+
+                    if account_idx is None:
+                        log_message(
+                            f"No accounts available for client {client_id}", "ERROR"
+                        )
+                        await asyncio.sleep(10)
+                        await processing_queue.put(client_id)
+                        continue
+
+                    cid_to_check = current_comment_id
+
+                    log_message(
+                        f"Assigning comment ID {cid_to_check} to `{client_id}` with account `{email}`",
+                        "INFO",
                     )
-                )
 
-            except Exception as e:
-                log_message(f"Error in job distributor: {e}", "ERROR")
-                await asyncio.sleep(5)
+                    # Update client status
+                    client_status[client_id]["status"] = "busy"
+                    client_status[client_id]["current_cid"] = cid_to_check
+                    client_status[client_id]["account_index"] = account_idx
+
+                    # Update the last assignment time
+                    last_assignment_time = time.time()
+
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "job",
+                                "comment_id": cid_to_check,
+                                "account_index": account_idx,
+                                "email": email,
+                                "is_banned": is_banned,
+                                "processing_start_time": time.time(),
+                            }
+                        )
+                    )
+
+                except Exception as e:
+                    log_message(f"Error in job distributor inner loop: {e}", "ERROR")
+                    await asyncio.sleep(5)
+
+        except Exception as e:
+            log_message(f"Error in job distributor market session: {e}", "ERROR")
+            # Ensure cleanup even if there's an error
+            await disconnect_all_clients()
+            await asyncio.sleep(10)
 
 
 async def cleanup_inactive_clients():
-    """Clean up inactive client connections"""
+    """Clean up inactive client connections with market awareness"""
     while True:
         try:
+            current_time_dt = get_current_time()
+            _, _, market_close_time = get_next_market_times()
+
+            if current_time_dt > market_close_time:
+                await asyncio.sleep(300)
+                continue
+
             current_time = time.time()
             inactive_clients = []
 
@@ -959,14 +1058,21 @@ async def cleanup_inactive_clients():
                     del connected_clients[client_id]
 
                 if client_id in client_status:
+                    release_client_account(client_id)
                     del client_status[client_id]
+
+                if client_id in initializing_clients:
+                    initializing_clients.remove(client_id)
+
+                if client_id in client_browser_restart:
+                    del client_browser_restart[client_id]
 
                 log_message(f"Removed inactive client {client_id}", "INFO")
 
         except Exception as e:
             log_message(f"Error in cleanup task: {e}", "WARNING")
 
-        await asyncio.sleep(60)  # Check every minute
+        await asyncio.sleep(60)
 
 
 async def main():

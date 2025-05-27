@@ -14,6 +14,11 @@ from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
 
 from utils.logger import log_message
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 
 load_dotenv()
 
@@ -522,200 +527,246 @@ async def main(CLIENT_ID):
     # Load credentials
     load_credentials()
 
-    if not setup_browser():
-        log_message("Failed to set up browser, exiting", "CRITICAL")
-        return
-
-    reconnect_delay = RECONNECT_DELAY
-
     while True:
-        try:
-            log_message(f"Connecting to server at {WEBSOCKET_URL}", "INFO")
-            async with websockets.connect(WEBSOCKET_URL) as websocket:
-                await websocket.send(
-                    json.dumps({"type": "register", "client_id": CLIENT_ID})
-                )
+        await sleep_until_market_open()
+        log_message("Market is open. Starting Zacks client...", "INFO")
 
-                # Wait for registration acknowledgment
-                response = await websocket.recv()
-                data = json.loads(response)
+        # Get market close time for this session
+        _, _, market_close_time = get_next_market_times()
 
-                if data["type"] != "registration_ack":
-                    log_message(f"Failed to register with server: {data}", "ERROR")
-                    await asyncio.sleep(reconnect_delay)
-                    continue
+        if not setup_browser():
+            log_message(
+                "Failed to set up browser, waiting for next market open", "CRITICAL"
+            )
+            continue
 
-                log_message(f"Registered with server as client: {CLIENT_ID}", "INFO")
-                reconnect_delay = RECONNECT_DELAY
+        reconnect_delay = RECONNECT_DELAY
 
-                message_queue = asyncio.Queue()
+        while get_current_time() < market_close_time:
+            try:
+                log_message(f"Connecting to server at {WEBSOCKET_URL}", "INFO")
+                async with websockets.connect(WEBSOCKET_URL) as websocket:
+                    await websocket.send(
+                        json.dumps({"type": "register", "client_id": CLIENT_ID})
+                    )
 
-                async def message_handler():
-                    try:
-                        while True:
-                            message = await websocket.recv()
-                            data = json.loads(message)
+                    response = await websocket.recv()
+                    data = json.loads(response)
 
-                            if data["type"] == "ping":
-                                await websocket.send(
-                                    json.dumps({"type": "pong", "client_id": CLIENT_ID})
-                                )
-                            else:
-                                await message_queue.put(data)
-                    except Exception as e:
-                        log_message(f"Error in message handler: {e}", "ERROR")
-                        await message_queue.put(None)
+                    if data["type"] != "registration_ack":
+                        log_message(f"Failed to register with server: {data}", "ERROR")
+                        await asyncio.sleep(reconnect_delay)
+                        continue
 
-                message_task = asyncio.create_task(message_handler())
+                    log_message(
+                        f"Registered with server as client: {CLIENT_ID}", "INFO"
+                    )
+                    reconnect_delay = RECONNECT_DELAY
 
-                # Initial status update
-                await websocket.send(
-                    json.dumps({"type": "status_update", "status": "available"})
-                )
+                    message_queue = asyncio.Queue()
 
-                try:
-                    while True:
-                        data = await message_queue.get()
-                        if data is None:
-                            break
+                    async def message_handler():
+                        try:
+                            while True:
+                                message = await websocket.recv()
+                                data = json.loads(message)
 
-                        # No need to handle ping/pong here as it's done in message_handler
-                        if data["type"] == "job":
-                            processing_start_time = data.get(
-                                "processing_start_time", time.time()
-                            )
-                            await handle_job(websocket, data, processing_start_time)
-
-                            await websocket.send(
-                                json.dumps(
-                                    {"type": "status_update", "status": "available"}
-                                )
-                            )
-
-                        elif data["type"] == "initialize_login":
-                            account_index = data["account_index"]
-                            email = data["email"]
-                            password = get_password_for_email(email)
-
-                            if not password:
-                                log_message(
-                                    f"Could not find password for email {email}",
-                                    "ERROR",
-                                )
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "login_result",
-                                            "account_index": account_index,
-                                            "success": False,
-                                            "minutes": 0,
-                                        }
+                                if data["type"] == "ping":
+                                    await websocket.send(
+                                        json.dumps(
+                                            {"type": "pong", "client_id": CLIENT_ID}
+                                        )
                                     )
+                                else:
+                                    await message_queue.put(data)
+                        except Exception as e:
+                            log_message(f"Error in message handler: {e}", "ERROR")
+                            await message_queue.put(None)
+
+                    message_task = asyncio.create_task(message_handler())
+
+                    await websocket.send(
+                        json.dumps({"type": "status_update", "status": "available"})
+                    )
+
+                    try:
+                        while get_current_time() < market_close_time:
+                            if get_current_time() >= market_close_time:
+                                log_message(
+                                    "Market closed during session. Disconnecting...",
+                                    "INFO",
                                 )
-                                continue
+                                break
 
-                            log_message(
-                                f"Received initial login request for account {email}",
-                                "INFO",
+                            data = await asyncio.wait_for(
+                                message_queue.get(), timeout=60.0
                             )
+                            if data is None:
+                                break
 
-                            login_success = await asyncio.to_thread(
-                                login, email, password
-                            )
-
-                            await websocket.send(
-                                json.dumps(
-                                    {
-                                        "type": "login_result",
-                                        "account_index": account_index,
-                                        "success": login_success,
-                                        "minutes": 0 if login_success else 15,
-                                    }
+                            if data["type"] == "job":
+                                processing_start_time = data.get(
+                                    "processing_start_time", time.time()
                                 )
-                            )
+                                await handle_job(websocket, data, processing_start_time)
 
-                            if login_success:
                                 await websocket.send(
                                     json.dumps(
                                         {"type": "status_update", "status": "available"}
                                     )
                                 )
 
-                        elif data["type"] == "restart_browser":
-                            account_index = data["account_index"]
-                            email = data["email"]
-                            password = get_password_for_email(email)
+                            elif data["type"] == "initialize_login":
+                                account_index = data["account_index"]
+                                email = data["email"]
+                                password = get_password_for_email(email)
 
-                            if not password:
+                                if not password:
+                                    log_message(
+                                        f"Could not find password for email {email}",
+                                        "ERROR",
+                                    )
+                                    await websocket.send(
+                                        json.dumps(
+                                            {
+                                                "type": "login_result",
+                                                "account_index": account_index,
+                                                "success": False,
+                                                "minutes": 0,
+                                            }
+                                        )
+                                    )
+                                    continue
+
                                 log_message(
-                                    f"Could not find password for email {email}",
-                                    "ERROR",
+                                    f"Received initial login request for account {email}",
+                                    "INFO",
                                 )
+
+                                login_success = await asyncio.to_thread(
+                                    login, email, password
+                                )
+
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "login_result",
+                                            "account_index": account_index,
+                                            "success": login_success,
+                                            "minutes": 0 if login_success else 15,
+                                        }
+                                    )
+                                )
+
+                                if login_success:
+                                    await websocket.send(
+                                        json.dumps(
+                                            {
+                                                "type": "status_update",
+                                                "status": "available",
+                                            }
+                                        )
+                                    )
+
+                            elif data["type"] == "restart_browser":
+                                account_index = data["account_index"]
+                                email = data["email"]
+                                password = get_password_for_email(email)
+
+                                if not password:
+                                    log_message(
+                                        f"Could not find password for email {email}",
+                                        "ERROR",
+                                    )
+                                    await websocket.send(
+                                        json.dumps(
+                                            {
+                                                "type": "browser_restart_complete",
+                                                "success": False,
+                                            }
+                                        )
+                                    )
+                                    continue
+
+                                log_message(
+                                    f"Restarting browser with account {email}", "INFO"
+                                )
+
+                                # Actually restart the browser
+                                if not setup_browser():
+                                    log_message("Failed to restart browser", "ERROR")
+                                    await websocket.send(
+                                        json.dumps(
+                                            {
+                                                "type": "browser_restart_complete",
+                                                "success": False,
+                                            }
+                                        )
+                                    )
+                                    continue
+
+                                # Try to login with the new account
+                                login_success = await asyncio.to_thread(
+                                    login, email, password
+                                )
+
                                 await websocket.send(
                                     json.dumps(
                                         {
                                             "type": "browser_restart_complete",
-                                            "success": False,
+                                            "success": login_success,
                                         }
                                     )
                                 )
-                                continue
 
-                            log_message(
-                                f"Restarting browser with account {email}", "INFO"
-                            )
+                    except asyncio.TimeoutError:
+                        # Timeout is fine, just check market hours and continue
+                        continue
+                    except Exception as e:
+                        log_message(f"Error in main connection loop: {e}", "ERROR")
 
-                            # Actually restart the browser
-                            if not setup_browser():
-                                log_message("Failed to restart browser", "ERROR")
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "browser_restart_complete",
-                                            "success": False,
-                                        }
-                                    )
-                                )
-                                continue
-
-                            # Try to login with the new account
-                            login_success = await asyncio.to_thread(
-                                login, email, password
-                            )
-
-                            await websocket.send(
-                                json.dumps(
-                                    {
-                                        "type": "browser_restart_complete",
-                                        "success": login_success,
-                                    }
-                                )
-                            )
-
-                except Exception as e:
-                    log_message(f"Error in main connection loop: {e}", "ERROR")
-
-                finally:
-                    # Cancel all tasks when connection is lost
-                    if message_task:
-                        message_task.cancel()
-
-                    try:
+                    finally:
+                        # Cancel all tasks when connection is lost
                         if message_task:
-                            await message_task
-                    except asyncio.CancelledError:
-                        pass
+                            message_task.cancel()
 
-        except websockets.exceptions.ConnectionClosed:
-            log_message("Connection to server closed", "WARNING")
-        except Exception as e:
-            log_message(f"Connection error: {e}", "ERROR")
+                        try:
+                            if message_task:
+                                await message_task
+                        except asyncio.CancelledError:
+                            pass
 
-        log_message(f"Reconnecting in {reconnect_delay} seconds...", "INFO")
-        await asyncio.sleep(reconnect_delay)
-        reconnect_delay = min(
-            reconnect_delay * 2, 60
-        )  # Exponential backoff capped at 60s
+            except websockets.exceptions.ConnectionClosed:
+                log_message("Connection to server closed", "WARNING")
+                if get_current_time() >= market_close_time:
+                    break
+            except Exception as e:
+                log_message(f"Connection error: {e}", "ERROR")
+                if get_current_time() >= market_close_time:
+                    break
+
+            # Only reconnect if market is still open
+            if get_current_time() < market_close_time:
+                log_message(f"Reconnecting in {reconnect_delay} seconds...", "INFO")
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2, 60)
+            else:
+                log_message(
+                    "Market closed. Will not reconnect until next market open.", "INFO"
+                )
+                break
+
+        # Clean up browser when market closes
+        log_message(
+            "Market closed. Cleaning up browser and waiting for next market open...",
+            "INFO",
+        )
+        if page:
+            try:
+                page.quit()
+                log_message("Browser closed successfully", "INFO")
+            except Exception as e:
+                log_message(f"Error closing browser: {e}", "ERROR")
 
 
 if __name__ == "__main__":
