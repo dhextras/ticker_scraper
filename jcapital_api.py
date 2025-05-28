@@ -23,7 +23,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://jcapitalresearch.substack.com/api/v1/posts"
-CHECK_INTERVAL = 0.2  # seconds
+CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/jcapital_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
@@ -98,7 +98,7 @@ async def fetch_json(session):
         async with session.get(
             f"{JSON_URL}?limit=10&{random_cache_buster}",
             headers=headers,
-            timeout=1,
+            timeout=5,
         ) as response:
             if response.status == 200:
                 data = await response.json()

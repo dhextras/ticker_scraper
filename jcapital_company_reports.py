@@ -26,8 +26,8 @@ load_dotenv()
 HTML_URL = "https://www.jcapitalresearch.com/company-reports.html"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_REPORTS_FILE = "data/jcapital_html_processed_reports.json"
-TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_HTML_TELEGRAM_BOT_TOKEN")
-TELEGRAM_GRP = os.getenv("JCAPITAL_HTML_TELEGRAM_GRP")
+TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
+TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
 
 os.makedirs("data", exist_ok=True)
 
