@@ -48,6 +48,12 @@ pip install -r requirements.txt
    WS_SERVER_URL=  # WebSocket server URL
    GPT_API_KEY= # Api key for gpt
 
+   # Ticker Deck Configuration
+   TICKER_DECK_WS_URL=http://your-ticker-deck-socketio-url:port
+   TICKER_DECK_AUTH_URL=http://your-ticker-deck-auth-url:port
+   TICKER_DECK_USERNAME=your_username
+   TICKER_DECK_PASSWORD=your_password
+
    # Error Notify bot settings
    ERROR_NOTIFY_BOT_TOKEN=  # Telegram bot token for error notifications
    ERROR_NOTIFY_GRP=  # Telegram group ID for error notifications
@@ -369,6 +375,7 @@ ticker_scraper/
 │   ├── gpt_ticker_extractor.py   # Extract ticker from Image or Text
 │   ├── logger.py                 # Logger utility
 │   ├── telegram_sender.py        # Telegram sending utility
+│   └── ticker_deck_sender.py     # Ticker deck message sending utility
 │   ├── time_utils.py             # Time utility functions
 │   └── websocket_sender.py       # WebSocket sending utility
 ├── .env                          # Environment variables
