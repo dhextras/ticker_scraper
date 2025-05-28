@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
+from utils.ticker_deck_sender import initialize_ticker_deck, send_ticker_deck_message
 from utils.time_utils import (
     get_current_time,
     get_next_market_times,
@@ -23,7 +24,7 @@ load_dotenv()
 
 # Constants
 API_URL = "https://substack.com/api/v1/community/publications/836125/posts"
-CHECK_INTERVAL = 5  # seconds
+CHECK_INTERVAL = 2  # seconds
 PROCESSED_IDS_FILE = "data/substack_citrini_processed_ids.json"
 COOKIE_FILE = "cred/substack_cookies.json"
 TELEGRAM_BOT_TOKEN = os.getenv("CITRINI_TELEGRAM_BOT_TOKEN")
@@ -159,6 +160,13 @@ async def send_to_telegram(post_data):
     post_id = community_post.get("id", "Unknown")
     body = community_post.get("body", "No content available")
 
+    if body and body != "No Content available":
+        await send_ticker_deck_message(
+            sender="citrini",
+            name="Substack API",
+            content=body,
+        )
+
     user = post_data.get("user", {})
     author_name = user.get("name", "Unknown")
     media_urls = extract_media_urls(post_data)
@@ -189,6 +197,8 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_ticker_deck("Citrini")
+
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
