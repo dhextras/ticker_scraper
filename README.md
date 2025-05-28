@@ -207,6 +207,10 @@ pip install -r requirements.txt
    # Fuzzy Panda scraper settings
    FUZZYPANDA_TELEGRAM_BOT_TOKEN= # Telegram bot token for Fuzzy panda
    FUZZYPANDA_TELEGRAM_GRP= # Telegram group ID for Fuzzy panda
+
+   # J Capital Research settings
+   JCAPITAL_TELEGRAM_BOT_TOKEN=
+   JCAPITAL_TELEGRAM_GRP=
    ```
 
 **Note:** Fill in the values for each variable as needed.
