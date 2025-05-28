@@ -22,7 +22,7 @@ load_dotenv()
 # Constants
 CURRENT_YEAR = datetime.now().year
 API_URL = f"https://api.jetboost.io/search?boosterId=clmaxseess1tj0652a3dur1z6&q={CURRENT_YEAR}"
-CHECK_INTERVAL = 0.5  # seconds
+CHECK_INTERVAL = 0.3  # seconds
 PROCESSED_REPORTS_FILE = "data/jetboost_processed_reports.json"
 REPORT_BASE_URL = "https://www.sprucepointcap.com/research/"
 TELEGRAM_BOT_TOKEN = os.getenv("SPRUCEPOINT_TELEGRAM_BOT_TOKEN")

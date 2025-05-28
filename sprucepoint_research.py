@@ -13,12 +13,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 REPORT_URL = "https://www.sprucepointcap.com/research"
-CHECK_INTERVAL = 5  # seconds
+CHECK_INTERVAL = 60  # seconds
 PROCESSED_REPORTS_FILE = "data/sprucepoint_processed_reports.json"
 TELEGRAM_BOT_TOKEN = os.getenv("SPRUCEPOINT_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("SPRUCEPOINT_TELEGRAM_GRP")
@@ -139,7 +140,7 @@ async def fetch_reports(session):
 async def send_report_to_telegram(report):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
-    message = f"<b>New Spruce Point Capital Report</b>\n\n"
+    message = f"<b>New Spruce Point - Research HTML</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Report:</b> {report['title']}\n"
     message += f"<b>Company:</b> {report['company']}\n"
@@ -149,6 +150,17 @@ async def send_report_to_telegram(report):
     message += f"<b>Sector:</b> {report['sector']}\n"
     message += f"<b>Index:</b> {report['index']}\n"
     message += f"<b>URL:</b> {report['url']}\n"
+
+    if report["ticker"]:
+        await send_ws_message(
+            {
+                "name": "SpruePoint - Research HTML",
+                "type": "Sell",
+                "ticker": report["ticker"],
+                "sender": "sprucepoint",
+                "target": "CSS",
+            }
+        )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(
@@ -162,6 +174,8 @@ async def run_report_monitor():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check for new reports...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 

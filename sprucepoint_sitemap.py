@@ -22,7 +22,7 @@ load_dotenv()
 
 # Constants
 SITEMAP_URL = "https://www.sprucepointcap.com/sitemap.xml"
-CHECK_INTERVAL = 10  # seconds
+CHECK_INTERVAL = 60  # seconds
 PROCESSED_URLS_FILE = "data/sitemap_processed_urls.json"
 BASE_URL = "https://www.sprucepointcap.com"
 RESEARCH_PATH = "/research/"
@@ -300,8 +300,7 @@ async def run_sitemap_monitor():
                         processed_items.append(item)
                         processed_urls.add(url)
 
-                    # FIXME: Figure out how to send press release or what ever comes up first
-                    # await send_to_websocket(processed_items)
+                    await send_to_websocket(processed_items)
 
                     await send_to_telegram(processed_items)
 

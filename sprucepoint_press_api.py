@@ -81,20 +81,19 @@ async def fetch_releases_from_api(session):
 
 def extract_ticker_from_slug(slug):
     """Extract ticker from press release slug."""
-    # Pattern to match the ending ticker (last word after the last dash)
-    pattern = r"-([a-zA-Z]+)$"
-    matches = re.search(pattern, slug)
-
-    if matches:
-        return matches.group(1).upper()
-
-    # Fallback: extract from the nasdaq/nyse portion
+    # Extract from the nasdaq/nyse portion
     exchange_pattern = r"(nasdaq|nyse)-([a-zA-Z]+)"
     exchange_matches = re.search(exchange_pattern, slug, re.IGNORECASE)
 
     if exchange_matches:
         return exchange_matches.group(2).upper()
 
+    # Fallback: Pattern to match the ending ticker (last word after the last dash)
+    pattern = r"-([a-zA-Z]+)$"
+    matches = re.search(pattern, slug)
+
+    if matches:
+        return matches.group(1).upper()
     return None
 
 
@@ -145,17 +144,17 @@ async def process_new_release(slug):
 
     ticker = extract_ticker_from_slug(slug)
 
-    # if ticker:
-    #     await send_ws_message(
-    #         {
-    #             "name": "SpruePoint - Press Release API",
-    #             "type": "Sell",
-    #             "ticker": ticker,
-    #             "sender": "sprucepoint",
-    #             "target": "CSS",
-    #         }
-    #     )
-    #     log_message(f"WebSocket message sent for ticker: {ticker}", "INFO")
+    if ticker:
+        await send_ws_message(
+            {
+                "name": "SpruePoint - Press Release API",
+                "type": "Sell",
+                "ticker": ticker,
+                "sender": "sprucepoint",
+                "target": "CSS",
+            }
+        )
+        log_message(f"WebSocket message sent for ticker: {ticker}", "INFO")
 
     await send_release_to_telegram(slug, ticker)
 
