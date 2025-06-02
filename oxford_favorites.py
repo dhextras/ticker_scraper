@@ -37,7 +37,7 @@ CHECK_INTERVAL = 0.3  # Interval to check favorites page (seconds)
 
 # File paths
 DATA_DIR = "data"
-FAVORITES_STATE_FILE = f"{DATA_DIR}/favorites_state.json"
+FAVORITES_STATE_FILE = f"{DATA_DIR}/oxford_favorites_state.json"
 HTML_BACKUP_DIR = f"{DATA_DIR}/remove"
 
 os.makedirs(DATA_DIR, exist_ok=True)
