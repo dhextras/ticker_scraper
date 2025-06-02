@@ -111,9 +111,15 @@ async def add_favorite(session: requests.Session, post_id: int) -> bool:
     """Add a post to favorites"""
     try:
         headers = {
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
             "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "origin": "https://oxfordclub.com",
+            "referer": "https://oxfordclub.com/favorites/",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
             "x-requested-with": "XMLHttpRequest",
         }
+
         data = {"post": str(post_id), "action": "add"}
 
         response = await asyncio.to_thread(
@@ -137,7 +143,12 @@ async def remove_favorite(session: requests.Session, post_id: int) -> bool:
     """Remove a post from favorites"""
     try:
         headers = {
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
             "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "origin": "https://oxfordclub.com",
+            "referer": "https://oxfordclub.com/favorites/",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
             "x-requested-with": "XMLHttpRequest",
         }
         data = {"post": str(post_id), "action": "remove"}
