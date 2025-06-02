@@ -1,16 +1,17 @@
 import asyncio
 import json
 import os
-import random
 import sys
 import time
-import uuid
 from datetime import datetime
+from typing import Any, Dict, Optional
+from uuid import uuid4
 
 import aiohttp
 import pytz
 from dotenv import load_dotenv
 
+from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
@@ -25,24 +26,47 @@ load_dotenv()
 JSON_URL = "https://jcapitalresearch.substack.com/api/v1/posts"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/jcapital_processed_urls.json"
+SESSION_FILE = "data/jcapital_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
 
 os.makedirs("data", exist_ok=True)
 
-# User agents list
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 OPR/78.0.4093.112",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/91.0.4472.80 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
-]
+
+def load_cookies(fresh=False) -> Optional[Dict[str, Any]]:
+    try:
+        cookies = None
+        if fresh == False:
+            if not os.path.exists(SESSION_FILE):
+                log_message(f"Session file not found: {SESSION_FILE}", "WARNING")
+            else:
+                with open(SESSION_FILE, "r") as f:
+                    cookies = json.load(f)
+
+        if not cookies or cookies.get("cf_clearance", "") == "":
+            log_message(
+                "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
+                "WARNING",
+            )
+            bypass = bypasser(JSON_URL, SESSION_FILE)
+
+            if not bypass or bypass == False:
+                return None
+
+            with open(SESSION_FILE, "r") as f:
+                cookies = json.load(f)
+
+            if not cookies or cookies.get("cf_clearance", "") == "":
+                return None
+
+        return cookies
+
+    except json.JSONDecodeError:
+        log_message("Failed to decode JSON from session file.", "ERROR")
+    except Exception as e:
+        log_message(f"Error loading session: {e}", "ERROR")
+
+    return None
 
 
 def load_processed_urls():
@@ -59,66 +83,58 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-def get_random_headers():
-    """Generate random headers for requests"""
-    return {
-        "User-Agent": random.choice(USER_AGENTS),
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "X-Requested-With": str(uuid.uuid4()),
-        "X-Request-Time": str(int(time.time())),
-    }
-
-
-def get_random_cache_buster():
-    """Generate random cache busting url variable for requests"""
-    cache_busters = [
-        ("timestamp", lambda: int(time.time() * 10000)),
-        ("request_uuid", lambda: str(uuid.uuid4())),
-        ("cache_time", lambda: int(time.time())),
-        ("ran_time", lambda: int(time.time() * 1000)),
-        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
-        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
-        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
-        ("tist", lambda: str(int(time.time()))),
-    ]
-
-    variable, value_generator = random.choice(cache_busters)
-    return f"{variable}={value_generator()}"
-
-
-async def fetch_json(session):
-    """Fetch JSON data and custom headers"""
-    headers = get_random_headers()
-    random_cache_buster = get_random_cache_buster()
+async def fetch_json(session, cookies):
+    """Fetch JSON data using bypasser cookies"""
+    timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
 
     try:
+        headers = {
+            "User-Agent": f"{cookies['user_agent']}",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache, no-store, max-age=0, must-revalidate, private",
+            "Pragma": "no-cache",
+            "Cookie": f"cf_clearance:{cookies['cf_clearance']}",
+            "cache-timestamp": str(timestamp),
+            "cache-uuid": str(cache_uuid),
+        }
+
+        url = f"{JSON_URL}?limit=10&cache-timestamp={timestamp}"
+
         async with session.get(
-            f"{JSON_URL}?limit=10&{random_cache_buster}",
-            headers=headers,
-            timeout=5,
+            url, headers=headers, cookies=cookies, timeout=10
         ) as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched posts from JSON", "INFO")
-                return data
+                return data, None
+            elif response.status == 403:
+                log_message(
+                    "Cloudflare clearance expired, attempting to refresh", "WARNING"
+                )
+                cookies = load_cookies(fresh=True)
+                if not cookies:
+                    raise Exception("CF_CLEARANCE Failed")
+                return [], cookies
             elif 500 <= response.status < 600:
                 log_message(
                     f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
                     "WARNING",
                 )
-                return []
+                return [], None
             else:
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return []
+                return [], None
+
     except asyncio.TimeoutError:
-        log_message(f"Took more then 1 sec to fetch", "WARNING")
-        return []
+        log_message(f"Request timeout after 10 seconds", "WARNING")
+        return [], None
     except Exception as e:
-        log_message(f"Error fetching JSON {e}", "ERROR")
-        return []
+        if "CF_CLEARANCE Failed" in str(e):
+            raise
+        log_message(f"Error fetching JSON: {e}", "ERROR")
+        return [], None
 
 
 def is_draft_post(url):
@@ -171,6 +187,11 @@ async def send_to_telegram(post_data):
 
 async def run_scraper():
     processed_urls = load_processed_urls()
+    cookies = load_cookies()
+
+    if not cookies:
+        log_message("Failed to get valid cf_clearance", "CRITICAL")
+        return
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -189,7 +210,14 @@ async def run_scraper():
                     break
 
                 log_message("Checking for new posts...")
-                posts = await fetch_json(session)
+                posts, new_cookies = await fetch_json(session, cookies)
+
+                cookies = new_cookies if new_cookies is not None else cookies
+
+                if not posts:
+                    log_message("Failed to fetch posts or no posts found", "WARNING")
+                    await asyncio.sleep(CHECK_INTERVAL)
+                    continue
 
                 new_posts = [
                     post
