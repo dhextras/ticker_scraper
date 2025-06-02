@@ -335,13 +335,12 @@ async def check_and_update_favorites(
         highest_new_id = max(new_post_ids)
         if int(highest_new_id) > state.current_end_id:
             # Calculate what we need to add (from current_end_id + 1 to highest_new_id + FAVORITES_WINDOW - 1)
-            old_end = state.current_end_id
             new_start = int(highest_new_id)
             new_end = int(highest_new_id) + FAVORITES_WINDOW - 1
 
             # Add new favorites (only the ones we don't already have)
             ids_to_add = []
-            for post_id in range(old_end + 1, new_end + 1):
+            for post_id in range(new_start + 1, new_end + 1):
                 ids_to_add.append(post_id)
 
             if ids_to_add:
@@ -357,7 +356,7 @@ async def check_and_update_favorites(
 
             state.update_range(new_start)
 
-    if new_post_ids or len(current_post_ids) != state.known_post_ids:
+    if new_post_ids or len(current_post_ids) != len(state.known_post_ids):
         # FIXME: Remove this HTML backup feature later once script is confirmed working
         backup_path = save_html_backup(html_content)
         log_message(
