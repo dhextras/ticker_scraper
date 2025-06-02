@@ -24,11 +24,10 @@ load_dotenv()
 
 # Constants
 POSTS_URL = "https://oxfordclub.com/wp-json/wp/v2/posts"
-MEDIA_URL = "https://oxfordclub.com/wp-json/wp/v2/media"
 LOGIN_URL = "https://oxfordclub.com/wp-login.php"
 USERNAME = os.getenv("OXFORDCLUB_USERNAME")
 PASSWORD = os.getenv("OXFORDCLUB_PASSWORD")
-CHECK_INTERVAL = 0.3  # seconds between batch checks
+CHECK_INTERVAL = 2  # seconds between batch checks
 BATCH_SIZE = 40  # Number of IDs to check in one batch
 LATEST_ID_FILE = "data/oxfordclub_post_latest_id.json"
 TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
