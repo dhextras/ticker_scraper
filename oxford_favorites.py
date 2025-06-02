@@ -332,11 +332,11 @@ async def check_and_update_favorites(
         ]
         await send_new_articles_to_telegram(new_articles)
 
-        highest_new_id = max(new_post_ids)
-        if int(highest_new_id) > state.current_end_id:
+        highest_new_id = int(max(new_post_ids))
+        if highest_new_id > state.current_end_id:
             # Calculate what we need to add (from current_end_id + 1 to highest_new_id + FAVORITES_WINDOW - 1)
-            new_start = int(highest_new_id)
-            new_end = int(highest_new_id) + FAVORITES_WINDOW - 1
+            new_start = highest_new_id
+            new_end = highest_new_id + FAVORITES_WINDOW - 1
 
             # Add new favorites (only the ones we don't already have)
             ids_to_add = []
@@ -393,8 +393,12 @@ async def run_favorites_manager() -> None:
     if not login_sync(session):
         return
 
-    if not state.known_post_ids:
-        await initialize_favorites(session, state)
+    if state.known_post_ids:
+        availalbe_start = int(max(state.known_post_ids))
+        state.update_range(availalbe_start)
+        state.save_state()
+
+    await initialize_favorites(session, state)
 
     while True:
         await sleep_until_market_open()
