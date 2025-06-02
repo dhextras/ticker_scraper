@@ -23,7 +23,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://jcapitalresearch.substack.com/api/v1/posts"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 3  # seconds
 PROCESSED_URLS_FILE = "data/jcapital_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
