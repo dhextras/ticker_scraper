@@ -241,7 +241,7 @@ async def fetch_favorites_page(session: requests.Session) -> Optional[str]:
     """Fetch the favorites page HTML"""
     try:
         key, value = get_random_cache_buster()
-        url = f"{url}?{key}={value}"
+        url = f"{FAVORITES_URL}?{key}={value}"
         response = await asyncio.to_thread(session.get, url, timeout=15)
 
         if response.status_code == 200:
