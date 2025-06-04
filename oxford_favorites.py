@@ -218,10 +218,28 @@ async def remove_favorites_batch(
             await asyncio.sleep(BATCH_DELAY)
 
 
+def get_random_cache_buster():
+    cache_busters = [
+        ("cache_timestamp", lambda: int(time() * 10000)),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("cache_time", lambda: int(time())),
+        ("ran_time", lambda: int(time() * 1000)),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("unique", lambda: f"{int(time())}-{random.randint(1000, 9999)}"),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("tist", lambda: str(int(time()))),
+    ]
+
+    variable, value_generator = random.choice(cache_busters)
+    return variable, value_generator()
+
+
 async def fetch_favorites_page(session: requests.Session) -> Optional[str]:
     """Fetch the favorites page HTML"""
     try:
-        response = await asyncio.to_thread(session.get, FAVORITES_URL, timeout=15)
+        key, value = get_random_cache_buster()
+        url = f"{url}?{key}={value}"
+        response = await asyncio.to_thread(session.get, url, timeout=15)
 
         if response.status_code == 200:
             return response.text
