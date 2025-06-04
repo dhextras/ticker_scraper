@@ -49,6 +49,7 @@ class FavoritesState:
         self.current_start_id = STARTING_ID
         self.current_end_id = STARTING_ID + FAVORITES_WINDOW - 1
         self.known_post_ids = set()
+        self.current_favorites = set()
         self.load_state()
 
     def load_state(self):
@@ -60,6 +61,7 @@ class FavoritesState:
                     "current_end_id", STARTING_ID + FAVORITES_WINDOW - 1
                 )
                 self.known_post_ids = set(data.get("known_post_ids", []))
+                self.current_favorites = set(data.get("current_favorites", []))
                 log_message(
                     f"Loaded state: Range {self.current_start_id}-{self.current_end_id}, Known posts: {len(self.known_post_ids)}",
                     "INFO",
@@ -73,6 +75,7 @@ class FavoritesState:
             "current_start_id": self.current_start_id,
             "current_end_id": self.current_end_id,
             "known_post_ids": list(self.known_post_ids),
+            "current_favorites": list(self.current_favorites),
         }
         with open(FAVORITES_STATE_FILE, "w") as f:
             json.dump(data, f, indent=2)
@@ -82,14 +85,15 @@ class FavoritesState:
         old_start = self.current_start_id
         old_end = self.current_end_id
 
-        self.current_start_id = new_highest_id
-        self.current_end_id = new_highest_id + FAVORITES_WINDOW - 1
+        if new_highest_id > old_start:
+            self.current_start_id = new_highest_id
+            self.current_end_id = new_highest_id + FAVORITES_WINDOW - 1
 
-        log_message(
-            f"Updated range: {old_start}-{old_end} → {self.current_start_id}-{self.current_end_id}",
-            "INFO",
-        )
-        self.save_state()
+            log_message(
+                f"Updated range: {old_start}-{old_end} → {self.current_start_id}-{self.current_end_id}",
+                "INFO",
+            )
+            self.save_state()
 
 
 def login_sync(session: requests.Session) -> bool:
@@ -279,7 +283,6 @@ def save_html_backup(html_content: str) -> str:
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(html_content)
-        log_message(f"HTML backup saved: {filename}", "INFO")
         return filepath
     except Exception as e:
         log_message(f"Error saving HTML backup: {e}", "ERROR")
@@ -327,13 +330,14 @@ async def check_and_update_favorites(
 
     new_post_ids = current_post_ids - state.known_post_ids
     if new_post_ids:
+        log_message(f"Found New posts ids: {str(new_post_ids)}", "INFO")
         new_articles = [
             fav for fav in current_favorites if fav["post_id"] in new_post_ids
         ]
         await send_new_articles_to_telegram(new_articles)
 
         highest_new_id = int(max(new_post_ids))
-        if highest_new_id > state.current_end_id:
+        if highest_new_id > state.current_start_id:
             # Calculate what we need to add (from current_end_id + 1 to highest_new_id + FAVORITES_WINDOW - 1)
             new_start = highest_new_id
             new_end = highest_new_id + FAVORITES_WINDOW - 1
@@ -341,22 +345,28 @@ async def check_and_update_favorites(
             # Add new favorites (only the ones we don't already have)
             ids_to_add = []
             for post_id in range(new_start + 1, new_end + 1):
-                ids_to_add.append(post_id)
+                if post_id not in state.current_favorites:
+                    ids_to_add.append(post_id)
 
             if ids_to_add:
                 await add_favorites_batch(session, ids_to_add)
+                state.current_favorites.update(ids_to_add)
 
             # Remove old favorites (below the new start)
             ids_to_remove = []
-            for post_id in range(state.current_start_id, new_start):
-                ids_to_remove.append(post_id)
+            for post_id in state.current_favorites:
+                if post_id <= new_start:
+                    ids_to_remove.append(post_id)
 
             if ids_to_remove:
                 await remove_favorites_batch(session, ids_to_remove)
+                state.current_favorites.difference_update(ids_to_add)
 
-            state.update_range(new_start)
+            available_start = int(max(new_post_ids))
+            state.update_range(available_start)
+            state.save_state()
 
-    if new_post_ids or len(current_post_ids) != len(state.known_post_ids):
+    if new_post_ids:
         # FIXME: Remove this HTML backup feature later once script is confirmed working
         backup_path = save_html_backup(html_content)
         log_message(
@@ -378,8 +388,16 @@ async def initialize_favorites(
         "INFO",
     )
 
-    ids_to_add = list(range(state.current_start_id, state.current_end_id + 1))
-    await add_favorites_batch(session, ids_to_add)
+    ids_to_add = [
+        i
+        for i in range(state.current_start_id, state.current_end_id + 1)
+        if i not in state.current_favorites
+    ]
+
+    if ids_to_add:
+        await add_favorites_batch(session, ids_to_add)
+        state.current_favorites.update(ids_to_add)
+        state.save_state()
 
     await asyncio.sleep(1)  # just to make sure the favorite load in the first go
     await check_and_update_favorites(session, state)
@@ -394,8 +412,8 @@ async def run_favorites_manager() -> None:
         return
 
     if state.known_post_ids:
-        availalbe_start = int(max(state.known_post_ids))
-        state.update_range(availalbe_start)
+        available_start = int(max(state.known_post_ids))
+        state.update_range(available_start)
         state.save_state()
 
     await initialize_favorites(session, state)
