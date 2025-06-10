@@ -543,11 +543,11 @@ async def run_favorites_manager() -> None:
         state.update_range(available_start)
         state.save_state()
 
+    await initialize_websocket()
     await initialize_favorites(session, state)
 
     while True:
         await sleep_until_market_open()
-        await initialize_websocket()
 
         log_message("Market is open. Starting favorites monitoring...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
