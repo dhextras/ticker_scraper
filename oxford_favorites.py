@@ -19,6 +19,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -113,6 +114,94 @@ def login_sync(session: requests.Session) -> bool:
         log_message(f"Error during login: {e}", "ERROR")
         return False
 
+
+async def process_page(
+    session: requests.Session, url: str
+) -> Optional[Tuple[str, str, str, float]]:
+    try:
+        start_time = time.time()
+        response = await asyncio.to_thread(
+            session.get, url, headers=get_headers(), timeout=15
+        )
+        total_seconds = time.time() - start_time
+
+        if response.status_code == 200:
+            content = response.text
+            soup = BeautifulSoup(content, "html.parser")
+            all_text = soup.get_text(separator=" ", strip=True)
+
+            action_sections = re.split(r"Action to Take", all_text, flags=re.IGNORECASE)
+
+            if len(action_sections) < 2:
+                log_message(f"'Action to Take' not found: {url}", "WARNING")
+
+            for section in action_sections[1:]:
+                buy_match = re.search(r"Buy", section, re.IGNORECASE)
+                sell_match = re.search(r"Sell", section, re.IGNORECASE)
+                ticker_match = re.search(
+                    r"(NYSE|NASDAQ):\s*(\w+)", section, re.IGNORECASE
+                )
+
+                if (
+                    sell_match
+                    and ticker_match
+                    and sell_match.start() < ticker_match.start()
+                ):
+                    exchange, ticker = ticker_match.groups()
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    await send_match_to_telegram(
+                        url, ticker, exchange, "Sell", timestamp, total_seconds
+                    )
+                    return (ticker, exchange, "Sell", total_seconds)
+                elif (
+                    buy_match
+                    and ticker_match
+                    and buy_match.start() < ticker_match.start()
+                ):
+                    exchange, ticker = ticker_match.groups()
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    await send_match_to_telegram(
+                        url, ticker, exchange, "Buy", timestamp, total_seconds
+                    )
+                    return (ticker, exchange, "Buy", total_seconds)
+
+            log_message(
+                f"Took {total_seconds:.2f}s to fetch and process URL: {url}", "WARNING"
+            )
+        else:
+            log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
+    except Exception as e:
+        log_message(f"Error processing page {url}: {e}", "ERROR")
+
+    return None
+
+
+async def send_match_to_telegram(
+    url: str,
+    ticker: str,
+    exchange: str,
+    action: str,
+    timestamp: str,
+    total_seconds: float,
+) -> None:
+
+    await send_ws_message(
+        {
+            "name": "Oxford Club - Favorite ID",
+            "type": action,
+            "ticker": ticker,
+            "sender": "oxfordclub",
+        },
+    )
+
+    message = f"<b>New Stock Match Found - Post ID</b>\n\n"
+    message += f"<b>Current Time:</b> {timestamp}\n"
+    message += f"<b>URL:</b> {url}\n"
+    message += f"<b>Stock Symbol:</b> {exchange}:{ticker}\n"
+    message += f"<b>Article Fetch time:</b> {total_seconds:.2f}s\n"
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    log_message(f"Match sent to Telegram: {exchange}:{ticker} - {url}", "INFO")
 
 async def add_favorite(session: requests.Session, post_id: int) -> bool:
     """Add a post to favorites"""
@@ -355,6 +444,9 @@ async def check_and_update_favorites(
         new_articles = [
             fav for fav in current_favorites if fav["post_id"] in new_post_ids
         ]
+        for article in new_articles:
+            await process_page(session, article["link"])
+
         await send_new_articles_to_telegram(new_articles)
 
         highest_new_id = int(max(new_post_ids))
@@ -441,6 +533,7 @@ async def run_favorites_manager() -> None:
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
 
         log_message("Market is open. Starting favorites monitoring...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
