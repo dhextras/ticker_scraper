@@ -6,7 +6,8 @@ import sys
 import uuid
 from datetime import datetime
 from time import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 import requests
 from bs4 import BeautifulSoup
@@ -114,16 +115,28 @@ def login_sync(session: requests.Session) -> bool:
         log_message(f"Error during login: {e}", "ERROR")
         return False
 
+def get_headers() -> Dict[str, str]:
+    timestamp = int(time.time() * 10000)
+    cache_uuid = uuid4()
+
+    return {
+        "Connection": "keep-alive",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
+        "pragma": "no-cache",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
+        "cache-timestamp": str(timestamp),
+        "cache-uuid": str(cache_uuid),
+    }
 
 async def process_page(
     session: requests.Session, url: str
 ) -> Optional[Tuple[str, str, str, float]]:
     try:
-        start_time = time.time()
+        start_time = time()
         response = await asyncio.to_thread(
             session.get, url, headers=get_headers(), timeout=15
         )
-        total_seconds = time.time() - start_time
+        total_seconds = time() - start_time
 
         if response.status_code == 200:
             content = response.text
