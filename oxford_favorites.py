@@ -116,7 +116,7 @@ def login_sync(session: requests.Session) -> bool:
         return False
 
 def get_headers() -> Dict[str, str]:
-    timestamp = int(time.time() * 10000)
+    timestamp = int(time() * 10000)
     cache_uuid = uuid4()
 
     return {
