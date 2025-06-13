@@ -208,7 +208,7 @@ async def send_match_to_telegram(
         },
     )
 
-    message = f"<b>New Stock Match Found - Post ID</b>\n\n"
+    message = f"<b>New Stock Match Found - Favorite ID</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
     message += f"<b>Stock Symbol:</b> {exchange}:{ticker}\n"
