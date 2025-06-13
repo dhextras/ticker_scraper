@@ -44,10 +44,8 @@ CHECK_INTERVAL = 0.3  # Interval to check favorites page (seconds)
 # File paths
 DATA_DIR = "data"
 FAVORITES_STATE_FILE = f"{DATA_DIR}/oxford_favorites_state.json"
-HTML_BACKUP_DIR = f"{DATA_DIR}/remove"
 
 os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(HTML_BACKUP_DIR, exist_ok=True)
 
 
 class FavoritesState:
@@ -398,21 +396,6 @@ def parse_favorites_html(html_content: str) -> List[Dict[str, str]]:
         return []
 
 
-def save_html_backup(html_content: str) -> str:
-    """Save HTML content with timestamp filename"""
-    timestamp = datetime.now().strftime("%d_%m_%Y_%H_%M")
-    filename = f"{timestamp}.html"
-    filepath = os.path.join(HTML_BACKUP_DIR, filename)
-
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        return filepath
-    except Exception as e:
-        log_message(f"Error saving HTML backup: {e}", "ERROR")
-        return ""
-
-
 async def send_new_articles_to_telegram(new_articles: List[Dict[str, str]]) -> None:
     """Send new articles found to Telegram"""
     if not new_articles:
@@ -494,8 +477,6 @@ async def check_and_update_favorites(
             state.save_state()
 
     if new_post_ids:
-        # FIXME: Remove this HTML backup feature later once script is confirmed working
-        backup_path = save_html_backup(html_content)
         log_message(
             f"Found {len(new_post_ids)} new articles {(len(current_post_ids))}, {(len(state.known_post_ids))}, HTML backed up to: {backup_path}",
             "INFO",
