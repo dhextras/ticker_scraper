@@ -1,8 +1,8 @@
 import asyncio
-import re
 import json
 import os
 import random
+import re
 import sys
 import uuid
 from datetime import datetime
@@ -114,6 +114,7 @@ def login_sync(session: requests.Session) -> bool:
         log_message(f"Error during login: {e}", "ERROR")
         return False
 
+
 def get_headers() -> Dict[str, str]:
     timestamp = int(time() * 10000)
     cache_uuid = uuid4()
@@ -126,6 +127,7 @@ def get_headers() -> Dict[str, str]:
         "cache-timestamp": str(timestamp),
         "cache-uuid": str(cache_uuid),
     }
+
 
 async def process_page(
     session: requests.Session, url: str
@@ -214,6 +216,7 @@ async def send_match_to_telegram(
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
     log_message(f"Match sent to Telegram: {exchange}:{ticker} - {url}", "INFO")
+
 
 async def add_favorite(session: requests.Session, post_id: int) -> bool:
     """Add a post to favorites"""
@@ -396,6 +399,21 @@ def parse_favorites_html(html_content: str) -> List[Dict[str, str]]:
         return []
 
 
+def save_html_backup(html_content: str) -> str:
+    """Save HTML content with timestamp filename"""
+    timestamp = datetime.now().strftime("%d_%m_%Y_%H_%M")
+    filename = f"{timestamp}.html"
+    filepath = os.path.join(HTML_BACKUP_DIR, filename)
+
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        return filepath
+    except Exception as e:
+        log_message(f"Error saving HTML backup: {e}", "ERROR")
+        return ""
+
+
 async def send_new_articles_to_telegram(new_articles: List[Dict[str, str]]) -> None:
     """Send new articles found to Telegram"""
     if not new_articles:
@@ -478,7 +496,7 @@ async def check_and_update_favorites(
 
     if new_post_ids:
         log_message(
-            f"Found {len(new_post_ids)} new articles {(len(current_post_ids))}, {(len(state.known_post_ids))}, HTML backed up to: {backup_path}",
+            f"Found {len(new_post_ids)} new articles {(len(current_post_ids))}, {(len(state.known_post_ids))}",
             "INFO",
         )
 
