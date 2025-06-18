@@ -154,6 +154,10 @@ async def get_latest_message(tab_id, channel_url):
     try:
         current_tab = page.get_tab(tab_id)
 
+        if page.url == channel_url:
+            current_tab.get(channel_url)
+            await asyncio.sleep(3)
+
         await random_scroll(current_tab)
 
         try:
@@ -250,7 +254,7 @@ async def run_scraper():
             for i, channel_url in enumerate(CHANNELS):
                 channel_name = extract_channel_name(channel_url)
                 message = await get_latest_message(tab_ids[i], channel_url)
-                log_message(f"Fetched latest message for channel_name", "INFO")
+                log_message(f"Fetched latest message for {channel_name}", "INFO")
 
                 if not message:
                     continue
