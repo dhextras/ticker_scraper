@@ -152,6 +152,7 @@ async def random_scroll(current_tab):
 
 async def get_latest_message(tab_id, channel_url):
     try:
+        page.activate_tab(tab_id)
         current_tab = page.get_tab(tab_id)
 
         if page.url == channel_url:
