@@ -454,6 +454,13 @@ class TickerDeckWebSocketManager:
                 if len(match.strip()) <= 6:
                     tickers.add(match.strip().upper())
 
+        # Pattern for dollar-prefixed tickers like $AAPL
+        dollar_pattern = r"\$([A-Z]{2,6})"
+        dollar_matches = re.findall(dollar_pattern, text)
+        for match in dollar_matches:
+            if len(match.strip()) <= 6:
+                tickers.add(match.strip().upper())
+
         # Look for tickers with separators: -SOFT-, HAVE-SOFT
         separator_pattern = r"(?:^|[^A-Z])[A-Z]{2,6}(?:-[A-Z]{2,6})*(?=[^A-Z]|$)"
         separator_matches = re.findall(separator_pattern, text)
