@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import random
 import sys
 
 from dotenv import load_dotenv
@@ -22,7 +23,7 @@ CHANNELS = [
     "https://discord.com/channels/916525682887122974/919332311391154256",
     "https://discord.com/channels/916525682887122974/1217309136681832540",
 ]
-CHECK_INTERVAL = 3
+CHECK_INTERVAL = 0.4
 PROCESSED_MESSAGES_FILE = "data/discord_processed_messages.json"
 SESSION_FILE = "data/discord_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("DISCORD_TELEGRAM_BOT_TOKEN")
@@ -34,6 +35,7 @@ os.makedirs("data", exist_ok=True)
 
 co = ChromiumOptions()
 page = ChromiumPage(co)
+tab_ids = []
 
 
 def load_processed_messages():
@@ -50,6 +52,24 @@ def save_processed_messages(messages):
     log_message("Processed messages saved.", "INFO")
 
 
+def initialize_tabs():
+    global page, tab_ids
+
+    if tab_ids:
+        for tab_id in tab_ids[1:]:
+            try:
+                page.get_tab(tab_id).close()
+            except Exception as e:
+                log_message(f"Error closing tab: {e}", "WARNING")
+
+    page.new_tab()
+    tab_ids = page.tab_ids
+    log_message(f"Initialized {len(tab_ids)} tabs", "INFO")
+
+    page.activate_tab(tab_ids[0])
+    return tab_ids
+
+
 async def send_captcha_notification():
     message = f"<b>Discord Login Captcha Detected</b>\n\n"
     message += f"<b>Time:</b> {get_current_time().strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -61,7 +81,7 @@ async def send_captcha_notification():
 
 
 async def login_discord():
-    global page, co
+    global page
 
     try:
         page.get(DISCORD_LOGIN_URL)
@@ -120,18 +140,29 @@ def extract_channel_name(url):
     return channel_mapping.get(channel_id, f"Channel-{channel_id}")
 
 
-async def get_latest_message(channel_url):
+async def random_scroll(current_tab):
     try:
-        page.get(channel_url)
-        await asyncio.sleep(3)
+        if random.random() < 0.1:
+            scroll_amount = random.randint(-200, 200)
+            current_tab.scroll(0, scroll_amount)
+            await asyncio.sleep(0.1)
+    except Exception as e:
+        log_message(f"Error during random scroll: {e}", "DEBUG")
+
+
+async def get_latest_message(tab_id, channel_url):
+    try:
+        current_tab = page.get_tab(tab_id)
+
+        await random_scroll(current_tab)
 
         try:
-            messages = page.eles("@id:message-content")
+            messages = current_tab.eles("@id:message-content")
             if not messages:
                 return None
 
             content_elem = messages[-1]
-            timestamp_elem = page.ele("@id:message-timestamp")
+            timestamp_elem = current_tab.ele("@id:message-timestamp")
 
             if "NoneElement" not in str(timestamp_elem) and "NoneElement" not in str(
                 content_elem
@@ -168,7 +199,6 @@ async def send_new_message_notification(message_data, channel_name):
     telegram_message += f"<b>Message Time:</b> {message_data['timestamp']}\n"
     telegram_message += f"<b>Current Time:</b> {current_time}\n"
     telegram_message += f"<b>Content:</b>\n{message_data['content']}\n"
-
     telegram_message += f"<b>Channel URL:</b> {message_data['channel_url']}"
 
     await send_ticker_deck_message(
@@ -181,12 +211,25 @@ async def send_new_message_notification(message_data, channel_name):
     log_message(f"New message notification sent for {channel_name}", "INFO")
 
 
+async def setup_channel_tabs():
+    global tab_ids
+
+    for i, channel_url in enumerate(CHANNELS):
+        page.activate_tab(tab_ids[i])
+        page.get(channel_url)
+        await asyncio.sleep(3)
+        log_message(f"Tab {i} loaded with {extract_channel_name(channel_url)}", "INFO")
+
+
 async def run_scraper():
     processed_messages = load_processed_messages()
 
     if not await login_discord():
         log_message("Failed to login to Discord", "CRITICAL")
         return
+
+    initialize_tabs()
+    await setup_channel_tabs()
 
     while True:
         await sleep_until_market_open()
@@ -204,11 +247,10 @@ async def run_scraper():
                 )
                 break
 
-            log_message("Checking Discord channels for new messages...")
-
-            for channel_url in CHANNELS:
+            for i, channel_url in enumerate(CHANNELS):
                 channel_name = extract_channel_name(channel_url)
-                message = await get_latest_message(channel_url)
+                message = await get_latest_message(tab_ids[i], channel_url)
+                log_message(f"Fetched latest message for channel_name", "INFO")
 
                 if not message:
                     continue
@@ -233,7 +275,6 @@ async def run_scraper():
                         ][-50:]
 
                 save_processed_messages(processed_messages)
-                await asyncio.sleep(1)
 
             await asyncio.sleep(CHECK_INTERVAL)
 
