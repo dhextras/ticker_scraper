@@ -144,7 +144,13 @@ async def random_scroll(current_tab):
     try:
         if random.random() < 0.1:
             scroll_amount = random.randint(-200, 200)
-            current_tab.scroll(0, scroll_amount)
+            if scroll_amount > 0:
+                current_tab.scroll.to_bottom()
+            else:
+                current_tab.scroll.up()
+                current_tab.scroll.up()
+                current_tab.scroll.up()
+
             await asyncio.sleep(0.1)
     except Exception as e:
         log_message(f"Error during random scroll: {e}", "DEBUG")
