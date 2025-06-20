@@ -229,7 +229,7 @@ def login(email, password):
                 f"Account {email} is already banned. Access denied before login.",
                 "ERROR",
             )
-            return False
+            return False, True
 
         if is_logged_in():
             log_message("Already logged in, logging out first", "INFO")
@@ -256,7 +256,7 @@ def login(email, password):
         )
         if not login_div:
             log_message("Cannot find login button", "ERROR")
-            return False
+            return False, False
 
         login_input = login_div.ele("tag:input", timeout=0.1)
 
@@ -272,7 +272,7 @@ def login(email, password):
         denied, _ = check_for_access_denied()
         if denied:
             log_message(f"Account {email} banned after login attempt", "ERROR")
-            return False
+            return False, True
 
         try:
             if is_logged_in():
@@ -281,14 +281,14 @@ def login(email, password):
                 current_login_password = password
                 page.get("https://www.zacks.com/confidential")
                 time.sleep(2)
-                return True
+                return True, False
         except:
             log_message(f"Login failed with account: {email}", "ERROR")
-            return False
+            return False, False
 
     except Exception as e:
         log_message(f"Error during login with account {email}: {e}", "ERROR")
-        return False
+        return False, False
 
 
 def check_for_access_denied():
@@ -399,7 +399,7 @@ def process_commentary(html):
 
 
 async def handle_job(websocket, job_data, processing_start_time):
-    """Handle a job assignment from the server"""
+    """Handle a job assignment with WebSocket keepalive during login"""
     global consecutive_failures, current_login_email, current_login_password
 
     comment_id = job_data["comment_id"]
@@ -437,30 +437,49 @@ async def handle_job(websocket, job_data, processing_start_time):
 
         if not is_logged_in() or current_login_email != email:
             log_message(f"Need to login with account {email}", "INFO")
-            if not login(email, password):
+
+            # FIX:
+            await websocket.send(
+                json.dumps(
+                    {"type": "status_update", "status": "logging_in", "email": email}
+                )
+            )
+
+            keepalive_task = asyncio.create_task(send_periodic_pings(websocket, 10))
+
+            try:
+                login_success, banned = await asyncio.to_thread(login, email, password)
+            finally:
+                keepalive_task.cancel()
+                try:
+                    await keepalive_task
+                except asyncio.CancelledError:
+                    pass
+
+            if banned and not login_success:
                 await websocket.send(
                     json.dumps(
                         {
                             "type": "account_banned",
                             "account_index": account_index,
-                            "minutes": 15,  # Default ban time
+                            "minutes": 15,
                         }
                     )
                 )
                 consecutive_failures += 1
                 return
 
-        success, html_content, *ban_minutes = await asyncio.to_thread(
+        _, html_content, *ban_minutes = await asyncio.to_thread(
             fetch_commentary, comment_id
         )
 
-        if not success:
+        if ban_minutes:
             await websocket.send(
                 json.dumps(
                     {
                         "type": "account_banned",
                         "account_index": account_index,
-                        "minutes": ban_minutes[0] if ban_minutes else 15,
+                        "minutes": ban_minutes[0],
                     }
                 )
             )
@@ -520,18 +539,29 @@ async def handle_job(websocket, job_data, processing_start_time):
         )
 
 
+async def send_periodic_pings(websocket, interval=5):
+    """Send periodic pings to keep WebSocket alive during long operations"""
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            await websocket.send(json.dumps({"type": "pong", "client_id": CLIENT_ID}))
+            log_message("Sent keepalive ping during long operation", "INFO")
+    except asyncio.CancelledError:
+        log_message("Keepalive task cancelled", "INFO")
+    except Exception as e:
+        log_message(f"Error in keepalive task: {e}", "WARNING")
+
+
 async def main(CLIENT_ID):
     """Main client function"""
     global consecutive_failures, current_login_email, current_login_password
 
-    # Load credentials
     load_credentials()
 
     while True:
         await sleep_until_market_open()
-        log_message("Market is open. Starting Zacks client...", "INFO")
+        log_message("Market is open. Starting Zacks client...", "DEBUG")
 
-        # Get market close time for this session
         _, _, market_close_time = get_next_market_times()
 
         if not setup_browser():
@@ -643,7 +673,7 @@ async def main(CLIENT_ID):
                                     "INFO",
                                 )
 
-                                login_success = await asyncio.to_thread(
+                                login_success, _ = await asyncio.to_thread(
                                     login, email, password
                                 )
 
@@ -706,7 +736,7 @@ async def main(CLIENT_ID):
                                     continue
 
                                 # Try to login with the new account
-                                login_success = await asyncio.to_thread(
+                                login_success, _ = await asyncio.to_thread(
                                     login, email, password
                                 )
 
@@ -752,7 +782,7 @@ async def main(CLIENT_ID):
                 reconnect_delay = min(reconnect_delay * 2, 60)
             else:
                 log_message(
-                    "Market closed. Will not reconnect until next market open.", "INFO"
+                    "Market closed. Will not reconnect until next market open.", "DEBUG"
                 )
                 break
 

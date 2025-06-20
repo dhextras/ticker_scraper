@@ -28,6 +28,8 @@ TELEGRAM_CHAT_ID = os.getenv("ZACKS_TELEGRAM_GRP")
 STARTING_CID = 44640  # Starting comment ID
 WEBSOCKET_PORT = 6969  # IDK lol just for fun
 ACCOUNT_COOL_DOWN_DEFAULT = 15 * 60  # Default cool down period in seconds (15 minutes)
+MAX_RECONNECT_ATTEMPTS = 3  # Maximum reconnection attempts per client
+RECONNECT_DELAY = 30  # Delay between reconnection attempts
 
 DATA_DIR = Path("data")
 CRED_DIR = Path("cred")
@@ -39,7 +41,7 @@ ACCOUNT_STATUS_FILE = DATA_DIR / "zacks_account_status.json"
 connected_clients = {}  # client_id -> websocket
 client_status = (
     {}
-)  # client_id -> {status, last_active, current_cid, account_index, account_email, account_assigned_time}
+)  # client_id -> {status, last_active, current_cid, account_index, account_email, account_assigned_time, reconnect_count}
 current_comment_id = STARTING_CID
 accounts = []
 total_accounts = 0
@@ -51,6 +53,8 @@ account_usage_queue = []  # Queue of available account emails
 account_in_use = set()  # Set of emails currently in use
 initializing_clients = set()  # Set of clients currently initializing
 account_usage_count = {}  # email -> count of
+waiting_clients = set()  # Set of clients waiting for accounts
+system_paused = False  # Global pause when all accounts are banned
 
 
 def load_credentials():
@@ -138,6 +142,42 @@ def save_account_status():
         return False
 
 
+def clean_all_account_bans():
+    """Clean all account bans and reset the system"""
+    global account_status, system_paused
+
+    log_message("Cleaning all account bans and resetting system...", "INFO")
+
+    for email in account_status:
+        account_status[email]["banned"] = False
+        account_status[email]["banned_until"] = 0
+        account_status[email]["ban_count"] = 0
+
+    save_account_status()
+    system_paused = False
+
+    init_account_rotation()
+    log_message("All account bans cleared, system reset complete", "INFO")
+
+
+def check_all_accounts_banned():
+    """Check if all accounts are banned"""
+    current_time = datetime.now().timestamp()
+
+    for account in accounts:
+        email = account["email"]
+        if email not in account_status:
+            return False
+
+        if (
+            not account_status[email]["banned"]
+            or current_time >= account_status[email]["banned_until"]
+        ):
+            return False
+
+    return True
+
+
 def init_account_rotation():
     """Initialize the account rotation system"""
     global account_usage_queue, account_in_use, account_usage_count
@@ -156,11 +196,24 @@ def init_account_rotation():
     )
 
 
+async def send_critical_error_alert():
+    message = "ALL ACCOUNTS ARE BANNED! Cleaning bans and resetting system...\n Make sure to check the logs and see if the account banns are legit or not..."
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
+
 def get_available_account(client_id):
     """Get an available account using a rotation system with 30-minute persistence per client"""
-    global account_usage_queue, account_in_use, client_status, account_usage_count
+    global account_usage_queue, account_in_use, client_status, account_usage_count, system_paused
 
     current_time = datetime.now().timestamp()
+
+    if check_all_accounts_banned():
+        if not system_paused:
+            asyncio.run(send_critical_error_alert())
+            clean_all_account_bans()
+            system_paused = False
+        else:
+            return None, None, None
 
     # Check if client already has an assigned account and it hasn't been 30 minutes yet
     if client_id in client_status and "account_email" in client_status[client_id]:
@@ -201,13 +254,9 @@ def get_available_account(client_id):
                 client_status[client_id].pop("account_email", None)
                 client_status[client_id].pop("account_assigned_time", None)
 
-    # If we need a new account, continue with the rotation system
-
     # If queue is empty but we have accounts in use, wait for releases
     if not account_usage_queue and len(account_in_use) >= total_accounts:
-        log_message(
-            f"All accounts are in use, client {client_id} will have to wait", "WARNING"
-        )
+        log_message(f"All accounts are in use, client {client_id} will wait", "WARNING")
         return None, None, None
 
     # Find the least used accounts that are available
@@ -295,6 +344,13 @@ def get_available_account(client_id):
     if earliest_email:
         wait_time = max(0, earliest_expiry - current_time)
 
+        if wait_time > 300:  # 5 minutes
+            log_message(
+                f"Shortest ban time is {wait_time/60:.1f} minutes, client {client_id} will wait",
+                "WARNING",
+            )
+            return None, None, None
+
         # Increment usage count
         account_usage_count[earliest_email] = (
             account_usage_count.get(earliest_email, 0) + 1
@@ -308,7 +364,7 @@ def get_available_account(client_id):
         client_status[client_id]["account_assigned_time"] = current_time
 
         log_message(
-            f"All non-banned accounts are in use or none available. Using {earliest_email} for client {client_id}, available in {wait_time:.1f} seconds (usage count: {account_usage_count[earliest_email]})",
+            f"Using {earliest_email} for client {client_id}, available in {wait_time:.1f} seconds (usage count: {account_usage_count[earliest_email]})",
             "WARNING",
         )
         return earliest_idx, earliest_email, True
@@ -423,7 +479,7 @@ def extract_ticker(title, content):
             match = re.search(r"\(([A-Z]+)\)", content[buy_section.start() :])
             if match:
                 return match.group(1), "Buy"
-    elif "BUY" in title or "Buy" in title or "Buying" in title:
+    elif any(word in title for word in ["BUY", "Buy", "Buying"]):
         if "sell" in title.lower():
             match = re.search("buy", content.lower())
             match2 = re.search("hold", content.lower())
@@ -431,11 +487,19 @@ def extract_ticker(title, content):
                 content = content[match.end() :]
             elif match2:
                 content = content[match2.end() :]
-        match = re.search(r"\(([A-Z]+)\)", content)
+        match = re.search(r"\(([A-Z]{2,6})\)", content)
+        if match:
+            return match.group(1), "Buy"
+
+        match = re.search(r"\bBuy\s+([A-Z]{2,6})\b", content)
+        if match:
+            return match.group(1), "Buy"
+
+        match = re.search(r"\bBuy\s+([A-Z]{2,6})\b", title)
         if match:
             return match.group(1), "Buy"
     elif "Adding" in title:
-        match = re.search(r"Adding\s+([A-Z]+)", title)
+        match = re.search(r"Adding\s+([A-Z]{2,6})", title)
         if match:
             return match.group(1), "Buy"
     # TODO: Later also process sell alerts
@@ -444,14 +508,25 @@ def extract_ticker(title, content):
 
 
 async def handle_client_pong(websocket, client_id):
-    """Handle ping-pong mechanism for a client"""
+    """Handle ping-pong mechanism for a client with better error handling"""
     try:
         while client_id in connected_clients:
-            await websocket.send(json.dumps({"type": "ping"}))
-            client_status[client_id]["last_active"] = time.time()
-            await asyncio.sleep(5)  # Send ping every 5 seconds
+            try:
+                await websocket.send(json.dumps({"type": "ping"}))
+                client_status[client_id]["last_active"] = time.time()
+                await asyncio.sleep(5)  # Send ping every 5 seconds
+            except websockets.exceptions.ConnectionClosed:
+                log_message(
+                    f"Connection closed for client {client_id} during ping", "INFO"
+                )
+                break
+            except Exception as e:
+                log_message(f"Error sending ping to client {client_id}: {e}", "WARNING")
+                break
     except Exception as e:
-        log_message(f"Error in ping-pong handler for client {client_id}: {e}", "ERROR")
+        log_message(
+            f"Error in ping-pong handler for client {client_id}: {e}", "WARNING"
+        )
 
 
 async def browser_initialization_manager():
@@ -473,6 +548,9 @@ async def browser_initialization_manager():
 
             # Check all connected clients
             for client_id in list(connected_clients.keys()):
+                if client_id in waiting_clients:
+                    continue
+
                 if client_id not in client_browser_restart:
                     # New client needs initial setup
                     client_browser_restart[client_id] = current_time_timestamp
@@ -505,6 +583,14 @@ async def browser_initialization_manager():
                                 release_account(email)
                             if client_id in initializing_clients:
                                 initializing_clients.remove(client_id)
+                    else:
+                        waiting_clients.add(client_id)
+                        if client_id in initializing_clients:
+                            initializing_clients.remove(client_id)
+                        log_message(
+                            f"Client {client_id} added to waiting list (no accounts available)",
+                            "WARNING",
+                        )
 
                 # Check if it's time for a browser restart (every 30 minutes)
                 elif (
@@ -515,6 +601,7 @@ async def browser_initialization_manager():
                     if (
                         client_id not in initializing_clients
                         and client_id in connected_clients
+                        and client_id not in waiting_clients
                     ):
                         initializing_clients.add(client_id)
 
@@ -545,10 +632,12 @@ async def browser_initialization_manager():
                                     release_account(email)
                                 if client_id in initializing_clients:
                                     initializing_clients.remove(client_id)
-                elif client_id in initializing_clients:
-                    initializing_clients.remove(client_id)
+                        else:
+                            waiting_clients.add(client_id)
+                            if client_id in initializing_clients:
+                                initializing_clients.remove(client_id)
 
-            await asyncio.sleep(10)  # Check every 10 seconds
+            await asyncio.sleep(30)  # Check every 30 seconds
 
     except Exception as e:
         log_message(f"Error in browser initialization manager: {e}", "ERROR")
@@ -557,18 +646,30 @@ async def browser_initialization_manager():
 
 
 async def handle_client(websocket):
-    """Handle WebSocket client connections"""
-    global current_comment_id, initializing_clients
+    """Handle WebSocket client connections with improved error handling"""
+    global current_comment_id, initializing_clients, waiting_clients
     client_id = None
     message_queue = asyncio.Queue()
+    reconnect_count = 0
 
     try:
         # Wait for client registration
-        message = await websocket.recv()
+        message = await asyncio.wait_for(websocket.recv(), timeout=30)
         data = json.loads(message)
 
         if data["type"] == "register":
             client_id = data["client_id"]
+
+            if client_id in client_status:
+                reconnect_count = client_status[client_id].get("reconnect_count", 0) + 1
+                if reconnect_count > MAX_RECONNECT_ATTEMPTS:
+                    log_message(
+                        f"Client {client_id} exceeded reconnection limit, rejecting",
+                        "WARNING",
+                    )
+                    await websocket.close(code=1008, reason="Too many reconnections")
+                    return
+
             connected_clients[client_id] = websocket
             client_status[client_id] = {
                 "status": "available",
@@ -576,9 +677,12 @@ async def handle_client(websocket):
                 "current_cid": None,
                 "account_index": None,
                 "processing_time": [],
+                "reconnect_count": reconnect_count,
             }
-            log_message(f"Client {client_id} connected", "INFO")
-            initializing_clients.add(client_id)
+            log_message(
+                f"Client {client_id} connected (reconnect count: {reconnect_count})",
+                "INFO",
+            )
 
             # Send acknowledgment
             await websocket.send(
@@ -589,13 +693,22 @@ async def handle_client(websocket):
                 try:
                     while True:
                         try:
-                            message = await websocket.recv()
+                            message = await asyncio.wait_for(
+                                websocket.recv(), timeout=60
+                            )
                             data = json.loads(message)
 
                             if data["type"] == "pong":
                                 client_status[client_id]["last_active"] = time.time()
                             else:
                                 await message_queue.put(data)
+                        except asyncio.TimeoutError:
+                            log_message(
+                                f"Timeout waiting for message from client {client_id}",
+                                "WARNING",
+                            )
+                            await message_queue.put(None)
+                            break
                         except websockets.exceptions.ConnectionClosed as e:
                             log_message(
                                 f"Connection closed in message handler for client {client_id}: code={e.code} reason='{e.reason}'",
@@ -608,6 +721,8 @@ async def handle_client(websocket):
                                 f"Error in message handler for client {client_id}: {e}",
                                 "ERROR",
                             )
+                            await message_queue.put(None)
+                            break
                 except Exception as e:
                     log_message(
                         f"Fatal error in message handler for client {client_id}: {e}",
@@ -637,6 +752,7 @@ async def handle_client(websocket):
                         if (
                             data["status"] == "available"
                             and client_id not in initializing_clients
+                            and client_id not in waiting_clients
                         ):
                             await processing_queue.put(client_id)
 
@@ -660,13 +776,12 @@ async def handle_client(websocket):
                             )
 
                             recent_times = client_status[client_id]["processing_time"][
-                                -1:
+                                -5:
                             ]
                             if (
-                                len(recent_times) >= 1
-                                and sum(recent_times) / len(recent_times) > 5.0
+                                len(recent_times) >= 5
+                                and sum(recent_times) / len(recent_times) > 10.0
                             ):
-                                # NOTE: Later change this to warning instead of error also change 1 to 5
                                 log_message(
                                     f"Client {client_id} is consistently slow (avg: {sum(recent_times)/len(recent_times):.2f}s)",
                                     "WARNING",
@@ -684,7 +799,10 @@ async def handle_client(websocket):
                         client_status[client_id]["current_cid"] = None
                         client_status[client_id]["account_index"] = None
 
-                        if client_id not in initializing_clients:
+                        if (
+                            client_id not in initializing_clients
+                            and client_id not in waiting_clients
+                        ):
                             await processing_queue.put(client_id)
 
                     elif data["type"] == "account_banned":
@@ -697,7 +815,10 @@ async def handle_client(websocket):
                         client_status[client_id]["status"] = "available"
                         client_status[client_id]["account_index"] = None
 
-                        if client_id not in initializing_clients:
+                        if (
+                            client_id not in initializing_clients
+                            and client_id not in waiting_clients
+                        ):
                             await processing_queue.put(client_id)
 
                     elif data["type"] == "login_result":
@@ -713,8 +834,13 @@ async def handle_client(websocket):
                                     "INFO",
                                 )
                                 client_status[client_id]["status"] = "available"
+                                client_status[client_id][
+                                    "reconnect_count"
+                                ] = 0  # Reset on successful login
                                 if client_id in initializing_clients:
                                     initializing_clients.remove(client_id)
+                                if client_id in waiting_clients:
+                                    waiting_clients.remove(client_id)
                                 await processing_queue.put(client_id)
                             else:
                                 ban_minutes = data.get("minutes", 15)
@@ -939,7 +1065,7 @@ async def job_distributor():
         # Wait until market opens
         await sleep_until_market_open()
         await initialize_websocket()
-        log_message("Market is open. Starting commentary monitoring...", "INFO")
+        log_message("Market is open. Starting commentary monitoring...", "DEBUG")
 
         _, _, market_close_time = get_next_market_times()
 
@@ -949,7 +1075,7 @@ async def job_distributor():
                 if current_time > market_close_time:
                     log_message(
                         "Market is closed. Disconnecting clients and waiting for next market open.",
-                        "INFO",
+                        "DEBUG",
                     )
                     # Disconnect all clients before sleeping
                     await disconnect_all_clients()
