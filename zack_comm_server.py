@@ -952,26 +952,29 @@ async def process_commentary_result(comment_id, data):
     if not title or not content:
         return
 
-    ticker, action = extract_ticker(title, content)
+    is_stock_under_10 = "stock under $10" in content.lower()
 
+    ticker, action = extract_ticker(title, content)
     fetched_time = get_current_time()
     ticker_info = ""
 
     if ticker and action:
-        ticker_info = f"\n<b>Action:</b> {action} {ticker}"
-
-        try:
-            await send_ws_message(
-                {
-                    "name": "Zacks - Commentary",
-                    "type": action,
-                    "ticker": ticker,
-                    "sender": "zacks",
-                    "target": "CSS",
-                }
-            )
-        except Exception as e:
-            log_message(f"Error sending websocket message: {e}", "WARNING")
+        if is_stock_under_10:
+            ticker_info = f"\n<b>Action:</b> {action} {ticker} (Stock Under 10)"
+        else:
+            ticker_info = f"\n<b>Action:</b> {action} {ticker}"
+            try:
+                await send_ws_message(
+                    {
+                        "name": "Zacks - Commentary",
+                        "type": action,
+                        "ticker": ticker,
+                        "sender": "zacks",
+                        "target": "CSS",
+                    }
+                )
+            except Exception as e:
+                log_message(f"Error sending websocket message: {e}", "WARNING")
 
     log_message(f"Found comment: {comment_id}, Title: {title}", "INFO")
 
