@@ -481,7 +481,12 @@ class TickerDeckWebSocketManager:
 
     @classmethod
     async def send_ticker_deck_message(
-        cls, sender: str, name: str = "", title: str = "", content: str = ""
+        cls,
+        custom_name: str,
+        sender: str,
+        name: str = "",
+        title: str = "",
+        content: str = "",
     ) -> bool:
         """Send a message to the ticker deck"""
         if not sender or not sender.strip():
@@ -518,8 +523,14 @@ class TickerDeckWebSocketManager:
 
         try:
             if not await cls._connect():
-                log_message("Failed to connect to ticker deck Socket.IO", "ERROR")
-                return False
+                log_message("Failed to connect to ticker deck Socket.IO", "WARNING")
+
+                if await cls._get_new_token(custom_name):
+                    tmp_connected = await cls._test_connection()
+                    if not tmp_connected:
+                        return False
+                else:
+                    return False
 
             await cls._sio.emit("send_trading_message", message)
             log_message(f"Ticker deck message sent successfully from {sender}", "INFO")
