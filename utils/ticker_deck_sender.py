@@ -482,7 +482,6 @@ class TickerDeckWebSocketManager:
     @classmethod
     async def send_ticker_deck_message(
         cls,
-        custom_name: str,
         sender: str,
         name: str = "",
         title: str = "",
@@ -525,7 +524,7 @@ class TickerDeckWebSocketManager:
             if not await cls._connect():
                 log_message("Failed to connect to ticker deck Socket.IO", "WARNING")
 
-                if await cls._get_new_token(custom_name):
+                if await cls._get_new_token(sender.capitalize()):
                     tmp_connected = await cls._test_connection()
                     if not tmp_connected:
                         return False
