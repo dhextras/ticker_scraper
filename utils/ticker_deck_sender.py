@@ -473,9 +473,13 @@ class TickerDeckWebSocketManager:
         # Do a senatization one more time
         finalized_ticker = []
         for ticker in tickers:
-            ticker = ticker.strip().upper()
-            if ticker not in common_words and len(ticker) <= 6 and len(ticker) >= 2:
-                finalized_ticker.append(ticker)
+            cleaned_ticker = re.sub(r"[^A-Za-z]", "", ticker).strip().upper()
+            if (
+                cleaned_ticker not in common_words
+                and len(cleaned_ticker) <= 6
+                and len(cleaned_ticker) >= 2
+            ):
+                finalized_ticker.append(cleaned_ticker)
 
         return sorted(list(set(finalized_ticker)))
 
