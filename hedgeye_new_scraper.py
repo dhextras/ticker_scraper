@@ -35,7 +35,7 @@ load_dotenv()
 HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN")
 HEDGEYE_SCRAPER_TELEGRAM_GRP = os.getenv("HEDGEYE_SCRAPER_TELEGRAM_GRP")
 DATA_DIR = "data"
-RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_new_rate_limited_proxy.json")
+# RATE_LIMIT_PROXY_FILE = os.path.join(DATA_DIR, "hedgeye_new_rate_limited_proxy.json")
 RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
     DATA_DIR, "hedgeye_new_rate_limited_accounts.json"
 )
@@ -59,66 +59,67 @@ options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
 
-class ProxyManager:
-    def __init__(self, proxies: List[str]):
-        self.proxies = proxies
-        self.current_index = 0
-        self.rate_limited: Dict[str, datetime] = self._load_rate_limited()
-
-    def _load_rate_limited(self) -> Dict[str, datetime]:
-        if os.path.exists(RATE_LIMIT_PROXY_FILE):
-            with open(RATE_LIMIT_PROXY_FILE, "r") as f:
-                rate_limited = json.load(f)
-                return {k: datetime.fromisoformat(v) for k, v in rate_limited.items()}
-        return {}
-
-    def _save_rate_limited(self):
-        with open(RATE_LIMIT_PROXY_FILE, "w") as f:
-            rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
-            json.dump(rate_limited, f)
-
-    def get_next_proxy(self) -> str:
-        current_time = get_current_time()
-
-        expired_proxies = [
-            proxy
-            for proxy, limit_time in self.rate_limited.items()
-            if (current_time - limit_time).total_seconds() >= 900  # 15 minutes
-        ]
-
-        for proxy in expired_proxies:
-            del self.rate_limited[proxy]
-            log_message(
-                f"Proxy {proxy} removed from rate limits (15-minute expired)", "INFO"
-            )
-
-        if expired_proxies:
-            self._save_rate_limited()
-
-        available_proxies = [
-            proxy for proxy in self.proxies if proxy not in self.rate_limited
-        ]
-
-        if not available_proxies:
-            raise Exception("No available proxies")
-
-        if self.current_index >= len(available_proxies):
-            self.current_index = 0
-
-        proxy = available_proxies[self.current_index]
-        self.current_index += 1
-
-        return proxy
-
-    def mark_rate_limited(self, proxy: str):
-        self.rate_limited[proxy] = get_current_time()
-        self._save_rate_limited()
-
-    def clear_rate_limits(self):
-        self.rate_limited.clear()
-        if os.path.exists(RATE_LIMIT_PROXY_FILE):
-            os.remove(RATE_LIMIT_PROXY_FILE)
-        log_message("All proxy rate limits cleared", "INFO")
+# class ProxyManager:
+#     def __init__(self, proxies: List[str]):
+#         self.proxies = proxies
+#         self.current_index = 0
+#         self.rate_limited: Dict[str, datetime] = self._load_rate_limited()
+#
+#     def _load_rate_limited(self) -> Dict[str, datetime]:
+#         if os.path.exists(RATE_LIMIT_PROXY_FILE):
+#             with open(RATE_LIMIT_PROXY_FILE, "r") as f:
+#                 rate_limited = json.load(f)
+#                 return {k: datetime.fromisoformat(v) for k, v in rate_limited.items()}
+#         return {}
+#
+#     def _save_rate_limited(self):
+#         with open(RATE_LIMIT_PROXY_FILE, "w") as f:
+#             rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
+#             json.dump(rate_limited, f)
+#
+#     def get_next_proxy(self) -> str:
+#         current_time = get_current_time()
+#
+#         expired_proxies = [
+#             proxy
+#             for proxy, limit_time in self.rate_limited.items()
+#             if (current_time - limit_time).total_seconds() >= 900  # 15 minutes
+#         ]
+#
+#         for proxy in expired_proxies:
+#             del self.rate_limited[proxy]
+#             log_message(
+#                 f"Proxy {proxy} removed from rate limits (15-minute expired)", "INFO"
+#             )
+#
+#         if expired_proxies:
+#             self._save_rate_limited()
+#
+#         available_proxies = [
+#             proxy for proxy in self.proxies if proxy not in self.rate_limited
+#         ]
+#
+#         if not available_proxies:
+#             raise Exception("No available proxies")
+#
+#         if self.current_index >= len(available_proxies):
+#             self.current_index = 0
+#
+#         proxy = available_proxies[self.current_index]
+#         self.current_index += 1
+#
+#         return proxy
+#
+#     def mark_rate_limited(self, proxy: str):
+#         self.rate_limited[proxy] = get_current_time()
+#         self._save_rate_limited()
+#
+#     def clear_rate_limits(self):
+#         self.rate_limited.clear()
+#         if os.path.exists(RATE_LIMIT_PROXY_FILE):
+#             os.remove(RATE_LIMIT_PROXY_FILE)
+#         log_message("All proxy rate limits cleared", "INFO")
+#
 
 
 class AccountManager:
@@ -272,20 +273,20 @@ def get_random_cache_buster():
     return f"{variable}={value_generator()}"
 
 
-async def get_public_ip(proxy: Optional[str]) -> str:
-    """Get public IP address using the proxy"""
-    ip_check_url = "https://api.ipify.org?format=text"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                ip_check_url, proxy=f"http://{proxy}" if proxy else None
-            ) as response:
-                if response.status == 200:
-                    ip = await response.text()
-                    return ip.strip()
-                return f"Code: {response.status}"
-    except Exception as e:
-        return f"Error: {e}"
+# async def get_public_ip(proxy: Optional[str]) -> str:
+#     """Get public IP address using the proxy"""
+#     ip_check_url = "https://api.ipify.org?format=text"
+#     try:
+#         async with aiohttp.ClientSession() as session:
+#             async with session.get(
+#                 ip_check_url, proxy=f"http://{proxy}" if proxy else None
+#             ) as response:
+#                 if response.status == 200:
+#                     ip = await response.text()
+#                     return ip.strip()
+#                 return f"Code: {response.status}"
+#     except Exception as e:
+#         return f"Error: {e}"
 
 
 def login(driver, email, password) -> Optional[Dict[str, str]]:
@@ -419,7 +420,12 @@ async def initialize_accounts(accounts: List[tuple]) -> List[tuple]:
     return valid_accounts
 
 
-def archive_alert_parser(articles, fetch_time, current_time, proxy):
+def archive_alert_parser(
+    articles,
+    fetch_time,
+    current_time,
+    # proxy
+):
     result = []
 
     for article in articles:
@@ -447,7 +453,7 @@ def archive_alert_parser(articles, fetch_time, current_time, proxy):
                     "created_at": created_at_cst,
                     "current_time": current_time,
                     "fetch_time": fetch_time,
-                    "proxy": proxy,
+                    # "proxy": proxy,
                 }
             )
         except:
@@ -459,7 +465,7 @@ def archive_alert_parser(articles, fetch_time, current_time, proxy):
 async def fetch_research_archives(
     session: aiohttp.ClientSession,
     cookies: Dict[str, str],
-    proxy: Optional[str],
+    # proxy: Optional[str],
     today: str,
 ):
     try:
@@ -485,12 +491,17 @@ async def fetch_research_archives(
         )
         fetch_time = time.time() - start_time
 
-        results = archive_alert_parser(articles, fetch_time, current_time_cst, proxy)
+        results = archive_alert_parser(
+            articles,
+            fetch_time,
+            current_time_cst,
+            # proxy
+        )
         return results
 
     except asyncio.TimeoutError:
         log_message(
-            f"Fetch alert took more then 3 seconds with ip: {proxy}, Gotta fix this ASAP",
+            f"Fetch alert took more then 3 seconds, Gotta fix this ASAP",
             "WARNING",
         )
         return []
@@ -502,7 +513,9 @@ async def fetch_research_archives(
 
 
 async def fetch_alert_details(
-    session: aiohttp.ClientSession, cookies: Dict[str, str], proxy: Optional[str]
+    session: aiohttp.ClientSession,
+    cookies: Dict[str, str],
+    # proxy: Optional[str]
 ):
     try:
         cache_buster = get_random_cache_buster()
@@ -512,7 +525,7 @@ async def fetch_alert_details(
         async with session.get(
             url,
             cookies=cookies,
-            proxy=f"http://{proxy}" if proxy else None,
+            # proxy=f"http://{proxy}" if proxy else None,
             timeout=aiohttp.ClientTimeout(
                 total=3
             ),  # FIXME: Later try to bring this down to 1 or 2
@@ -543,13 +556,13 @@ async def fetch_alert_details(
             "price": alert_price,
             "created_at": created_at_cst,
             "current_time": current_time_cst,
-            "proxy": proxy,
+            # "proxy": proxy,
             "fetch_time": time.time() - start_time,
         }
 
     except asyncio.TimeoutError:
         log_message(
-            f"Fetch alert took more then 3 seconds with proxy: {proxy}, Gotta fix this ASAP",
+            f"Fetch alert took more then 3 seconds, Gotta fix this ASAP",
             "WARNING",
         )
         return None
@@ -622,11 +635,11 @@ async def process_fetched_alert(alert_details, last_alert_lock: asyncio.Lock):
                 "INFO",
             )
 
-    # FIXME: Also try to bring this into 1 sec if not move on to different proxy provider
     if alert_details["fetch_time"] > 2:
-        public_ip = await get_public_ip(alert_details["proxy"])
+        # public_ip = await get_public_ip(alert_details["proxy"])
         log_message(
-            f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
+            # f"Slow fetch detected Publid IP: {public_ip}, took {alert_details['fetch_time']} seconds",
+            f"Slow fetch detected, took {alert_details['fetch_time']} seconds",
             "WARNING",
         )
 
@@ -647,7 +660,7 @@ async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start
                 ticker = ticker_match.group(0) if ticker_match else "-"
 
                 log_message(
-                    f"Trying to send new alert, Title - {result['title']}, Proxy - {result['proxy']}",
+                    f"Trying to send new alert, Title - {result['title']}",
                     "INFO",
                 )
                 await send_ws_message(
@@ -684,9 +697,9 @@ async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start
                 )
 
         if result["fetch_time"] > 2:
-            public_ip = await get_public_ip(result["proxy"])
+            # public_ip = await get_public_ip(result["proxy"])
             log_message(
-                f"Slow fetch detected Publid IP: {public_ip}, took {result['fetch_time']} seconds",
+                f"Slow fetch detected, took {result['fetch_time']} seconds",
                 "WARNING",
             )
 
@@ -694,8 +707,8 @@ async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start
 async def process_account(
     email: str,
     password: str,
-    proxy: str,
-    proxy_manager,
+    # proxy: str,
+    # proxy_manager,
     account_manager,
     last_alert_lock: asyncio.Lock,
 ):
@@ -729,10 +742,15 @@ async def process_account(
             # METHOD 2: research archives
             start_time = time.time()
             today = get_current_time().now().strftime("%Y-%m-%d")
-            results = await fetch_research_archives(session, cookies, proxy, today)
+            results = await fetch_research_archives(
+                session,
+                cookies,
+                # proxy,
+                today,
+            )
 
             log_message(
-                f"fetch_alert_details took {time.time() - start_time:.2f} seconds. for {email}, {proxy}",
+                f"fetch_alert_details took {time.time() - start_time:.2f} seconds. for {email}",
                 "INFO",
             )
 
@@ -740,14 +758,14 @@ async def process_account(
 
     except Exception as e:
         if "Rate limited" in str(e):
-            proxy_manager.mark_rate_limited(proxy)
+            # proxy_manager.mark_rate_limited(proxy)
             account_manager.mark_rate_limited(email)
-        log_message(f"Error processing account {email} with {proxy}: {str(e)}", "ERROR")
+        log_message(f"Error processing account {email}: {str(e)}", "ERROR")
 
 
 async def process_accounts_continuously(
     account_manager: AccountManager,
-    proxy_manager: ProxyManager,
+    # proxy_manager: ProxyManager,
     last_alert_lock: asyncio.Lock,
     init_valid_accounts: int,
 ):
@@ -777,9 +795,9 @@ async def process_accounts_continuously(
 
                 # email, password = accounts[0]
                 email, password = account
-                proxy = (
-                    proxy_manager.get_next_proxy()
-                )  # Use the same proxy for a single account to avoid being flagged
+                # proxy = (
+                #     proxy_manager.get_next_proxy()
+                # )  # Use the same proxy for a single account to avoid being flagged
 
                 # Use the first diff and then remove it after processing it
                 fetch_count = FETCH_PER_ACCOUNT + (all_diffs[0])
@@ -791,8 +809,8 @@ async def process_accounts_continuously(
                         process_account_with_release(
                             email,
                             password,
-                            proxy,
-                            proxy_manager,
+                            # proxy,
+                            # proxy_manager,
                             last_alert_lock,
                             account_manager,
                         )
@@ -812,14 +830,18 @@ async def process_accounts_continuously(
 async def process_account_with_release(
     email: str,
     password: str,
-    proxy: str,
-    proxy_manager: ProxyManager,
+    # proxy: str,
+    # proxy_manager: ProxyManager,
     last_alert_lock: asyncio.Lock,
     account_manager: AccountManager,
 ):
     try:
         await process_account(
-            email, password, proxy, proxy_manager, account_manager, last_alert_lock
+            email,
+            password,
+            # proxy, proxy_manager,
+            account_manager,
+            last_alert_lock,
         )
     finally:
         pass
@@ -842,8 +864,8 @@ async def main():
                 (acc["email"], acc["password"]) for acc in json.load(f)["accounts"]
             ]
 
-        with open("cred/proxies.json", "r") as f:
-            proxies = json.load(f)["hedgeye"]
+        # with open("cred/proxies.json", "r") as f:
+        #     proxies = json.load(f)["hedgeye"]
 
         log_message("Initializing accounts...", "INFO")
         valid_accounts = await initialize_accounts(all_accounts)
@@ -855,7 +877,7 @@ async def main():
         log_message(f"Successfully initialized {len(valid_accounts)} accounts", "INFO")
 
         last_alert_lock = asyncio.Lock()
-        proxy_manager = ProxyManager(proxies)
+        # proxy_manager = ProxyManager(proxies)
         account_manager = AccountManager(valid_accounts)
 
         while True:
@@ -867,7 +889,10 @@ async def main():
 
             process_task = asyncio.create_task(
                 process_accounts_continuously(
-                    account_manager, proxy_manager, last_alert_lock, len(valid_accounts)
+                    account_manager,
+                    # proxy_manager,
+                    last_alert_lock,
+                    len(valid_accounts),
                 )
             )
 
@@ -885,7 +910,7 @@ async def main():
             log_message("Market is closed. Waiting for next market open...", "DEBUG")
 
             # Clear rate limits at end of day
-            proxy_manager.clear_rate_limits()
+            # proxy_manager.clear_rate_limits()
             account_manager.clear_rate_limits()
 
     except Exception as e:
