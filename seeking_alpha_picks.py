@@ -20,10 +20,10 @@ load_dotenv()
 
 SEEKING_ALPHA_BASE_URL = "https://seekingalpha.com"
 SEEKING_ALPHA_LOGIN_URL = "https://seekingalpha.com/"
-ARTICLES_PAGE_URL = "https://seekingalpha.com/alpha-picks/articles"
-API_ENDPOINT = "https://seekingalpha.com/api/v3/service_plans/458/marketplace/articles"
+STOCK_PICKS_PAGE_URL = "https://seekingalpha.com/alpha-picks/articles"
+API_ENDPOINT = "https://seekingalpha.com/api/v3/service_plans/458/picks"
 CHECK_INTERVAL = 1
-PROCESSED_ARTICLES_FILE = "data/seeking_alpha_articles_processed.json"
+PROCESSED_PICKS_FILE = "data/seeking_alpha_stock_picks_processed.json"
 
 # Environment variables
 SEEKING_ALPHA_EMAIL = os.getenv("SEEKING_ALPHA_EMAIL")
@@ -37,18 +37,18 @@ co = ChromiumOptions()
 page = ChromiumPage(co)
 
 
-def load_processed_articles():
+def load_processed_picks():
     try:
-        with open(PROCESSED_ARTICLES_FILE, "r") as f:
+        with open(PROCESSED_PICKS_FILE, "r") as f:
             return json.load(f)
     except FileNotFoundError:
-        return []
+        return {}
 
 
-def save_processed_articles(articles):
-    with open(PROCESSED_ARTICLES_FILE, "w") as f:
-        json.dump(articles, f, indent=2)
-    log_message("Processed articles saved.", "INFO")
+def save_processed_picks(picks):
+    with open(PROCESSED_PICKS_FILE, "w") as f:
+        json.dump(picks, f, indent=2)
+    log_message("Processed stock picks saved.", "INFO")
 
 
 def none_element(element):
@@ -56,10 +56,8 @@ def none_element(element):
 
 
 async def send_captcha_notification():
-    message = f"<b>Seeking Alpha Login Captcha Detected</b>\n\n"
-    message += (
-        f"<b>Current Time:</b> {get_current_time().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    )
+    message = f"<b>Seeking Alpha Login Captcha Detected (Stock Picks)</b>\n\n"
+    message += f"<b>Time:</b> {get_current_time().strftime('%Y-%m-%d %H:%M:%S')}\n"
     message += f"<b>Action Required:</b> Manual login needed\n"
     message += f"<b>Status:</b> Bot waiting for manual intervention"
 
@@ -153,9 +151,9 @@ async def check_captcha():
 
 
 async def check_login_status():
-    """Check if user is logged in by navigating to articles page"""
+    """Check if user is logged in by navigating to stock picks page"""
     try:
-        page.get(ARTICLES_PAGE_URL)
+        page.get(STOCK_PICKS_PAGE_URL)
         await asyncio.sleep(3)
 
         if "subscribe" in page.url.lower():
@@ -169,12 +167,12 @@ async def check_login_status():
         return False
 
 
-async def fetch_articles_data():
-    """Fetch articles data by navigating directly to API endpoint"""
+async def fetch_stock_picks_data():
+    """Fetch stock picks data by navigating directly to API endpoint"""
     try:
         start_time = time.time()
 
-        api_url = f"{API_ENDPOINT}?include=primaryTickers,secondaryTickers,servicePlans,servicePlanArticles,author,secondaryAuthor"
+        api_url = f"{API_ENDPOINT}?include=ticker,ticker.sector,ticker.tickerMetrics,ticker.tickerMetrics.metricType&page[size]=500&sort=undefined"
         page.get(api_url)
 
         pre_element = page.ele("pre")
@@ -197,7 +195,7 @@ async def fetch_articles_data():
 
         fetch_time = time.time() - start_time
         log_message(
-            f"Successfully fetched articles data in {fetch_time:.2f} seconds", "INFO"
+            f"Successfully fetched stock picks data in {fetch_time:.2f} seconds", "INFO"
         )
         return result
 
@@ -205,128 +203,146 @@ async def fetch_articles_data():
         log_message(f"Failed to parse JSON response: {e}", "ERROR")
         return None
     except Exception as e:
-        log_message(f"Error fetching articles data: {e}", "ERROR")
+        log_message(f"Error fetching stock picks data: {e}", "ERROR")
         return None
 
 
-def extract_tickers_from_article(article_data, included_data):
-    tickers = []
-
+def extract_stock_picks_data(json_data):
+    """Extract stock picks information from API response"""
     try:
-        primary_tickers = (
-            article_data.get("relationships", {})
-            .get("primaryTickers", {})
-            .get("data", [])
-        )
+        stock_pick_map = {}
 
-        for ticker_ref in primary_tickers:
-            ticker_id = ticker_ref.get("id")
+        for pick in json_data.get("data", []):
+            if pick.get("type") == "stock_pick":
+                ticker_id = (
+                    pick.get("relationships", {})
+                    .get("ticker", {})
+                    .get("data", {})
+                    .get("id")
+                )
+                attrs = pick.get("attributes", {})
+                stock_pick_map[ticker_id] = {
+                    "active": attrs.get("active"),
+                    "buy_price": attrs.get("buy_price"),
+                    "buy_price_status": attrs.get("buy_price_status"),
+                    "sell_price": attrs.get("sell_price"),
+                    "sell_price_status": attrs.get("sell_price_status"),
+                    "weight_in_portfolio": attrs.get("weight_in_portfolio"),
+                }
 
-            for item in included_data:
-                if item.get("id") == ticker_id and item.get("type") == "tag":
-                    ticker_info = {
-                        "symbol": item.get("attributes", {}).get("name", ""),
-                        "company": item.get("attributes", {}).get("company", ""),
-                        "url": item.get("links", {}).get("self", ""),
-                        "equity_type": item.get("attributes", {}).get("equityType", ""),
+        stock_picks = []
+        for item in json_data.get("included", []):
+            if item.get("type") == "ticker":
+                ticker_id = item.get("id")
+                ticker_name = item.get("attributes", {}).get("name")
+                company_name = item.get("attributes", {}).get("company", "")
+                trading_view_slug = item.get("attributes", {}).get(
+                    "tradingViewSlug", ""
+                )
+                pick_info = stock_pick_map.get(ticker_id)
+
+                if pick_info:
+                    stock_pick = {
+                        "ticker_id": ticker_id,
+                        "ticker_name": ticker_name,
+                        "company_name": company_name,
+                        "trading_view_slug": trading_view_slug,
+                        **pick_info,
                     }
-                    tickers.append(ticker_info)
-                    break
+                    stock_picks.append(stock_pick)
+
+        return stock_picks
 
     except Exception as e:
-        log_message(f"Error extracting tickers: {e}", "ERROR")
-
-    return tickers
-
-
-async def handle_paywalled_article(article_url):
-    """Navigate to paywalled article to refresh session"""
-    try:
-        log_message(f"Attempting to access paywalled article: {article_url}", "INFO")
-        page.get(article_url)
-        await asyncio.sleep(3)
-
-        if "subscribe" in page.url.lower():
-            log_message("Paywall still active after navigation", "WARNING")
-            return False
-
-        log_message("Successfully accessed paywalled content", "INFO")
-        return True
-
-    except Exception as e:
-        log_message(f"Error handling paywalled article: {e}", "ERROR")
-        return False
+        log_message(f"Error extracting stock picks data: {e}", "ERROR")
+        return []
 
 
-async def send_article_notification(article, tickers):
+async def send_stock_pick_notification(stock_pick, is_update=False):
+    """Send notification for a stock pick to Telegram"""
     try:
         current_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
-        title = article.get("attributes", {}).get("title", "No title")
-        published_on = article.get("attributes", {}).get("publishedOn", "")
-        is_paywalled = article.get("attributes", {}).get("isPaywalled", False)
-        article_url = (
-            f"https://seekingalpha.com{article.get('links', {}).get('self', '')}"
+        ticker_name = stock_pick.get("ticker_name", "N/A")
+        company_name = stock_pick.get("company_name", "N/A")
+        trading_view_slug = stock_pick.get("trading_view_slug", "N/A")
+
+        action = "Updated" if is_update else "New"
+
+        telegram_message = f"<b>{action} Seeking Alpha Stock Pick</b>\n\n"
+        telegram_message += f"<b>Ticker:</b> {ticker_name}\n"
+        telegram_message += f"<b>Company:</b> {company_name}\n"
+        telegram_message += f"<b>TradingView:</b> {trading_view_slug}\n"
+        telegram_message += (
+            f"<b>Active:</b> {'Yes' if stock_pick.get('active') else 'No'}\n"
         )
 
-        if is_paywalled:
-            await handle_paywalled_article(article_url)
+        buy_price = stock_pick.get("buy_price")
+        if buy_price:
+            telegram_message += f"<b>Buy Price:</b> ${buy_price:.2f}\n"
+            telegram_message += (
+                f"<b>Buy Status:</b> {stock_pick.get('buy_price_status', 'N/A')}\n"
+            )
 
-        ticker_info = ""
-        if tickers:
-            ticker_info = "\n<b>Tickers:</b>\n"
-            for ticker in tickers[:3]:
-                ticker_info += f"• {ticker['symbol']} - {ticker['company']}\n"
+        sell_price = stock_pick.get("sell_price")
+        if sell_price:
+            telegram_message += f"<b>Sell Price:</b> ${sell_price:.2f}\n"
+            telegram_message += (
+                f"<b>Sell Status:</b> {stock_pick.get('sell_price_status', 'N/A')}\n"
+            )
 
-        telegram_message = f"<b>New Seeking Alpha Article</b>\n\n"
-        telegram_message += f"<b>Title:</b> {title}\n"
-        telegram_message += f"<b>Published:</b> {published_on}\n"
-        telegram_message += f"<b>Paywalled:</b> {'Yes' if is_paywalled else 'No'}\n"
-        telegram_message += f"<b>Fetch Time:</b> {current_time}\n"
-        telegram_message += ticker_info
-        telegram_message += f"\n<b>URL:</b> {article_url}"
+        weight = stock_pick.get("weight_in_portfolio")
+        if weight:
+            telegram_message += f"<b>Portfolio Weight:</b> {weight:.2f}%\n"
+
+        telegram_message += f"\n<b>Current Time:</b> {current_time}"
 
         await send_telegram_message(telegram_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-        log_message(f"Article notification sent: {title[:50]}...", "INFO")
+        log_message(f"Stock pick notification sent: {ticker_name}", "INFO")
 
     except Exception as e:
-        log_message(f"Error sending article notification: {e}", "ERROR")
+        log_message(f"Error sending stock pick notification: {e}", "ERROR")
 
 
-async def process_articles(api_data):
-    """Process fetched articles and send notifications for new ones"""
-    if not api_data or "data" not in api_data:
-        log_message("No valid article data received", "WARNING")
+async def process_stock_picks(api_data):
+    """Process fetched stock picks and send notifications for new/updated ones"""
+    if not api_data:
+        log_message("No valid stock picks data received", "WARNING")
         return
 
-    processed_articles = load_processed_articles()
-    articles_data = api_data["data"]
-    included_data = api_data.get("included", [])
+    processed_picks = load_processed_picks()
+    current_picks = extract_stock_picks_data(api_data)
 
-    new_articles_count = 0
+    new_picks_count = 0
+    updated_picks_count = 0
 
-    for article in articles_data:
-        article_id = article.get("id")
+    for pick in current_picks:
+        ticker_id = pick.get("ticker_id")
 
-        if article_id not in processed_articles:
-            tickers = extract_tickers_from_article(article, included_data)
-            await send_article_notification(article, tickers)
-            processed_articles.append(article_id)
-            new_articles_count += 1
+        if ticker_id not in processed_picks:
+            await send_stock_pick_notification(pick, is_update=False)
+            processed_picks[ticker_id] = pick
+            new_picks_count += 1
+        else:
+            previous_pick = processed_picks[ticker_id]
+            if pick != previous_pick:
+                await send_stock_pick_notification(pick, is_update=True)
+                processed_picks[ticker_id] = pick
+                updated_picks_count += 1
 
-            if len(processed_articles) > 200:
-                processed_articles = processed_articles[-100:]
-
-    if new_articles_count > 0:
-        save_processed_articles(processed_articles)
-        log_message(f"Processed {new_articles_count} new articles", "INFO")
+    if new_picks_count > 0 or updated_picks_count > 0:
+        save_processed_picks(processed_picks)
+        log_message(
+            f"Processed {new_picks_count} new and {updated_picks_count} updated stock picks",
+            "INFO",
+        )
     else:
-        log_message("No new articles found", "INFO")
+        log_message("No new or updated stock picks found", "INFO")
 
 
 async def run_scraper():
     """Main scraper loop"""
-    log_message("Starting Seeking Alpha scraper", "INFO")
+    log_message("Starting Seeking Alpha Stock Picks scraper", "INFO")
 
     if not await login_seeking_alpha():
         log_message("Failed to login to Seeking Alpha", "CRITICAL")
@@ -335,7 +351,7 @@ async def run_scraper():
     while True:
         await sleep_until_market_open()
         log_message(
-            "Market is open. Starting to monitor Seeking Alpha articles...", "INFO"
+            "Market is open. Starting to monitor Seeking Alpha stock picks...", "INFO"
         )
 
         _, _, market_close_time = get_next_market_times()
@@ -347,9 +363,9 @@ async def run_scraper():
                 log_message("Market is closed. Waiting for next market open...", "INFO")
                 break
 
-            api_data = await fetch_articles_data()
+            api_data = await fetch_stock_picks_data()
             if api_data:
-                await process_articles(api_data)
+                await process_stock_picks(api_data)
             else:
                 if not await check_login_status():
                     log_message("Session expired, attempting re-login...", "WARNING")
