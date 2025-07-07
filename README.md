@@ -211,6 +211,18 @@ pip install -r requirements.txt
    # J Capital Research settings
    JCAPITAL_TELEGRAM_BOT_TOKEN=
    JCAPITAL_TELEGRAM_GRP=
+
+   # Discord settings
+   DISCORD_TELEGRAM_BOT_TOKEN=
+   DISCORD_TELEGRAM_GRP=
+   DISCORD_EMAIL=
+   DISCORD_PASSWORD=
+   
+   # Seeking Alpha settings
+   SEEKING_ALPHA_TELEGRAM_BOT_TOKEN=
+   SEEKING_ALPHA_TELEGRAM_GRP=
+   SEEKING_ALPHA_EMAIL=
+   SEEKING_ALPHA_PASSWORD=
    ```
 
 **Note:** Fill in the values for each variable as needed.
