@@ -456,14 +456,14 @@ async def process_article(article, uid, session_token, fetch_time):
             )
 
             if ticker_info:
-                await send_ws_message(
-                    {
-                        "name": "Josh Brown",
-                        "type": "Buy",
-                        "ticker": ticker_info["ticker"],
-                        "sender": "josh_brown",
-                    },
-                )
+                # await send_ws_message(
+                #     {
+                #         "name": "Josh Brown",
+                #         "type": "Buy",
+                #         "ticker": ticker_info["ticker"],
+                #         "sender": "josh_brown",
+                #     },
+                # )
                 message += f"\n<b>Ticker:</b> {ticker_info['ticker']} - {ticker_info['company']}\n"
                 message += f"<b>Headline:</b> {ticker_info['headline']}\n"
             else:
