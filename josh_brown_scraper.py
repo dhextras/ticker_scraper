@@ -452,7 +452,6 @@ async def process_article(article, uid, session_token, fetch_time):
                 f"<b>Assets, Article Data fetch time:</b> {fetch_time:.2f}s, {fetch_data_time:.2f}s\n"
                 f"<b>ID:</b> {article['id']}\n"
                 f"<b>Title:</b> {article['title']}\n"
-                f"<b>Content:</b> {full_content}\n"
             )
 
             if ticker_info:
