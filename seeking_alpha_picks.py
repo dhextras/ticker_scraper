@@ -175,7 +175,7 @@ async def fetch_stock_picks_data():
         api_url = f"{API_ENDPOINT}?include=ticker,ticker.sector,ticker.tickerMetrics,ticker.tickerMetrics.metricType&page[size]=500&sort=undefined"
         page.get(api_url)
 
-        pre_element = page.ele("pre")
+        pre_element = page.ele("css:pre")
         if none_element(pre_element):
             log_message("No <pre> element found - possibly redirected", "ERROR")
             return None
