@@ -98,8 +98,8 @@ async def login_discord():
             await asyncio.sleep(3)
 
             if (
-                page.ele('div[class*="captcha"]')
-                or page.ele('iframe[src*="captcha"]')
+                page.ele('css:div[class*="captcha"]')
+                or page.ele('css:iframe[src*="captcha"]')
                 or "captcha" in page.html.lower()
             ):
                 await send_captcha_notification()
@@ -108,8 +108,8 @@ async def login_discord():
                 )
 
                 while (
-                    page.ele('div[class*="captcha"]')
-                    or page.ele('iframe[src*="captcha"]')
+                    page.ele('css:div[class*="captcha"]')
+                    or page.ele('css:iframe[src*="captcha"]')
                     or "captcha" in page.html.lower()
                 ):
                     await asyncio.sleep(10)
