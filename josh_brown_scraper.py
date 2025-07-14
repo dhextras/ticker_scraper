@@ -363,7 +363,7 @@ async def fetch_latest_assets() -> Tuple[List[Dict], str]:
         base_url = "https://webql-redesign.cnbcfm.com/graphql"
 
         variables = {
-            "id": "108131024",
+            "id": "100831613",
             "offset": 0,
             "pageSize": 3,
             "nonFilter": True,
