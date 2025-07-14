@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import sys
 import time
 import uuid
@@ -23,7 +24,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://jcapitalresearch.substack.com/api/v1/posts"
-CHECK_INTERVAL = 3  # seconds
+CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/jcapital_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
@@ -140,6 +141,20 @@ def get_post_title(post):
     return title
 
 
+def extract_ticker(text):
+    parentheses_pattern = r"\(([^)]+)\)"
+    matches = re.findall(parentheses_pattern, text, re.IGNORECASE)
+
+    for match in matches:
+        cleaned = re.sub(r"^(nasdaq|nyse):\s*", "", match.strip(), flags=re.IGNORECASE)
+
+        ticker_pattern = r"^[A-Z]{1,5}$"
+        if re.match(ticker_pattern, cleaned.upper()):
+            return cleaned.upper()
+
+    return None
+
+
 async def send_to_telegram(post_data):
     current_time = get_current_time()
     post_date = datetime.fromisoformat(post_data["post_date"].replace("Z", "+00:00"))
@@ -150,6 +165,9 @@ async def send_to_telegram(post_data):
     is_draft = is_draft_post(post_data.get("canonical_url", ""))
     title = post_data.get("title", "")
     social_title = post_data.get("social_title", "")
+    t_body_text = post_data.get("truncated_body_text", "")
+
+    ticker = extract_ticker(t_body_text)
 
     message = (
         f"<b>{'[DRAFT] ' if is_draft else ''}New J Capital Research Article!</b>\n\n"
@@ -161,6 +179,10 @@ async def send_to_telegram(post_data):
         f"<b>Updated Date:</b> {update_date_est.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
     )
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+
+    if ticker:
+        message += f"<b>Ticker:</b> {ticker}\n"
+
     message += f"<b>Title:</b> {title}\n"
     message += f"<b>Social Title:</b> {social_title}\n"
     message += f"<b>URL:</b> {post_data['canonical_url']}\n"
