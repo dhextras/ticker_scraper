@@ -41,10 +41,16 @@ RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
 )
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_new_last_alert.json")
 LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
+
+# NOTE: Use this to calculate how many accounts you'd need
+# Or the interval between requests To avoid beeing rate limited
+# {Num Of Accounts} x {Fetch interval} x {25} = 420 or 425 is extra safe but 420 is fine
+# future me: Don't ask why 420, it works so stfu and use it
+
 FETCH_PER_ACCOUNT = (
     25  # Max is 30 so we can adjust this accordingly if needed ( We will use -+2)
 )
-SLEEP_BETWEEN_REQUESTS = 0.35  # Adjust this depend on how they rate limit
+SLEEP_BETWEEN_REQUESTS = 0.85  # Adjust this depend on how they rate limit
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
