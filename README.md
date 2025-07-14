@@ -223,6 +223,16 @@ pip install -r requirements.txt
    SEEKING_ALPHA_TELEGRAM_GRP=
    SEEKING_ALPHA_EMAIL=
    SEEKING_ALPHA_PASSWORD=
+
+   # Josh brown settings
+   JOSH_BROWN_TELEGRAM_BOT_TOKEN=
+   JOSH_BROWN_TELEGRAM_GRP=
+
+   # Twitter settings
+   TWITTER_USERNAME=
+   TWITTER_PASSWORD=
+   TWITTER_TELEGRAM_BOT_TOKEN=
+   TWITTER_TELEGRAM_GRP=
    ```
 
 **Note:** Fill in the values for each variable as needed.
