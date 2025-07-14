@@ -44,10 +44,29 @@ def save_processed_posts(posts):
     log_message("Processed posts saved.", "INFO")
 
 
-def extract_ticker_from_text(text):
-    pattern = r"\((NASDAQ|NYSE):\s*\$([A-Z]+)\)"
-    match = re.search(pattern, text)
-    return match.group(2) if match else None
+def extract_ticker(text):
+    """
+    Extract sentiment (buy/sell) and ticker symbol.
+    """
+    sentiment_match = re.search(
+        r"hunterbrook capital is \b(long|short)\b", text, re.IGNORECASE
+    )
+    if not sentiment_match:
+        return None, None
+
+    sentiment_word = sentiment_match.group(1).lower()
+    sentiment = "Buy" if sentiment_word == "long" else "Sell"
+
+    # Look for $TICKER or ($TICKER) or (EXCHANGE: $TICKER) patterns after the sentiment position
+    text_after_sentiment = text[sentiment_match.end() :]
+    ticker_pattern = r"\$([A-Z]+)|\((?:[^:)]*:)?\s*\$?([A-Z]+)\)"
+    ticker_match = re.search(ticker_pattern, text_after_sentiment)
+
+    if ticker_match:
+        ticker = ticker_match.group(1) or ticker_match.group(2)
+        return sentiment, ticker
+
+    return None, None
 
 
 async def fetch_posts(session):
@@ -82,7 +101,7 @@ async def process_post(post):
 
     soup = BeautifulSoup(content, "html.parser")
     box_content = soup.select_one("p.box.sans")
-    box_ticker = extract_ticker_from_text(box_content.text if box_content else "")
+    sentiment, ticker = extract_ticker(box_content.text if box_content else "")
 
     message = f"<b>New Hunter Brook Research Article</b>\n\n"
     message += f"<b>Post Time:</b> {post_date.astimezone(pytz.timezone('America/Chicago')).strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -91,21 +110,21 @@ async def process_post(post):
     message += f"<b>Title:</b> {title}\n"
     message += f"<b>Box Content:</b> {box_content.text if box_content else ''}\n"
 
-    if box_ticker:
-        message += f"<b>\n\nTicker:</b> {box_ticker}\n"
+    if sentiment and ticker:
+        message += f"<b>\n\nTicker:</b> {sentiment} - {ticker}\n"
 
         await send_ws_message(
             {
                 "name": "Hunter Brook - Post",
-                "type": "Sell",
-                "ticker": box_ticker,
+                "type": sentiment,
+                "ticker": ticker,
                 "sender": "hunterbrook",
                 "target": "CSS",
             },
         )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Report sent to Telegram: {box_ticker} - {link}", "INFO")
+    log_message(f"Report sent to Telegram: {ticker} - {link}", "INFO")
 
 
 async def run_scraper():
