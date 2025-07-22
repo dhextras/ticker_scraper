@@ -40,6 +40,9 @@ subscriptions = [
     {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM"},
     {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn"},
     {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso"},
+    {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01"},
+    {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb"},
+    {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI"},
 ]
 
 os.makedirs("data", exist_ok=True)
@@ -157,7 +160,7 @@ async def fetch_articles(session, subscription_name, subscription_id, proxy):
         return []
 
 
-async def process_articles(articles):
+async def process_articles(articles, subscription):
     buy_recommendations = []
     for article in articles:
         title = article["title"].lower()
@@ -165,6 +168,13 @@ async def process_articles(articles):
             title.startswith("buy alert:")
             or title.startswith("flash buy:")
             or title.startswith("new trade alert:")
+            # FIXME: This is not a good aproach lol so figure out a way to properly parse later
+            or subscription
+            in [
+                "aln",
+                "al2",
+                "taa",
+            ]
         ):
             if "stockRecommendations" in article:
                 for stock_rec in article.get("stockRecommendations", []):
@@ -265,7 +275,7 @@ async def process_subscription(session, subscription, proxy, processed_urls):
         with open(f"data/delete_{date}.json", "w") as f:
             json.dump(new_articles, f, indent=2)
 
-        buy_recs = await process_articles(new_articles)
+        buy_recs = await process_articles(new_articles, subscription)
         await send_matches_to_telegram(buy_recs)
         return new_urls
     return set()
