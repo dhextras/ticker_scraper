@@ -35,14 +35,19 @@ TELEGRAM_BOT_TOKEN = os.getenv("ALTUCHER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ALTUCHER_TELEGRAM_GRP")
 PROXY_FILE = "cred/proxies.json"
 
+# NOTE: cId stand for the category like
+# Alerts - 630ga2Gfm1hh4L2mHMkBHS
+# Issues - 49RxAGaOXW3MilamPgjp6A
+# Updates - 4Rnp1u5SB5m9d4WuJkfeiq
+
 subscriptions = [
-    {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT"},
-    {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM"},
-    {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn"},
-    {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso"},
-    {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01"},
-    {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb"},
-    {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI"},
+    {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
+    {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
+    {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
+    {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
+    {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01", "cId": "49RxAGaOXW3MilamPgjp6A"},
+    {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "cId": "4Rnp1u5SB5m9d4WuJkfeiq"},
+    {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI", "cId": "4Rnp1u5SB5m9d4WuJkfeiq"},
 ]
 
 os.makedirs("data", exist_ok=True)
@@ -82,12 +87,14 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-async def fetch_articles(session, subscription_name, subscription_id, proxy):
+async def fetch_articles(
+    session, subscription_name, subscription_id, category_id, proxy
+):
     try:
         params = {
             "include": 2,
             "order": "-fields.postDate",
-            "fields.articleCategory.sys.id": "630ga2Gfm1hh4L2mHMkBHS",
+            "fields.articleCategory.sys.id": category_id,
             "fields.subscription.sys.id": subscription_id,
             "fields.postDate[gte]": "2020-12-31T18:00:00.000Z",
             "fields.postDate[lte]": "2030-12-31T10:22:51.880Z",
@@ -254,7 +261,7 @@ async def send_matches_to_telegram(buy_recs):
 
 async def process_subscription(session, subscription, proxy, processed_urls):
     articles = await fetch_articles(
-        session, subscription["name"], subscription["id"], proxy
+        session, subscription["name"], subscription["id"], subscription["cId"], proxy
     )
 
     new_articles = [
