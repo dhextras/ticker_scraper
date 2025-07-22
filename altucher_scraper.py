@@ -282,7 +282,7 @@ async def process_subscription(session, subscription, proxy, processed_urls):
         with open(f"data/delete_{date}.json", "w") as f:
             json.dump(new_articles, f, indent=2)
 
-        buy_recs = await process_articles(new_articles, subscription)
+        buy_recs = await process_articles(new_articles, subscription["name"])
         await send_matches_to_telegram(buy_recs)
         return new_urls
     return set()
