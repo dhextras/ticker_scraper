@@ -399,6 +399,12 @@ async def login_twitter():
 
 def extract_posts():
     try:
+        # NOTE: Wait till the first username loads this way we can make sure that the content is loaded
+        page.ele(
+            'css:div[aria-label="Timeline: Your Home Timeline"] > div > div div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
+            timeout=5,
+        )
+
         posts = []
         post_containers = page.eles(
             'css:div[aria-label="Timeline: Your Home Timeline"] > div > div',
@@ -407,16 +413,6 @@ def extract_posts():
         if len(post_containers) == 0:
             log_message("Couldn't found any post in the page", "WARNING")
             return []
-
-        random_indices = random.sample(range(len(post_containers)), 2)
-        # NOTE: Wait till the some random username, tweet loads this way we can make sure that the content is loaded
-        post_containers[random_indices[0]].ele(
-            'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-            timeout=3,
-        )
-        post_containers[random_indices[1]].ele(
-            'css:div[data-testid="tweetText"]', timeout=2
-        )
 
         for container in post_containers:
             try:
