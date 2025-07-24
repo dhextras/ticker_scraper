@@ -632,7 +632,7 @@ async def run_scraper():
                         log_message("Re-login failed, continuing with errors", "ERROR")
 
                 refresh_count += 1
-                refresh_delay = random.uniform(5, 10)
+                refresh_delay = random.uniform(60, 240)
                 await asyncio.sleep(refresh_delay)
 
             except Exception as e:
