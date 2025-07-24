@@ -404,7 +404,11 @@ def extract_posts():
             'css:section[aria-labelledby^="accessible-list-0"] > div > div > div',
         )
 
-        time.sleep(2)
+        # NOTE: Wait till the first user name loads this way we can make sure that the content is loaded
+        post_containers[0].ele(
+            'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
+            timeout=5,
+        )
 
         for container in post_containers:
             try:
