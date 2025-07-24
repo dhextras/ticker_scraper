@@ -404,11 +404,13 @@ def extract_posts():
             'css:section[aria-labelledby^="accessible-list-0"] > div > div > div',
         )
 
+        time.sleep(2)
+
         for container in post_containers:
             try:
                 username_elem = container.ele(
                     'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-                    timeout=0.1,
+                    timeout=0.2,
                 )
                 tweet_elem = container.ele(
                     'css:div[data-testid="tweetText"]', timeout=0.1
