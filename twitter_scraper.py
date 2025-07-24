@@ -561,14 +561,14 @@ async def run_scraper():
         log_message("Failed to navigate to following page", "CRITICAL")
         return
 
-    await scroll_to_find_last_post(processed_data)
-
     refresh_count = 0
     consecutive_errors = 0
     max_consecutive_errors = 5
 
     while True:
         await sleep_until_market_open()
+        await scroll_to_find_last_post(processed_data)
+
         log_message("Market is open. Starting to monitor Twitter following...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
 
