@@ -401,35 +401,35 @@ def extract_posts():
     try:
         posts = []
         post_containers = page.eles(
-            'css:section[aria-labelledby^="accessible-list-0"] > div > div > div',
+            'css:div[aria-label="Timeline: Your Home Timeline"] > div > div',
         )
 
-        random_indices = random.sample(range(len(post_containers)), 3)
-        # NOTE: Wait till the some random username, tweet, analytics loads this way we can make sure that the content is loaded
+        if len(post_containers) == 0:
+            log_message("Couldn't found any post in the page", "WARNING")
+            return []
+
+        random_indices = random.sample(range(len(post_containers)), 2)
+        # NOTE: Wait till the some random username, tweet loads this way we can make sure that the content is loaded
         post_containers[random_indices[0]].ele(
             'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-            timeout=2,
+            timeout=3,
         )
         post_containers[random_indices[1]].ele(
             'css:div[data-testid="tweetText"]', timeout=2
-        )
-
-        post_containers[random_indices[2]].ele(
-            'css:[aria-label*="View post analytics"]', timeout=2
         )
 
         for container in post_containers:
             try:
                 username_elem = container.ele(
                     'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-                    timeout=0.5,
+                    timeout=0.1,
                 )
                 tweet_elem = container.ele(
-                    'css:div[data-testid="tweetText"]', timeout=0.5
+                    'css:div[data-testid="tweetText"]', timeout=0.1
                 )
 
                 analytics_elem = container.ele(
-                    'css:[aria-label*="View post analytics"]', timeout=0.5
+                    'css:[aria-label*="View post analytics"]', timeout=0.1
                 )
 
                 if (
