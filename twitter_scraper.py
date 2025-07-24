@@ -27,7 +27,7 @@ from utils.time_utils import (
 
 load_dotenv()
 
-WEBSOCKET_PORT = 8675
+WEBSOCKET_PORT = 8765
 TCP_HOST = os.getenv("TCP_HOST")
 TCP_PORT = int(os.getenv("TCP_PORT", 3005))
 TCP_SECRET = os.getenv("TCP_SECRET")
@@ -225,8 +225,8 @@ async def send_found_post(data, source):
         await send_alert("<b>TCP_CLIENT isn't Connected</b>")
 
     message = f"<b>New Post sender found - {source}</b>\n\n"
-    message += f"<b>Sender:</b> {data.t}\n"
-    message += f"<b>Content:</b> {data.te[:600]}{'\n\ncontent is trimmed.....' if len(data.te) > 600 else ''}"
+    message += f"<b>Sender:</b> {data['t']}\n"
+    message += f"<b>Content:</b> {data['te'][:600]}{'\n\ncontent is trimmed.....' if len(data.te) > 600 else ''}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
@@ -247,6 +247,9 @@ async def handle_websocket_message(websocket):
                     log_message(f"Search content was empty content: {data}")
                     continue
 
+                log_message(
+                    f"Recevied a search for content: {search_content[:300]}...." "INFO"
+                )
                 matching_post = find_matching_post(
                     search_content, processed_data_global["posts"]
                 )
