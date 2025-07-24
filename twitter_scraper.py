@@ -404,24 +404,32 @@ def extract_posts():
             'css:section[aria-labelledby^="accessible-list-0"] > div > div > div',
         )
 
-        # NOTE: Wait till the first user name loads this way we can make sure that the content is loaded
-        post_containers[0].ele(
+        random_indices = random.sample(range(len(post_containers)), 3)
+        # NOTE: Wait till the some random username, tweet, analytics loads this way we can make sure that the content is loaded
+        post_containers[random_indices[0]].ele(
             'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-            timeout=5,
+            timeout=2,
+        )
+        post_containers[random_indices[1]].ele(
+            'css:div[data-testid="tweetText"]', timeout=2
+        )
+
+        post_containers[random_indices[2]].ele(
+            'css:[aria-label*="View post analytics"]', timeout=2
         )
 
         for container in post_containers:
             try:
                 username_elem = container.ele(
                     'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-                    timeout=0.2,
+                    timeout=0.5,
                 )
                 tweet_elem = container.ele(
-                    'css:div[data-testid="tweetText"]', timeout=0.1
+                    'css:div[data-testid="tweetText"]', timeout=0.5
                 )
 
                 analytics_elem = container.ele(
-                    'css:[aria-label*="View post analytics"]', timeout=0.1
+                    'css:[aria-label*="View post analytics"]', timeout=0.5
                 )
 
                 if (
