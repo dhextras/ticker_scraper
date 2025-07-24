@@ -226,7 +226,7 @@ async def send_found_post(data, source):
 
     message = f"<b>New Post sender found - {source}</b>\n\n"
     message += f"<b>Sender:</b> {data['t']}\n"
-    message += f"<b>Content:</b> {data['te'][:600]}{'\n\ncontent is trimmed.....' if len(data.te) > 600 else ''}"
+    message += f"<b>Content:</b> {data['te'][:600]}{'\n\ncontent is trimmed.....' if len(data['te']) > 600 else ''}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
