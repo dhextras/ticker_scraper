@@ -15,6 +15,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -22,7 +23,7 @@ SEEKING_ALPHA_BASE_URL = "https://seekingalpha.com"
 SEEKING_ALPHA_LOGIN_URL = "https://seekingalpha.com/"
 ARTICLES_PAGE_URL = "https://seekingalpha.com/alpha-picks/articles"
 API_ENDPOINT = "https://seekingalpha.com/api/v3/service_plans/458/marketplace/articles"
-CHECK_INTERVAL = 1
+CHECK_INTERVAL = 0.3
 PROCESSED_ARTICLES_FILE = "data/seeking_alpha_articles_processed.json"
 
 # Environment variables
@@ -211,31 +212,34 @@ async def fetch_articles_data():
 
 def extract_tickers_from_article(article_data, included_data):
     tickers = []
-
+    seen_symbols = set()
     try:
         primary_tickers = (
             article_data.get("relationships", {})
             .get("primaryTickers", {})
             .get("data", [])
         )
-
         for ticker_ref in primary_tickers:
             ticker_id = ticker_ref.get("id")
-
             for item in included_data:
                 if item.get("id") == ticker_id and item.get("type") == "tag":
+                    raw_symbol = item.get("attributes", {}).get("name", "")
+                    clean_symbol = raw_symbol.split(":")[0]
+
+                    if clean_symbol in seen_symbols:
+                        break
+
+                    seen_symbols.add(clean_symbol)
                     ticker_info = {
-                        "symbol": item.get("attributes", {}).get("name", ""),
+                        "symbol": clean_symbol,
                         "company": item.get("attributes", {}).get("company", ""),
                         "url": item.get("links", {}).get("self", ""),
                         "equity_type": item.get("attributes", {}).get("equityType", ""),
                     }
                     tickers.append(ticker_info)
                     break
-
     except Exception as e:
         log_message(f"Error extracting tickers: {e}", "ERROR")
-
     return tickers
 
 
@@ -276,6 +280,15 @@ async def send_article_notification(article, tickers):
         if tickers:
             ticker_info = "\n<b>Tickers:</b>\n"
             for ticker in tickers[:3]:
+                await send_ws_message(
+                    {
+                        "name": f"Seeking Alpha - Article ",
+                        "type": "Buy",
+                        "ticker": ticker,
+                        "sender": "seeking_alpha",
+                    },
+                )
+
                 ticker_info += f"• {ticker['symbol']} - {ticker['company']}\n"
 
         telegram_message = f"<b>New Seeking Alpha Article</b>\n\n"
@@ -334,6 +347,7 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
         log_message(
             "Market is open. Starting to monitor Seeking Alpha articles...", "INFO"
         )
