@@ -56,7 +56,7 @@ async def analyze_image_for_ticker(image_url: str) -> TickerAnalysis:
         """
 
         response = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -135,7 +135,7 @@ async def analyze_company_name_for_ticker(
         """
 
         response = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": analysis_context},
