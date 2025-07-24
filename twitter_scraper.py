@@ -1,11 +1,18 @@
 import asyncio
+import datetime
 import difflib
+import hashlib
 import json
 import os
 import random
+import socket
 import sys
+import threading
+import time
 
 import websockets
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
 from DrissionPage.common import Keys
@@ -21,6 +28,10 @@ from utils.time_utils import (
 load_dotenv()
 
 WEBSOCKET_PORT = 8675
+TCP_HOST = os.getenv("TCP_HOST")
+TCP_PORT = int(os.getenv("TCP_PORT", 3005))
+TCP_SECRET = os.getenv("TCP_SECRET")
+TCP_USERNAME = os.getenv("TCP_USERNAME")
 TWITTER_HOME_URL = "https://x.com/home"
 REFRESH_INTERVAL = random.uniform(5, 10)
 PROCESSED_POSTS_FILE = "data/twitter_processed_posts.json"
@@ -32,9 +43,165 @@ TWITTER_PASSWORD = os.getenv("TWITTER_PASSWORD")
 
 os.makedirs("data", exist_ok=True)
 
+tcp_client = None
 co = ChromiumOptions()
 page = ChromiumPage(co)
 processed_data_global = {"posts": [], "last_post": None}
+
+
+class EncryptedTcpClient:
+    def __init__(self, server_ip, server_port, shared_secret, username):
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.shared_secret = shared_secret
+        self.username = username
+        self.sock = None
+        self.key = None
+        self.connected = False
+        self.thread = None
+        self.message_queue = []
+        self.lock = threading.Lock()
+
+    def _get_utc_date(self):
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+    def _derive_key(self):
+        combined = self.shared_secret + self._get_utc_date()
+        return hashlib.sha256(combined.encode("utf-8")).digest()
+
+    def _encrypt(self, plaintext: str) -> bytes:
+        iv = b"\x00" * 16
+        cipher = AES.new(self.key, AES.MODE_CBC, iv)
+        padded = pad(plaintext.encode("utf-8"), AES.block_size)
+        return cipher.encrypt(padded)
+
+    def connect(self):
+        """
+        Connects to the server, performs authentication (IV + ciphertext),
+        starts receiver and heartbeat threads.
+        """
+        while not self.connected:  # Keep trying to connect if disconnected
+            try:
+                # Establish TCP connection
+                self.sock = socket.create_connection((self.server_ip, self.server_port))
+                self.connected = True
+                log_message(
+                    f"[TCP] Connected to {self.server_ip}:{self.server_port}", "INFO"
+                )
+
+                # Derive fresh key daily
+                self.key = self._derive_key()
+
+                # 1) Send authentication payload (IV + encrypted username)
+                iv = b"\x00" * 16
+                encrypted_username = self._encrypt(self.username)
+                self.sock.sendall(iv + encrypted_username)
+                log_message(
+                    f"[TCP] Sent encrypted auth for username '{self.username}'", "INFO"
+                )
+
+                # 2) Start background threads
+                threading.Thread(target=self._receive_loop, daemon=True).start()
+                threading.Thread(target=self._heartbeat_loop, daemon=True).start()
+                threading.Thread(target=self._message_processor, daemon=True).start()
+
+                # 3) Send initial hello after a short pause
+                time.sleep(1)
+                self.send_message("Hello, server!")
+
+            except Exception as e:
+                log_message(f"[TCP] Connection error: {e}", "ERROR")
+                self.connected = False
+                log_message("[TCP] Attempting to reconnect...", "WARNING")
+
+                # Sleep before reconnecting
+                time.sleep(5)
+
+    def send_message(self, message):
+        """
+        Public method: queues a message to be encrypted and sent to the server.
+        Can accept string or dict (which will be converted to JSON).
+        """
+        with self.lock:
+            self.message_queue.append(message)
+
+    def _message_processor(self):
+        """Process messages from queue and send them to the server."""
+        while True:
+            if self.message_queue and self.connected:
+                with self.lock:
+                    message = self.message_queue.pop(0)
+
+                try:
+                    # Convert dict to JSON if needed
+                    if isinstance(message, dict):
+                        message = json.dumps(message)
+
+                    # Send message
+                    self.sock.sendall((f"{message}<END>").encode("utf-8"))
+                    if "heartbeat" not in message.lower():
+                        log_message(f"[TCP] Sent message: {message}", "INFO")
+                except Exception as e:
+                    log_message(f"[TCP] Send error: {e}", "ERROR")
+                    self.connected = False
+                    self.reconnect()
+
+            time.sleep(0.1)  # Small delay to prevent CPU hogging
+
+    def _receive_loop(self):
+        while self.connected:
+            try:
+                data = self.sock.recv(4096)
+                if not data:
+                    log_message("[TCP] Server disconnected", "WARNING")
+                    self.connected = False
+                    self.reconnect()
+                    break
+
+                text = data.decode("utf-8", errors="ignore")
+                log_message(f"[TCP] Received: {text}", "INFO")
+            except Exception as e:
+                log_message(f"[TCP] Receive error: {e}", "ERROR")
+                self.connected = False
+                self.reconnect()
+
+    def _heartbeat_loop(self):
+        while self.connected:
+            time.sleep(60)  # Send heartbeat every 60 seconds
+            try:
+                self.send_message(f"HEARTBEAT")
+            except Exception as e:
+                log_message(f"[TCP] Heartbeat error: {e}", "ERROR")
+                self.connected = False
+                self.reconnect()
+
+    def reconnect(self):
+        """Attempt to reconnect to the server"""
+        log_message("[TCP] Reconnecting...", "WARNING")
+        if self.sock:
+            try:
+                self.sock.close()
+            except:
+                pass
+            self.sock = None
+
+        # Wait a moment before reconnecting
+        time.sleep(5)
+        self.connect()
+
+    def start(self):
+        """Start the TCP client in a separate thread."""
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.connect, daemon=True)
+            self.thread.start()
+            log_message("[TCP] Client thread started", "INFO")
+        else:
+            log_message("[TCP] Client thread already running", "INFO")
+
+
+async def send_alert(msg: str):
+    alert = f"🚨 ALERT: {msg}\n\nPlease check the server!"
+    await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
 def text_similarity(text1, text2, threshold=0.95):
@@ -49,6 +216,21 @@ def find_matching_post(search_content, posts_list):
     return None
 
 
+async def send_found_post(data, source):
+    global tcp_client
+
+    if tcp_client and tcp_client.connected:
+        tcp_client.send_message(data)
+    else:
+        await send_alert("<b>TCP_CLIENT isn't Connected</b>")
+
+    message = f"<b>New Post sender found - {source}</b>\n\n"
+    message += f"<b>Sender:</b> {data.t}\n"
+    message += f"<b>Content:</b> {data.te[:600]}{'\n\ncontent is trimmed.....' if len(data.te) > 600 else ''}"
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+
 async def handle_websocket_message(websocket):
     global processed_data_global
 
@@ -59,7 +241,10 @@ async def handle_websocket_message(websocket):
                 search_content = data.get("content", "")
 
                 if not search_content:
-                    await websocket.send(json.dumps({"error": "No content provided"}))
+                    await send_alert(
+                        f"<b>Couldn't found post</b>\n\n<b>Reason:</b> Search content was not provided"
+                    )
+                    log_message(f"Search content was empty content: {data}")
                     continue
 
                 matching_post = find_matching_post(
@@ -67,13 +252,14 @@ async def handle_websocket_message(websocket):
                 )
 
                 if matching_post:
-                    response = {
-                        "found": True,
-                        "username": matching_post["username"],
-                        "content": matching_post["content"],
-                        "source": "database",
+                    # FIXME: Send to tcp and also after that send to telegram as well and when error shows up like not found or something like that send to telegram twitter channel as well
+                    response_data = {
+                        "pn": "x.com",
+                        "t": matching_post["username"],
+                        "te": matching_post["content"],
+                        "ts": time.time() * 1000,
                     }
-                    await websocket.send(json.dumps(response))
+                    await send_found_post(response_data, "database")
                     continue
 
                 # If not found, refresh and check again
@@ -85,24 +271,28 @@ async def handle_websocket_message(websocket):
                     matching_post = find_matching_post(search_content, fresh_posts)
 
                     if matching_post:
-                        response = {
-                            "found": True,
-                            "username": matching_post["username"],
-                            "content": matching_post["content"],
-                            "source": "fresh_fetch",
+                        response_data = {
+                            "pn": "x.com",
+                            "t": matching_post["username"],
+                            "te": matching_post["content"],
+                            "ts": time.time() * 1000,
                         }
-                        await websocket.send(json.dumps(response))
+                        await send_found_post(response_data, "fresh_fetch")
                         continue
 
-                # Still not found
-                response = {"found": False, "message": "Post not found"}
-                await websocket.send(json.dumps(response))
+                await send_alert(
+                    f"<b>Couldn't found post</b>\n\n<b>Reason:</b> Couldn't find the post in DB/Fresh fetch\n<b>Content</b>: {search_content[:200]}\n\n content is trimmed....."
+                )
 
             except json.JSONDecodeError:
-                await websocket.send(json.dumps({"error": "Invalid JSON"}))
+                await send_alert(
+                    f"<b>Could'nt found post</b>\n\n<b>Reason:</b> Server Error check the logs"
+                )
             except Exception as e:
+                await send_alert(
+                    f"<b>Could'nt found post</b>\n\n<b>Reason:</b> Server Error check the logs"
+                )
                 log_message(f"WebSocket error: {e}", "ERROR")
-                await websocket.send(json.dumps({"error": "Server error"}))
 
     except websockets.exceptions.ConnectionClosed:
         log_message("WebSocket connection closed", "INFO")
@@ -162,30 +352,21 @@ async def login_twitter():
             password_input.input(TWITTER_PASSWORD + Keys.ENTER)
             await asyncio.sleep(3)
 
-        if (
-            not_none_element(
-                page.ele('css:div[data-testid="ocfEnterTextTextInput"]', timeout=2)
-            )
-            or not_none_element(
-                page.ele('css:div[data-testid="challenge_response_input"]', timeout=2)
-            )
-            or "challenge" in page.html.lower()
+        # FIXME: Not sure if this the actual id to check the captchas so confirm it when we got hit with it
+        if not_none_element(
+            page.ele('css:div[data-testid="ocfEnterTextTextInput"]', timeout=2)
+        ) or not_none_element(
+            page.ele('css:div[data-testid="challenge_response_input"]', timeout=2)
         ):
             await send_captcha_notification()
             log_message(
                 "Challenge detected, waiting for manual intervention...", "WARNING"
             )
 
-            while (
-                not_none_element(
-                    page.ele('css:div[data-testid="ocfEnterTextTextInput"]', timeout=2)
-                )
-                or not_none_element(
-                    page.ele(
-                        'css:div[data-testid="challenge_response_input"]', timeout=2
-                    )
-                )
-                or "challenge" in page.html.lower()
+            while not_none_element(
+                page.ele('css:div[data-testid="ocfEnterTextTextInput"]', timeout=2)
+            ) or not_none_element(
+                page.ele('css:div[data-testid="challenge_response_input"]', timeout=2)
             ):
                 await asyncio.sleep(10)
 
@@ -217,21 +398,21 @@ def extract_posts():
     try:
         posts = []
         post_containers = page.eles(
-            'css:section[aria-labelledby^="accessible-list-0"] > div > div > div'
+            'css:section[aria-labelledby^="accessible-list-0"] > div > div > div',
         )
 
         for container in post_containers:
             try:
                 username_elem = container.ele(
                     'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
-                    timeout=1,
+                    timeout=0.1,
                 )
                 tweet_elem = container.ele(
-                    'css:div[data-testid="tweetText"]', timeout=1
+                    'css:div[data-testid="tweetText"]', timeout=0.1
                 )
 
                 analytics_elem = container.ele(
-                    'css:[aria-label*="View post analytics"]', timeout=1
+                    'css:[aria-label*="View post analytics"]', timeout=0.1
                 )
 
                 if (
@@ -282,15 +463,24 @@ async def navigate_to_following():
         return False
 
 
-async def scroll_to_find_last_post(last_post_data):
+async def scroll_to_find_last_post(processed_data, max_scrolls=100):
+    last_post_data = processed_data["last_post"]
     if not last_post_data:
         return True
 
-    max_scrolls = 10
     scroll_count = 0
 
+    # NOTE: Each scroll would find 8 to 20 posts, so max of 1000 posts would be sufficient
     while scroll_count < max_scrolls:
+        start = time.time()
         posts = extract_posts()
+        if scroll_count > 0:
+            log_message(
+                f"Found {len(posts)} posts after scrolling. total time took: {(time.time() - start):.2f}"
+            )
+
+        if len(posts) > 0:
+            await store_new_posts(posts, processed_data)
 
         for post in posts:
             if (
@@ -301,10 +491,10 @@ async def scroll_to_find_last_post(last_post_data):
                 return True
 
         page.scroll.down()
-        await asyncio.sleep(1)
         scroll_count += 1
 
     log_message("Could not find last saved post after scrolling", "WARNING")
+    await send_alert(f"<b>Couldn't Find the last saved post</b>")
     return False
 
 
@@ -371,7 +561,7 @@ async def run_scraper():
         log_message("Failed to navigate to following page", "CRITICAL")
         return
 
-    await scroll_to_find_last_post(processed_data.get("last_post"))
+    await scroll_to_find_last_post(processed_data)
 
     refresh_count = 0
     consecutive_errors = 0
@@ -435,6 +625,16 @@ async def run_scraper():
 
 
 async def main_async():
+    global tcp_client
+
+    # Initialize and start TCP client in a separate thread
+    tcp_client = EncryptedTcpClient(
+        server_ip=TCP_HOST,
+        server_port=TCP_PORT,
+        shared_secret=TCP_SECRET,
+        username=TCP_USERNAME,
+    )
+    tcp_client.start()  # Start in a separate thread
     websocket_server = await start_websocket_server()
 
     try:

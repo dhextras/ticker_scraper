@@ -21,3 +21,5 @@ pyautogui
 openai
 pydantic
 python-socketio[asyncio_client]
+pycryptodome
+
