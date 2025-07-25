@@ -7,6 +7,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from utils.gpt_ticker_extractor import TickerAnalysis, analyze_company_name_for_ticker
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
@@ -148,6 +149,18 @@ async def run_report_monitor():
                     report_url = report["url"]
                     if report_url not in processed_reports:
                         log_message(f"Found new report: {report['title']}", "INFO")
+
+                        if report["ticker"] == "":
+                            ticker_obj: TickerAnalysis = (
+                                await analyze_company_name_for_ticker(
+                                    [], report["title"]
+                                )
+                            )
+
+                            if ticker_obj and ticker_obj.found:
+                                report["ticker"] = ticker_obj.ticker
+                                report["company"] = ticker_obj.company_name
+
                         await send_report_to_telegram(report)
                         processed_reports.add(report_url)
 

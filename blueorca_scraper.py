@@ -79,6 +79,12 @@ async def extract_ticker_from_pdf(session, url):
 
                 first_page = extract_text(pdf_file, page_numbers=[0])
 
+                # Check for format like "NYSE: TDOC" or "NASDAQ: GDS"
+                ticker_pattern = r"(?:NYSE|NASDAQ|AMEX|ASX|KOSDAQ|HK):\s*([A-Z0-9]+)"
+                match = re.search(ticker_pattern, first_page)
+                if match:
+                    return match.group(1)
+
                 # Look for capitalized words after brackets
                 bracket_pattern = r"\((.*?)\)"
                 matches = re.findall(bracket_pattern, first_page)
