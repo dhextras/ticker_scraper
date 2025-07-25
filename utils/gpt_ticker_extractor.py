@@ -68,10 +68,10 @@ async def send_analysis_notification(
 
         alert_message += "<b>Analysis Result:</b>\n"
         if result.found:
-            alert_message += f"<b>Found:</b> Yes\n"
-            alert_message += f"<b>Ticker:</b> {result.ticker}\n"
-            alert_message += f"<b>Company:</b> {result.company_name}\n"
-            alert_message += f"<b>Confidence:</b> {result.confidence}%"
+            alert_message += f"    <b>Found:</b> Yes\n"
+            alert_message += f"    <b>Ticker:</b> {result.ticker}\n"
+            alert_message += f"    <b>Company:</b> {result.company_name}\n"
+            alert_message += f"    <b>Confidence:</b> {result.confidence}%"
         else:
             alert_message += "<b>Found:</b> No ticker identified"
 
@@ -202,7 +202,7 @@ async def analyze_image_for_ticker(image_url: str) -> TickerAnalysis:
         result = TickerAnalysis(found=False)
 
         run_notification_async(
-            "image", f"{image_url} (ERROR: {str(e)})", result, script_name
+            "image", f"{image_url}\n    (ERROR: {str(e)})", result, script_name
         )
 
         return result
@@ -275,9 +275,9 @@ async def analyze_company_name_for_ticker(
         else:
             result = parsed_result
 
-        input_data = f"\n   Title: {title}"
+        input_data = f"\n    Title: {title}"
         if len(tags) > 0:
-            input_data += f"\n   Tags: {', '.join(tags)}"
+            input_data += f"\n    Tags: {', '.join(tags)}"
 
         run_notification_async("company", input_data, result, script_name)
 
@@ -287,10 +287,10 @@ async def analyze_company_name_for_ticker(
         log_message(f"Error analyzing title: {title} for ticker: {e}", "ERROR")
         result = TickerAnalysis(found=False)
 
-        input_data = f"\n   Title: {title}"
+        input_data = f"\n    Title: {title}"
         if len(tags) > 0:
-            input_data += f"\n   Tags: {', '.join(tags)}"
-        input_data += f"\n   (ERROR: {str(e)})"
+            input_data += f"\n    Tags: {', '.join(tags)}"
+        input_data += f"\n    (ERROR: {str(e)})"
 
         run_notification_async("company", input_data, result, script_name)
 
