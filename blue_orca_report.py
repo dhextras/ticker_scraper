@@ -15,6 +15,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -112,6 +113,17 @@ async def send_report_to_telegram(report):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
     ticker = extract_ticker(report["ticker"])
 
+    if ticker:
+        await send_ws_message(
+            {
+                "name": "Blue Orca Report",
+                "type": "Sell",
+                "ticker": ticker,
+                "sender": "blueorca",
+                "target": "CSS",
+            },
+        )
+
     message = f"<b>New Blue Orca Report</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>Report:</b> {report['title']}\n"
@@ -130,6 +142,7 @@ async def run_report_monitor():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
             log_message("Market is open. Starting to check for new reports...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 

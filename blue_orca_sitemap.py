@@ -14,6 +14,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -117,6 +118,17 @@ async def fetch_page_content(session, url):
 async def send_url_to_telegram(url_data, ticker):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
+    if ticker:
+        await send_ws_message(
+            {
+                "name": "Blue Orca Sitemap",
+                "type": "Sell",
+                "ticker": ticker,
+                "sender": "blueorca",
+                "target": "CSS",
+            },
+        )
+
     message = f"<b>New or Updated Blue Orca Post</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url_data['url']}\n"
@@ -133,6 +145,8 @@ async def run_sitemap_monitor():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
+
             log_message("Market is open. Starting to check sitemap...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 
