@@ -48,6 +48,10 @@ pip install -r requirements.txt
    WS_SERVER_URL=  # WebSocket server URL
    GPT_API_KEY= # Api key for gpt
 
+   # GPT Analysis Configuration
+   GPT_NOTIFY_BOT_TOKEN=
+   GPT_NOTIFY_GRP=
+
    # TCP Client Configuration
    TCP_HOST=your_tcp_server_host
    TCP_PORT=9000

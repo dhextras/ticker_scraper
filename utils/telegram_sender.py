@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import ssl
 from datetime import datetime
 
@@ -10,11 +11,7 @@ from utils.base_logger import setup_logger
 
 
 async def send_telegram_message(
-    message,
-    bot_token,
-    chat_id,
-    file_content=None,
-    filename=None,
+    message, bot_token, chat_id, file_content=None, filename=None, reply_markup=None
 ):
     if not bot_token or not chat_id:
         raise ValueError("Bot token and chat ID must be provided.")
@@ -33,6 +30,14 @@ async def send_telegram_message(
                     "parse_mode": "HTML",
                 }
 
+                if reply_markup:
+                    if isinstance(reply_markup, dict):
+                        payload["reply_markup"] = json.dumps(reply_markup)
+                    elif isinstance(reply_markup, str):
+                        payload["reply_markup"] = reply_markup
+                    else:
+                        payload["reply_markup"] = json.dumps(reply_markup)
+
                 async with session.post(
                     message_url, json=payload, ssl=ssl_context
                 ) as response:
@@ -45,7 +50,12 @@ async def send_telegram_message(
                         async def retry():
                             await asyncio.sleep(retry_after + 5)
                             await send_telegram_message(
-                                message, bot_token, chat_id, file_content, filename
+                                message,
+                                bot_token,
+                                chat_id,
+                                file_content,
+                                filename,
+                                reply_markup,
                             )
 
                         asyncio.create_task(retry())
