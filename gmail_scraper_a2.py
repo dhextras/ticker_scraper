@@ -108,6 +108,21 @@ def analyze_email_from_artoftrading(subject):
     return None
 
 
+def analyze_email_from_banyan(subject):
+    if "Trade Alert: Buy" in subject:
+        parentheses_pattern = r"Trade Alert: Buy.*?\((?:NYSE:\s*)?([A-Z]+)\)"
+        match = re.search(parentheses_pattern, subject)
+        if match:
+            return match.group(1)
+
+        direct_pattern = r"Trade Alert: Buy\s*([A-Z]+)"
+        match = re.search(direct_pattern, subject)
+        if match:
+            return match.group(1)
+
+    return None
+
+
 def analyze_email_from_investors(subject):
     if "watchlist" in subject.lower():
         return None
@@ -161,6 +176,9 @@ async def process_email(service, message_id):
     elif from_email == "stewie@artoftrading.net":
         sender_type = "stewie"
         stock_symbol = analyze_email_from_artoftrading(subject)
+    elif from_email == "info@mp.banyanhill.com":
+        sender_type = "banyan"
+        stock_symbol = analyze_email_from_banyan(subject)
     elif from_email == "info@fuzzypandaresearch.com":
         sender_type = "fuzzypanda"
         stock_symbol = analyze_email_from_fuzzypanda(email_body)
