@@ -139,7 +139,6 @@ async def send_to_telegram(url, ticker_obj: TickerAnalysis | str):
             "type": "Sell",
             "ticker": ticker,
             "sender": "blueorca",
-            "target": "CSS",
         },
     )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)

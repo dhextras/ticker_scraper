@@ -125,7 +125,6 @@ async def send_url_to_telegram(url_data, ticker):
                 "type": "Sell",
                 "ticker": ticker,
                 "sender": "blueorca",
-                "target": "CSS",
             },
         )
 

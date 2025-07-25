@@ -120,7 +120,6 @@ async def send_report_to_telegram(report):
                 "type": "Sell",
                 "ticker": ticker,
                 "sender": "blueorca",
-                "target": "CSS",
             },
         )
 
