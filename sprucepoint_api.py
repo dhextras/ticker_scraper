@@ -142,6 +142,12 @@ async def process_new_report(session, slug):
 
     start_fetch = time.time()
     html_content = await fetch_report_content(session, slug)
+
+    # FIX: Remove this after finding out why it wasn't working
+    date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S")
+    with open(f"data/sprucepoint_api_remove_{date}.html", "w") as f:
+        f.write(str(html_content))
+
     ticker = extract_ticker(html_content)
     fetch_time = time.time() - start_fetch
 
