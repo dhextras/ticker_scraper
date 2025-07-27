@@ -401,7 +401,7 @@ def extract_posts():
     try:
         # NOTE: Wait till the first username loads this way we can make sure that the content is loaded
         page.ele(
-            'css:div[aria-label="Timeline: Your Home Timeline"] > div > div div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
+            'css:div[aria-label="Timeline: Your Home Timeline"] > div > div div[data-testid="User-Name"] > div:nth-child(1) > div > a > div > div > span > span',
             timeout=5,
         )
 
@@ -417,7 +417,7 @@ def extract_posts():
         for container in post_containers:
             try:
                 username_elem = container.ele(
-                    'css:div[data-testid="User-Name"] > div:nth-child(2) > div > div > a > div > span',
+                    'css:div[data-testid="User-Name"] > div:nth-child(1) > div > a > div > div > span > span',
                     timeout=0.1,
                 )
                 tweet_elem = container.ele(
