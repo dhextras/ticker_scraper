@@ -35,7 +35,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 
 # Configuration
-STARTING_ID = 134784  # Starting post ID
+STARTING_ID = 135720  # Starting post ID
 FAVORITES_WINDOW = 50  # Number of favorites to maintain
 BATCH_SIZE = 10
 BATCH_DELAY = 0.1  # Delay between batch operations (seconds)
