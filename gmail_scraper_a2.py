@@ -102,7 +102,7 @@ def get_email_received_time(headers):
                 date_str = match.group(1)
                 try:
                     received_time = parsedate_to_datetime(date_str)
-                    return received_time.strftime("%Y-%m-%d %H:%M:%S")
+                    return received_time.strftime("%Y-%m-%d %H:%M:%S.%f")
                 except:
                     pass
 
@@ -110,7 +110,7 @@ def get_email_received_time(headers):
             if date_header:
                 try:
                     received_time = parsedate_to_datetime(date_header)
-                    return received_time.strftime("%Y-%m-%d %H:%M:%S")
+                    return received_time.strftime("%Y-%m-%d %H:%M:%S.%f")
                 except:
                     pass
 
@@ -200,7 +200,7 @@ async def process_email(service, message_id):
     log_message(f"Processing email from: {from_email}", "INFO")
     log_message(f"Subject: {subject}", "INFO")
 
-    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
     stock_symbol = None
     sender_type = None
     order_type = "Buy"  # Default order type
