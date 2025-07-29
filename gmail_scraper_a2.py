@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
@@ -84,6 +85,16 @@ def get_email_body(msg):
     return ""
 
 
+def format_email_received_time(internal_date):
+    """Convert Gmail internalDate (milliseconds) to formatted string"""
+    try:
+        timestamp_seconds = int(internal_date) / 1000
+        received_time = datetime.fromtimestamp(timestamp_seconds)
+        return received_time.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return internal_date
+
+
 def analyze_email_from_oxfordclub(email_body):
     action_to_take = "Action to Take"
     action_index = email_body.find(action_to_take)
@@ -160,6 +171,7 @@ async def process_email(service, message_id):
     subject = get_header(headers, "Subject")
     from_email = email.utils.parseaddr(from_header)[1]
     email_body = get_email_body(msg)
+    received_timestamp = format_email_received_time(msg.get("internalDate", ""))
 
     log_message(f"Processing email from: {from_email}", "INFO")
     log_message(f"Subject: {subject}", "INFO")
@@ -186,18 +198,39 @@ async def process_email(service, message_id):
         target = "CSS"
     # elif from_email == "do-not-reply@mail.investors.com":
     #     stock_symbol = analyze_email_from_investors(subject)
+    else:
+        message = f"<b>New Ignorable message</b>\n\n"
+        message += f"<b>Current Time:</> {timestamp}\n"
+        message += f"<b>Received Time:</> {received_timestamp}\n"
+        message += f"<b>Sender:</> {from_email}\n"
+        message += f"<b>Subject:</> {subject}\n"
+
+        await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
     if stock_symbol and sender_type:
         await send_stock_alert(
-            timestamp, from_email, sender_type, stock_symbol, order_type, target
+            timestamp,
+            received_timestamp,
+            from_email,
+            sender_type,
+            stock_symbol,
+            order_type,
+            target,
         )
 
 
 async def send_stock_alert(
-    timestamp, sender, sender_type, stock_symbol, order_type="Buy", target=None
+    timestamp,
+    rc_timestamp,
+    sender,
+    sender_type,
+    stock_symbol,
+    order_type="Buy",
+    target=None,
 ):
     message = f"<b>New Stock Alert A2</b>\n\n"
-    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Current Time:</b> {timestamp}\n"
+    message += f"<b>Received Time:</b> {rc_timestamp}\n"
     message += f"<b>Sender:</b> {sender}\n"
     message += f"<b>Order Type:</b> {order_type}\n"
     message += f"<b>Stock Symbol:</b> {stock_symbol}\n"
@@ -259,11 +292,13 @@ async def run_gmail_scraper():
                 else:
                     log_message("No new emails found.", "INFO")
 
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.3)
 
             except HttpError as error:
                 if error.resp.status == 429:
-                    log_message("Rate limit hit. Sleeping for 60 seconds...", "WARNING")
+                    log_message(
+                        "Rate limit hit. Sleeping for 60 seconds...", "CRITICAL"
+                    )
                     await asyncio.sleep(60)
                 else:
                     log_message(f"An error occurred: {error}", "ERROR")
