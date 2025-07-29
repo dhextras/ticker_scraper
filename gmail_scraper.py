@@ -101,7 +101,7 @@ def get_email_received_time(headers):
                 date_str = match.group(1)
                 try:
                     received_time = parsedate_to_datetime(date_str)
-                    return received_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+                    return received_time.strftime("%Y-%m-%d %H:%M:%S")
                 except:
                     pass
 
@@ -109,7 +109,7 @@ def get_email_received_time(headers):
             if date_header:
                 try:
                     received_time = parsedate_to_datetime(date_header)
-                    return received_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+                    return received_time.strftime("%Y-%m-%d %H:%M:%S")
                 except:
                     pass
 
@@ -199,7 +199,7 @@ async def process_email(service, message_id):
     log_message(f"Processing email from: {from_email}", "INFO")
     log_message(f"Subject: {subject}", "INFO")
 
-    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
     stock_symbol = None
     sender_type = None
     order_type = "Buy"  # Default order type
@@ -222,7 +222,7 @@ async def process_email(service, message_id):
     # elif from_email == "do-not-reply@mail.investors.com":
     #     stock_symbol = analyze_email_from_investors(subject)
     else:
-        message = f"<b>New Ignorable message</b>\n\n"
+        message = f"<b>New Ignorable message - A1</b>\n\n"
         message += f"<b>Current Time:</> {timestamp}\n"
         message += f"<b>Received Time:</> {received_timestamp}\n"
         message += f"<b>Sender:</> {from_email}\n"
@@ -251,7 +251,7 @@ async def send_stock_alert(
     order_type="Buy",
     target=None,
 ):
-    message = f"<b>New Stock Alert A1</b>\n\n"
+    message = f"<b>New Stock Alert - A1</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Received Time:</b> {rc_timestamp}\n"
     message += f"<b>Sender:</b> {sender}\n"

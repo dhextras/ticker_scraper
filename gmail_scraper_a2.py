@@ -223,7 +223,7 @@ async def process_email(service, message_id):
     # elif from_email == "do-not-reply@mail.investors.com":
     #     stock_symbol = analyze_email_from_investors(subject)
     else:
-        message = f"<b>New Ignorable message</b>\n\n"
+        message = f"<b>New Ignorable message - A2</b>\n\n"
         message += f"<b>Current Time:</> {timestamp}\n"
         message += f"<b>Received Time:</> {received_timestamp}\n"
         message += f"<b>Sender:</> {from_email}\n"
@@ -252,7 +252,7 @@ async def send_stock_alert(
     order_type="Buy",
     target=None,
 ):
-    message = f"<b>New Stock Alert A2</b>\n\n"
+    message = f"<b>New Stock Alert - A2</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Received Time:</b> {rc_timestamp}\n"
     message += f"<b>Sender:</b> {sender}\n"
