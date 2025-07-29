@@ -6,6 +6,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
@@ -85,14 +86,37 @@ def get_email_body(msg):
     return ""
 
 
-def format_email_received_time(internal_date):
-    """Convert Gmail internalDate (milliseconds) to formatted string"""
+def get_email_received_time(headers):
+    """Extract the actual received time from email headers"""
     try:
-        timestamp_seconds = int(internal_date) / 1000
-        received_time = datetime.fromtimestamp(timestamp_seconds)
-        return received_time.strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, TypeError):
-        return internal_date
+        received_header = get_header(headers, "Received")
+        if received_header:
+            # Parse the received header to extract timestamp
+            # Format: "by server with SMTP id; Mon, 29 Jul 2025 05:04:18 -0700 (PDT)"
+            date_pattern = (
+                r"(\w{3},\s+\d{1,2}\s+\w{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4})"
+            )
+            match = re.search(date_pattern, received_header)
+
+            if match:
+                date_str = match.group(1)
+                try:
+                    received_time = parsedate_to_datetime(date_str)
+                    return received_time.strftime("%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
+
+            date_header = get_header(headers, "Date")
+            if date_header:
+                try:
+                    received_time = parsedate_to_datetime(date_header)
+                    return received_time.strftime("%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
+
+        return "Unknown"
+    except:
+        return "Unknown"
 
 
 def analyze_email_from_oxfordclub(email_body):
@@ -171,7 +195,7 @@ async def process_email(service, message_id):
     subject = get_header(headers, "Subject")
     from_email = email.utils.parseaddr(from_header)[1]
     email_body = get_email_body(msg)
-    received_timestamp = format_email_received_time(msg.get("internalDate", ""))
+    received_timestamp = get_email_received_time(headers)
 
     log_message(f"Processing email from: {from_email}", "INFO")
     log_message(f"Subject: {subject}", "INFO")
