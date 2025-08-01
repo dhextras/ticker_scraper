@@ -104,6 +104,8 @@ async def fetch_xml_feed(session, raw_proxy=None):
     proxy = raw_proxy if raw_proxy is None else f"http://{raw_proxy}"
 
     try:
+        start_time = time.time()
+
         async with session.get(
             f"{XML_FEED_URL}?{random_cache_buster}",
             headers=headers,
@@ -150,7 +152,7 @@ async def fetch_xml_feed(session, raw_proxy=None):
                         }
                     )
                 log_message(
-                    f"Fetched {len(posts)} posts from XML using proxy: {raw_proxy}",
+                    f"Fetched {len(posts)} posts from XML in {(time.time() - start_time):.2f}s using proxy: {raw_proxy}",
                     "INFO",
                 )
                 return posts

@@ -110,6 +110,8 @@ async def fetch_json(session, raw_proxy=None):
     proxy = raw_proxy if raw_proxy is None else f"http://{raw_proxy}"
 
     try:
+        start_time = time.time()
+
         async with session.get(
             f"{JSON_URL}?limit=10&{random_cache_buster}",
             headers=headers,
@@ -118,7 +120,10 @@ async def fetch_json(session, raw_proxy=None):
         ) as response:
             if response.status == 200:
                 data = await response.json()
-                log_message(f"Fetched posts from JSON using proxy: {raw_proxy}", "INFO")
+                log_message(
+                    f"Fetched posts from JSON in {(time.time() - start_time):.2f}s using proxy: {raw_proxy}",
+                    "INFO",
+                )
                 return data
             elif 500 <= response.status < 600:
                 log_message(
