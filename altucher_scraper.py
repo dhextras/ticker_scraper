@@ -4,6 +4,7 @@ import os
 import random
 import re
 import sys
+import time
 from datetime import datetime
 
 import aiohttp
@@ -110,6 +111,7 @@ async def fetch_articles(
 
         proxy_url = f"http://{proxy}" if proxy else None
 
+        start_time = time.time()
         async with session.get(
             JSON_URL, params=params, headers=headers, proxy=proxy_url, timeout=3
         ) as response:
@@ -118,7 +120,7 @@ async def fetch_articles(
                     raw_data = await response.json()
                     processed_data = []
                     log_message(
-                        f"Fetched {len(raw_data)} {subscription_name.upper()} articles using proxy {proxy}",
+                        f"Fetched {len(raw_data)} {subscription_name.upper()} articles using proxy {proxy}, Took {(time.time() - start_time):.2f}s",
                         "INFO",
                     )
 
