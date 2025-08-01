@@ -43,6 +43,8 @@ ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
 
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "cnbc_alerts.json"
+
+# NOTE: Only this need to be changed to bypass caching the above 2 sha doesn't change that often
 SESSION_TOKEN = os.getenv("CNBC_SCRAPER_SESSION_TOKEN")
 
 # Global variables

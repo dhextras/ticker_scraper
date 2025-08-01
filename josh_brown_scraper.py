@@ -37,14 +37,16 @@ load_dotenv()
 # Constants
 TELEGRAM_BOT_TOKEN = os.getenv("JOSH_BROWN_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("JOSH_BROWN_TELEGRAM_GRP")
-GMAIL_USERNAME = os.getenv("CNBC_SCRAPER_GMAIL_USERNAME")
-GMAIL_PASSWORD = os.getenv("CNBC_SCRAPER_GMAIL_PASSWORD")
+GMAIL_USERNAME = os.getenv("JOSH_BROWN_GMAIL_USERNAME")
+GMAIL_PASSWORD = os.getenv("JOSH_BROWN_GMAIL_PASSWORD")
 LATEST_ASSETS_SHA = os.getenv("CNBC_SCRAPER_LATEST_ASSETS_SHA")
 ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
 
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "josh_brown_alerts.json"
-SESSION_TOKEN = os.getenv("CNBC_SCRAPER_SESSION_TOKEN")
+
+# NOTE: Only this need to be changed to bypass caching the above 2 sha doesn't change that often
+SESSION_TOKEN = os.getenv("JOSH_BROWN_SESSION_TOKEN")
 
 # Global variables
 last_request_time = 0
