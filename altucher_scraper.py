@@ -280,6 +280,7 @@ async def process_reports(session, articles, subscription_name):
                         "actionDesc": "---Empty---",
                         "postDate": article.get("cfUpdatedAt"),
                         "url": article.get("slug"),
+                        "file_url": file_url,
                         "subscription_name": subscription_name,
                     }
                 )
@@ -323,6 +324,7 @@ async def process_reports(session, articles, subscription_name):
                             "actionDesc": "---Empty---",
                             "postDate": article.get("cfUpdatedAt"),
                             "url": article.get("slug"),
+                            "file_url": file_url,
                             "subscription_name": subscription_name,
                         }
                     )
@@ -337,6 +339,7 @@ async def process_reports(session, articles, subscription_name):
                         "actionDesc": "---Empty---",
                         "postDate": article.get("cfUpdatedAt"),
                         "url": article.get("slug"),
+                        "file_url": file_url,
                         "subscription_name": subscription_name,
                     }
                 )
@@ -367,6 +370,7 @@ async def send_matches_to_telegram(buy_recs):
         postDate = rec["postDate"]
         sub_name = rec["subscription_name"].upper()
         url = f"https://my.paradigmpressgroup.com/article/{rec['url']}"
+        file_url = rec["file_url"]
 
         post_time = datetime.fromisoformat(postDate.replace("Z", "+00:00"))
 
@@ -380,6 +384,9 @@ async def send_matches_to_telegram(buy_recs):
         message += f"<b>Stock Name:</b> {name}\n"
         message += f"<b>Action Desc:</b> {actionDesc}\n"
         message += f"<b>URL:</b> {url}\n"
+        if file_url:
+            message += f"<b>Media Url:</b> {file_url}\n"
+
         message += f"<b>Post Time:</b> {post_time_us}\n"
         message += f"<b>Current Time:</b> {current_time_us}\n"
 
