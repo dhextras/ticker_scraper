@@ -54,11 +54,11 @@ subscriptions = [
     {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01", "category": "Issues"},
     {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "category": "Updates"},
     {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI", "category": "Updates"},
-    {"name": "mm2", "id": "", "category": "Reports"},
-    {"name": "rbc", "id": "", "category": "Reports"},
-    {"name": "sei", "id": "", "category": "Reports"},
-    {"name": "al2", "id": "", "category": "Reports"},
-    {"name": "pmg", "id": "", "category": "Reports"},
+    {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT", "category": "Reports"},
+    {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn", "category": "Reports"},
+    {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM", "category": "Reports"},
+    {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "category": "Reports"},
+    {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso", "category": "Reports"},
 ]
 
 os.makedirs("data", exist_ok=True)
