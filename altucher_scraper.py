@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import random
@@ -11,6 +12,7 @@ import aiohttp
 import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from pdfminer.high_level import extract_text
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -37,18 +39,26 @@ TELEGRAM_GRP = os.getenv("ALTUCHER_TELEGRAM_GRP")
 PROXY_FILE = "cred/proxies.json"
 
 # NOTE: cId stand for the category like
-# Alerts - 630ga2Gfm1hh4L2mHMkBHS
-# Issues - 49RxAGaOXW3MilamPgjp6A
-# Updates - 4Rnp1u5SB5m9d4WuJkfeiq
+categories = {
+    "Alerts": "630ga2Gfm1hh4L2mHMkBHS",
+    "Issues": "49RxAGaOXW3MilamPgjp6A",
+    "Updates": "4Rnp1u5SB5m9d4WuJkfeiq",
+    "Reports": "2KkGfTXI3s3yjQFdU70Xoo",
+}
 
 subscriptions = [
-    {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
-    {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
-    {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
-    {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso", "cId": "630ga2Gfm1hh4L2mHMkBHS"},
-    {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01", "cId": "49RxAGaOXW3MilamPgjp6A"},
-    {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "cId": "4Rnp1u5SB5m9d4WuJkfeiq"},
-    {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI", "cId": "4Rnp1u5SB5m9d4WuJkfeiq"},
+    {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT", "category": "Alerts"},
+    {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM", "category": "Alerts"},
+    {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn", "category": "Alerts"},
+    {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso", "category": "Alerts"},
+    {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01", "category": "Issues"},
+    {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "category": "Updates"},
+    {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI", "category": "Updates"},
+    {"name": "mm2", "id": "", "category": "Reports"},
+    {"name": "rbc", "id": "", "category": "Reports"},
+    {"name": "sei", "id": "", "category": "Reports"},
+    {"name": "al2", "id": "", "category": "Reports"},
+    {"name": "pmg", "id": "", "category": "Reports"},
 ]
 
 os.makedirs("data", exist_ok=True)
@@ -88,10 +98,9 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-async def fetch_articles(
-    session, subscription_name, subscription_id, category_id, proxy
-):
+async def fetch_articles(session, subscription_name, subscription_id, category, proxy):
     try:
+        category_id = categories[category]
         params = {
             "include": 2,
             "order": "-fields.postDate",
@@ -120,7 +129,7 @@ async def fetch_articles(
                     raw_data = await response.json()
                     processed_data = []
                     log_message(
-                        f"Fetched {len(raw_data)} {subscription_name.upper()} articles using proxy {proxy}, Took {(time.time() - start_time):.2f}s",
+                        f"Fetched {len(raw_data)} {subscription_name.upper()} {category} using proxy {proxy}, Took {(time.time() - start_time):.2f}s",
                         "INFO",
                     )
 
@@ -218,9 +227,137 @@ async def process_articles(articles, subscription):
     return buy_recommendations
 
 
+async def process_reports(session, articles, subscription_name):
+    buy_recommendations = []
+
+    headers = {
+        "Accept": "application/json",
+        "Cookie": f"tid={COOKIE_TID}; *dd*s=logs=1&iid={COOKIE_ID}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    }
+
+    for article in articles:
+        try:
+            if not article.get("attachment") or not article["attachment"]:
+                continue
+
+            attachment = (
+                article["attachment"][0]
+                if isinstance(article["attachment"], list)
+                else article["attachment"]
+            )  # NOTE: only the first document is necessary
+
+            file_url = attachment.get("fileUrl")
+            if not file_url:
+                continue
+
+            try:
+                async with session.get(
+                    file_url, headers=headers, timeout=30
+                ) as response:
+                    if response.status != 200:
+                        log_message(f"Failed to fetch PDF: {file_url}", "ERROR")
+                        continue
+
+                    pdf_content = await response.read()
+                    pdf_file = io.BytesIO(pdf_content)
+
+                    all_text = extract_text(pdf_file)
+                    if not all_text:
+                        continue
+
+            except Exception as e:
+                log_message(f"Error fetching PDF {file_url}: {str(e)}", "ERROR")
+                continue
+
+            action_sections = re.split(r"Action to Take", all_text, flags=re.IGNORECASE)
+            if len(action_sections) < 2:
+                log_message(f"'Action to Take' not found: {file_url}", "WARNING")
+                buy_recommendations.append(
+                    {
+                        "ticker": None,
+                        "name": "---Empty---",
+                        "actionDesc": "---Empty---",
+                        "postDate": article.get("cfUpdatedAt"),
+                        "url": article.get("slug"),
+                        "subscription_name": subscription_name,
+                    }
+                )
+                continue
+
+            found_recommendation = False
+            for section in action_sections[1:]:
+                buy_match = re.search(r"\b(Buy|buying)\b", section, re.IGNORECASE)
+                if not buy_match:
+                    continue
+
+                ticker_patterns = [
+                    r"(NYSE|NASDAQ):\s*([A-Z]+)",
+                    r"\(([A-Z]{2,5})\)",
+                    r"([A-Z]{2,5})\s+(?:up to|\$)",
+                ]
+
+                ticker_match = None
+                ticker_symbol = None
+
+                for pattern in ticker_patterns:
+                    ticker_match = re.search(pattern, section, re.IGNORECASE)
+                    if ticker_match:
+                        if "NYSE|NASDAQ" in pattern:
+                            ticker_symbol = ticker_match.group(2)
+                        else:
+                            ticker_symbol = ticker_match.group(1)
+                        break
+
+                if (
+                    buy_match
+                    and ticker_match
+                    and buy_match.start() < ticker_match.start()
+                    and ticker_symbol
+                ):
+
+                    buy_recommendations.append(
+                        {
+                            "ticker": ticker_symbol,
+                            "name": "---Empty---",
+                            "actionDesc": "---Empty---",
+                            "postDate": article.get("cfUpdatedAt"),
+                            "url": article.get("slug"),
+                            "subscription_name": subscription_name,
+                        }
+                    )
+                    found_recommendation = True
+                    break
+
+            if not found_recommendation:
+                buy_recommendations.append(
+                    {
+                        "ticker": None,
+                        "name": "---Empty---",
+                        "actionDesc": "---Empty---",
+                        "postDate": article.get("cfUpdatedAt"),
+                        "url": article.get("slug"),
+                        "subscription_name": subscription_name,
+                    }
+                )
+
+        except Exception as e:
+            log_message(
+                f"Error processing report article {article.get('slug', 'Unknown')}: {str(e)}",
+                "ERROR",
+            )
+            continue
+
+    return buy_recommendations
+
+
 async def send_matches_to_telegram(buy_recs):
     for rec in buy_recs:
         ticker = rec["ticker"]
+
+        if ticker is None:
+            continue
+
         clean_ticker = re.match(r"^[A-Z]+", ticker)
         if clean_ticker:
             ticker = clean_ticker.group(0)
@@ -263,7 +400,11 @@ async def send_matches_to_telegram(buy_recs):
 
 async def process_subscription(session, subscription, proxy, processed_urls):
     articles = await fetch_articles(
-        session, subscription["name"], subscription["id"], subscription["cId"], proxy
+        session,
+        subscription["name"],
+        subscription["id"],
+        subscription["category"],
+        proxy,
     )
 
     new_articles = [
@@ -284,7 +425,13 @@ async def process_subscription(session, subscription, proxy, processed_urls):
         with open(f"data/delete_{date}.json", "w") as f:
             json.dump(new_articles, f, indent=2)
 
-        buy_recs = await process_articles(new_articles, subscription["name"])
+        if subscription["category"] == "Reports":
+            buy_recs = await process_reports(
+                session, new_articles, subscription["name"]
+            )
+        else:
+            buy_recs = await process_articles(new_articles, subscription["name"])
+
         await send_matches_to_telegram(buy_recs)
         return new_urls
     return set()
