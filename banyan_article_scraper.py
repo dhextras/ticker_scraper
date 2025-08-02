@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import sys
 import time
 
@@ -27,12 +28,45 @@ TELEGRAM_GRP = os.getenv("BANYAN_TRADE_ALERT_TELEGRAM_GRP")
 PROXY_FILE = "cred/proxies.json"
 
 subscriptions = [
-    {"name": "sf_pro", "term_id": "46767"},
-    {"name": "sf", "term_id": "21331"},
-    {"name": "ef", "term_id": "20315"},
+    {"name": "Strategic Fortunes PRO", "term_id": "46767"},
+    {"name": "Strategic Fortunes", "term_id": "21331"},
+    {"name": "Extreme Fortunes", "term_id": "20315"},
 ]
 
 os.makedirs("data", exist_ok=True)
+
+
+def parse_ticker_from_title(title):
+    """
+    Extract the first ticker symbol from buy alerts only.
+    Returns None if it's not a buy alert or no ticker found.
+    """
+    if not title:
+        return None
+
+    title_lower = title.lower()
+
+    if not re.search(r"\b(buy|buying)\b", title_lower):
+        return None
+
+    if re.search(r"\b(sell|selling|take gains)\b", title_lower):
+        return None
+
+    ticker_patterns = [
+        r"\((?:NYSE|NASDAQ|Nasdaq):\s*([A-Z]+)\)",
+        r"\(([A-Z]{2,6})\)",
+        r"\b(?:buy|buying)\s+(?:back\s+into\s+|into\s+)?([A-Z]{2,6})\b",
+        r"\b(?:buy|buying)\s+([A-Z]{2,6})(?:\s*,|\s*&)",
+    ]
+
+    for pattern in ticker_patterns:
+        match = re.search(pattern, title, re.IGNORECASE)
+        if match:
+            ticker = match.group(1).upper()
+            if ticker not in ["BACK", "INTO", "THESE", "NOW"]:
+                return ticker
+
+    return None
 
 
 def load_proxies():
@@ -140,6 +174,8 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
                                     read_more_link.decompose()
                                 description = description_p.get_text(strip=True)
 
+                            ticker = parse_ticker_from_title(title)
+
                             if post_id and title:
                                 articles.append(
                                     {
@@ -149,6 +185,7 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
                                         "date": date_text,
                                         "description": description,
                                         "subscription_name": subscription_name,
+                                        "ticker": ticker,  # Added ticker field
                                     }
                                 )
 
@@ -190,19 +227,27 @@ async def send_matches_to_telegram(trade_alerts):
         date = alert["date"]
         url = alert["url"]
         sub_name = alert["subscription_name"].upper()
+        ticker = alert.get("ticker")
 
         current_time_us = get_current_time().strftime("%Y-%m-%d %H:%M:%S %Z")
 
         message = f"<b>New Alert - {sub_name}</b>\n\n"
         message += f"<b>Title:</b> {title}\n"
+
+        if ticker:
+            message += f"<b>Ticker:</b> {ticker}\n"
+
         message += f"<b>Current Time:</b> {current_time_us}\n"
         message += f"<b>Post Time:</b> {date}\n"
         message += f"<b>URL:</b> {url}\n"
-        message += f"<b>Description:</b> {description[:500]}{'...' if len(description) > 500 else ''}\n"
+        # NOTE: This just returns empty account login descirption so no need to send it now
+        # message += f"<b>Description:</b> {description[:500]}{'...' if len(description) > 500 else ''}\n"
 
         await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+        ticker_info = f" (Ticker: {ticker})" if ticker else ""
         log_message(
-            f"Alert for `{sub_name}` sent to Telegram: {title[:50]}... - {url}",
+            f"Alert for `{sub_name}` sent to Telegram: {title[:50]}...{ticker_info} - {url}",
             "INFO",
         )
 
@@ -220,10 +265,18 @@ async def process_subscription(session, subscription, proxy, processed_ids):
     new_ids = {article["post_id"] for article in articles if article.get("post_id")}
 
     if new_articles:
-        log_message(
-            f"Found {len(new_articles)} new articles to process for {subscription['name']}.",
-            "INFO",
-        )
+        buy_articles = [article for article in new_articles if article.get("ticker")]
+        if buy_articles:
+            ticker_list = [article["ticker"] for article in buy_articles]
+            log_message(
+                f"Found {len(new_articles)} new articles for {subscription['name']}, {len(buy_articles)} with tickers: {', '.join(ticker_list)}",
+                "INFO",
+            )
+        else:
+            log_message(
+                f"Found {len(new_articles)} new articles for {subscription['name']}, no buy alerts with tickers.",
+                "INFO",
+            )
 
         date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S_%f")
         with open(f"data/banyan_{date}.json", "w") as f:
