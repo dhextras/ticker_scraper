@@ -145,7 +145,7 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
                     archive_items = soup.find_all("div", class_="archive_item")
 
                     log_message(
-                        f"Fetched {len(archive_items)} {subscription_name.upper()} articles using proxy {proxy}, Took {(time.time() - start_time):.2f}s",
+                        f"Fetched {len(archive_items)} {subscription_name} articles using proxy {proxy}, Took {(time.time() - start_time):.2f}s",
                         "INFO",
                     )
 
@@ -226,7 +226,7 @@ async def send_matches_to_telegram(trade_alerts):
         description = alert["description"]
         date = alert["date"]
         url = alert["url"]
-        sub_name = alert["subscription_name"].upper()
+        sub_name = alert["subscription_name"]
         ticker = alert.get("ticker")
 
         current_time_us = get_current_time().strftime("%Y-%m-%d %H:%M:%S %Z")
