@@ -39,6 +39,7 @@ def load_proxies():
     try:
         with open(PROXY_FILE, "r") as f:
             data = json.load(f)
+            # FIXME: Im lazy as fuck, so just copy the same proxies later sometime
             proxies = data.get("investor_place", [])
             if not proxies:
                 log_message("No proxies found in config", "CRITICAL")
