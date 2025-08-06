@@ -22,7 +22,6 @@ load_dotenv()
 CHECK_INTERVAL = 1
 TELEGRAM_BOT_TOKEN = os.getenv("YOUTUBE_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("YOUTUBE_TELEGRAM_GRP")
-PLAYLIST_ID = os.getenv("YOUTUBE_PLAYLIST_ID")
 PROCESSED_VIDEOS_FILE = "data/processed_youtube_videos.json"
 API_KEYS_FILE = "cred/youtube_api_keys.json"
 API_USAGE_FILE = "data/youtube_api_usage.json"
@@ -30,10 +29,25 @@ API_USAGE_FILE = "data/youtube_api_usage.json"
 os.makedirs("cred", exist_ok=True)
 os.makedirs("data", exist_ok=True)
 
+CHANNELS_TO_MONITOR = [
+    {
+        "name": "Moon Market",
+        "uploads_playlist_id": "UUzUTeUSbbTBtj6cgoVaoSeg",
+    },
+    {
+        "name": "6K Investor",
+        "uploads_playlist_id": "UUxDsOgAmHnDQw2xS1f1dfcQ",
+    },
+    {
+        "name": "Paul's Portfolio",
+        "uploads_playlist_id": "UUJS4uOCQqcjeYIAFdtx7h9Q",
+    },
+]
+
 
 class YouTubeMonitor:
-    def __init__(self, playlist_id):
-        self.playlist_id = playlist_id
+    def __init__(self, channels):
+        self.channels = channels
         self.api_keys = self.load_api_keys()
         self.current_api_key_index = 0
         self.api_usage = self.load_api_usage()
@@ -101,7 +115,8 @@ class YouTubeMonitor:
         }
         self.save_api_usage()
 
-    async def get_recent_videos(self, max_videos=5):
+    async def get_recent_videos(self, playlist_id, max_videos=5):
+        """Get recent videos from a specific playlist"""
         api_key = self.get_next_available_api_key()
         if not api_key:
             log_message("All API keys are currently restricted", "ERROR")
@@ -109,7 +124,7 @@ class YouTubeMonitor:
 
         url = (
             f"https://www.googleapis.com/youtube/v3/playlistItems?"
-            f"part=snippet&playlistId={self.playlist_id}&maxResults={max_videos}"
+            f"part=snippet&playlistId={playlist_id}&maxResults={max_videos}"
             f"&order=date&key={api_key}"
         )
 
@@ -117,7 +132,9 @@ class YouTubeMonitor:
             response = requests.get(url)
             if response.status_code == 403:  # API quota exceeded
                 self.mark_api_key_exceeded(api_key)
-                return await self.get_recent_videos(max_videos)  # Retry with next key
+                return await self.get_recent_videos(
+                    playlist_id, max_videos
+                )  # Retry with next key
 
             response.raise_for_status()
             videos = response.json().get("items", [])
@@ -137,36 +154,54 @@ class YouTubeMonitor:
             return recent_videos
 
         except requests.RequestException as e:
-            log_message(f"Error fetching videos: {e}", "ERROR")
+            log_message(
+                f"Error fetching videos from playlist {playlist_id}: {e}", "ERROR"
+            )
             return []
 
     async def process_new_videos(self):
-        start = time.time()
-        videos = await self.get_recent_videos()
-        log_message(f"Fetching recent video took {(time.time() - start):.2f} seconds")
+        """Process new videos from all monitored channels"""
+        for channel in self.channels:
+            start = time.time()
+            videos = await self.get_recent_videos(channel["uploads_playlist_id"])
+            log_message(
+                f"Fetching recent videos for {channel['name']} took {(time.time() - start):.2f} seconds"
+            )
 
-        for video in videos:
-            video_id = video["snippet"]["resourceId"]["videoId"]
-            video_title = video["snippet"]["title"]
+            for video in videos:
+                video_id = video["snippet"]["resourceId"]["videoId"]
+                video_title = video["snippet"]["title"]
 
-            if video_id not in self.processed_videos:
-                message = (
-                    f"<b>New Moon Market Video Alert</b>\n\n"
-                    f"<b>Title:</b> {video_title}\n"
-                    f"<b>Link:</b> https://youtube.com/watch?v={video_id}"
-                )
+                if video_id not in self.processed_videos:
+                    message = (
+                        f"<b>New {channel['name']} Video Alert</b>\n\n"
+                        f"<b>Channel:</b> {channel['name']}\n"
+                        f"<b>Title:</b> {video_title}\n"
+                        f"<b>Link:</b> https://youtube.com/watch?v={video_id}"
+                    )
 
-                await send_telegram_message(
-                    message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-                )
-                log_message(f"New video alert sent: {video_title}", "INFO")
+                    await send_telegram_message(
+                        message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+                    )
+                    log_message(
+                        f"New video alert sent for {channel['name']}: {video_title}",
+                        "INFO",
+                    )
 
-                self.processed_videos.append(video_id)
-                self.save_processed_videos()
+                    self.processed_videos.append(video_id)
+                    self.save_processed_videos()
+
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 async def run_youtube_monitor():
-    monitor = YouTubeMonitor(PLAYLIST_ID)
+    monitor = YouTubeMonitor(CHANNELS_TO_MONITOR)
+
+    for channel in CHANNELS_TO_MONITOR:
+        log_message(
+            f"Monitoring {channel['name']} - Playlist: {channel['uploads_playlist_id']}",
+            "INFO",
+        )
 
     while True:
         await sleep_until_market_open()
@@ -183,7 +218,6 @@ async def run_youtube_monitor():
                 break
 
             await monitor.process_new_videos()
-            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
