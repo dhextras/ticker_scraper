@@ -40,6 +40,7 @@ FAVORITES_WINDOW = 50  # Number of favorites to maintain
 BATCH_SIZE = 10
 BATCH_DELAY = 0.1  # Delay between batch operations (seconds)
 CHECK_INTERVAL = 0.3  # Interval to check favorites page (seconds)
+MAX_NO_FAVORITES_COUNT = 10  # Restart threshold
 
 # File paths
 DATA_DIR = "data"
@@ -54,6 +55,7 @@ class FavoritesState:
         self.current_end_id = STARTING_ID + FAVORITES_WINDOW - 1
         self.known_post_ids = set()
         self.current_favorites = set()
+        self.no_favorites_count = 0
         self.load_state()
 
     def load_state(self):
@@ -66,6 +68,7 @@ class FavoritesState:
                 )
                 self.known_post_ids = set(data.get("known_post_ids", []))
                 self.current_favorites = set(data.get("current_favorites", []))
+                self.no_favorites_count = data.get("no_favorites_count", 0)
                 log_message(
                     f"Loaded state: Range {self.current_start_id}-{self.current_end_id}, Known posts: {len(self.known_post_ids)}",
                     "INFO",
@@ -80,6 +83,7 @@ class FavoritesState:
             "current_end_id": self.current_end_id,
             "known_post_ids": list(self.known_post_ids),
             "current_favorites": list(self.current_favorites),
+            "no_favorites_count": self.no_favorites_count,
         }
         with open(FAVORITES_STATE_FILE, "w") as f:
             json.dump(data, f, indent=2)
@@ -98,6 +102,21 @@ class FavoritesState:
                 "INFO",
             )
             self.save_state()
+
+    def reset_state(self):
+        """Reset state for restart"""
+        self.current_start_id = STARTING_ID
+        self.current_end_id = STARTING_ID + FAVORITES_WINDOW - 1
+        self.known_post_ids = set()
+        self.current_favorites = set()
+        self.no_favorites_count = 0
+        self.save_state()
+        log_message("State reset for restart", "INFO")
+
+
+async def send_alert(msg: str):
+    alert = f"ALERT: {msg}"
+    await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
 def login_sync(session: requests.Session) -> bool:
@@ -435,8 +454,8 @@ async def send_new_articles_to_telegram(new_articles: List[Dict[str, str]]) -> N
 
 async def check_and_update_favorites(
     session: requests.Session, state: FavoritesState
-) -> None:
-    """Check favorites page and update favorites list accordingly"""
+) -> bool:
+    """Check favorites page and update favorites list accordingly. Returns True if restart needed."""
     log_message(
         f"Checking favorites page - Current range: {state.current_start_id}-{state.current_end_id}",
         "INFO",
@@ -444,12 +463,35 @@ async def check_and_update_favorites(
 
     html_content = await fetch_favorites_page(session)
     if not html_content:
-        return
+        return False
 
     current_favorites = parse_favorites_html(html_content)
     if not current_favorites:
-        log_message("No favorites found on page", "WARNING")
-        return
+        state.no_favorites_count += 1
+        log_message(
+            f"No favorites found on page (count: {state.no_favorites_count})", "WARNING"
+        )
+
+        if state.no_favorites_count >= MAX_NO_FAVORITES_COUNT:
+            log_message(
+                f"No favorites error threshold reached ({state.no_favorites_count}). Triggering restart.",
+                "ERROR",
+            )
+            await send_alert(
+                f"No favorites error hit {state.no_favorites_count} times - restarting scraper"
+            )
+            return True
+
+        state.save_state()
+        return False
+
+    # Reset counter if we found favorites
+    if state.no_favorites_count > 0:
+        log_message(
+            f"Favorites found again, resetting no_favorites_count from {state.no_favorites_count} to 0",
+            "INFO",
+        )
+        state.no_favorites_count = 0
 
     current_post_ids = {fav["post_id"] for fav in current_favorites}
 
@@ -503,6 +545,7 @@ async def check_and_update_favorites(
     # Update known post IDs
     state.known_post_ids.update(current_post_ids)
     state.save_state()
+    return False
 
 
 async def initialize_favorites(
@@ -526,42 +569,70 @@ async def initialize_favorites(
         state.save_state()
 
     await asyncio.sleep(1)  # just to make sure the favorite load in the first go
-    await check_and_update_favorites(session, state)
+    needs_restart = await check_and_update_favorites(session, state)
+    if needs_restart:
+        raise Exception("Restart needed during initialization")
 
 
 async def run_favorites_manager() -> None:
     """Main function to run the favorites manager"""
-    state = FavoritesState()
-
-    session = requests.Session()
-    if not login_sync(session):
-        return
-
-    if state.known_post_ids:
-        available_start = int(max(state.known_post_ids))
-        state.update_range(available_start)
-        state.save_state()
-
-    await initialize_websocket()
-    await initialize_favorites(session, state)
-
     while True:
-        await sleep_until_market_open()
+        try:
+            state = FavoritesState()
+            session = requests.Session()
 
-        log_message("Market is open. Starting favorites monitoring...", "DEBUG")
-        _, _, market_close_time = get_next_market_times()
+            if not login_sync(session):
+                log_message("Login failed, retrying in 30 seconds...", "ERROR")
+                await asyncio.sleep(30)
+                continue
 
-        while True:
-            current_time = get_current_time()
+            if state.known_post_ids:
+                available_start = int(max(state.known_post_ids))
+                state.update_range(available_start)
+                state.save_state()
 
-            if current_time > market_close_time:
+            await initialize_websocket()
+            await initialize_favorites(session, state)
+
+            while True:
+                await sleep_until_market_open()
+
+                log_message("Market is open. Starting favorites monitoring...", "DEBUG")
+                _, _, market_close_time = get_next_market_times()
+
+                while True:
+                    current_time = get_current_time()
+
+                    if current_time > market_close_time:
+                        log_message(
+                            "Market is closed. Waiting for next market open...", "DEBUG"
+                        )
+                        break
+
+                    needs_restart = await check_and_update_favorites(session, state)
+                    if needs_restart:
+                        raise Exception("Restart triggered by no favorites threshold")
+
+                    await asyncio.sleep(CHECK_INTERVAL)
+
+        except Exception as e:
+            log_message(f"Error in favorites manager, restarting: {e}", "ERROR")
+            try:
+                # Reset state and send alert
+                state = FavoritesState()
+                state.reset_state()
+                session.close()
                 log_message(
-                    "Market is closed. Waiting for next market open...", "DEBUG"
+                    "Session closed and state reset, restarting in 10 seconds...",
+                    "INFO",
                 )
-                break
+            except:
+                log_message(
+                    "Error during cleanup, continuing with restart...", "WARNING"
+                )
 
-            await check_and_update_favorites(session, state)
-            await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(10)
+            continue
 
 
 def main() -> None:
