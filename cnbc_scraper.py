@@ -42,6 +42,7 @@ LATEST_ASSETS_SHA = os.getenv("CNBC_SCRAPER_LATEST_ASSETS_SHA")
 ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
 
 DATA_DIR = Path("data")
+CRED_FILE = "cred/cnbc_creds.json"
 ALERTS_FILE = DATA_DIR / "cnbc_alerts.json"
 
 # NOTE: Only this need to be changed to bypass caching the above 2 sha doesn't change that often
@@ -76,6 +77,15 @@ rate_limiter = RateLimiter()
 
 # Global variables to store previous alerts
 previous_trade_alerts = set()
+
+
+def load_creds():
+    try:
+        with open(CRED_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        log_message(f"Error loading credentials: {e}", "ERROR")
+        return None
 
 
 def load_saved_alerts() -> Set[str]:
@@ -224,7 +234,7 @@ def extracte_blockquote_text(article_body):
     return None
 
 
-async def get_article_data(article_id, uid, session_token):
+async def get_article_data(article_id, uid, session_token, creds):
     await rate_limiter.acquire()
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
     variables = {
@@ -247,8 +257,10 @@ async def get_article_data(article_id, uid, session_token):
         "extensions": json.dumps(extensions),
     }
 
+    # FIXME: The token Would expire every month and need to be changed again / find a way to do it within here...
     headers = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "authorization": f"Bearer {creds["auth_token"]}",
     }
 
     encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
@@ -420,10 +432,12 @@ async def fetch_latest_assets() -> Tuple[List[Dict], str]:
         return [], key
 
 
-async def process_article(article, uid, session_token, fetch_time):
+async def process_article(article, uid, session_token, fetch_time, creds):
     try:
         start_time = time.time()
-        article_data = await get_article_data(article.get("id"), uid, session_token)
+        article_data = await get_article_data(
+            article.get("id"), uid, session_token, creds
+        )
         fetch_data_time = time.time() - start_time
 
         if article_data:
@@ -469,7 +483,7 @@ async def process_article(article, uid, session_token, fetch_time):
     return False
 
 
-async def check_for_new_alerts(uid, session_token):
+async def check_for_new_alerts(uid, session_token, creds):
     global previous_trade_alerts
 
     try:
@@ -492,7 +506,7 @@ async def check_for_new_alerts(uid, session_token):
                 previous_trade_alerts.add(article_id)
                 articles_updated = True
 
-                await process_article(article, uid, session_token, fetch_time)
+                await process_article(article, uid, session_token, fetch_time, creds)
 
         # Save alerts if there were any updates
         if articles_updated:
@@ -503,6 +517,11 @@ async def check_for_new_alerts(uid, session_token):
 
 
 async def run_alert_monitor(uid, session_token):
+    creds = load_creds()
+    if not creds:
+        log_message("Failed to load credentials", "CRITICAL")
+        return
+
     global previous_trade_alerts
 
     while True:
@@ -531,7 +550,7 @@ async def run_alert_monitor(uid, session_token):
                     break
 
                 try:
-                    await check_for_new_alerts(uid, session_token)
+                    await check_for_new_alerts(uid, session_token, creds)
                     await asyncio.sleep(0.2)
 
                 except Exception as e:
