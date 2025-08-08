@@ -43,7 +43,7 @@ LATEST_ASSETS_SHA = os.getenv("CNBC_SCRAPER_LATEST_ASSETS_SHA")
 ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
 
 DATA_DIR = Path("data")
-CRED_FILE = "cred/cnbc_creds.json"
+CRED_FILE = "cred/josh_creds.json"
 ALERTS_FILE = DATA_DIR / "josh_brown_alerts.json"
 
 # NOTE: Only this need to be changed to bypass caching the above 2 sha doesn't change that often
