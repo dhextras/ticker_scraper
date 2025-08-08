@@ -55,19 +55,27 @@ def extract_ticker_from_html(html_content: str) -> Optional[TickerInfo]:
     soup = BeautifulSoup(html_content, "html.parser")
     text_content = soup.get_text()
 
-    # Single pattern to match both NYSE and Nasdaq with case insensitivity
-    pattern = r"\(\s*((?:NYSE|NASDAQ))(?:\s*:\s*)([A-Z]+)\s*\)"
+    pattern = r"\(([^)]+)\)"
 
-    # Case insensitive search
-    match = re.search(pattern, text_content, re.IGNORECASE)
-    if match:
-        exchange = match.group(1).upper()  # Normalize to uppercase
-        # Convert to standard form (NASDAQ instead of Nasdaq)
-        if exchange.upper() == "NASDAQ":
-            exchange = "NASDAQ"
-        else:
-            exchange = "NYSE"
-        return TickerInfo(ticker=match.group(2), exchange=exchange)
+    matches = re.findall(pattern, text_content)
+
+    for match in matches:
+        pair_pattern = r"(NYSE|NASDAQ)\s*:\s*([A-Z]+)"
+        pairs = re.findall(pair_pattern, match, re.IGNORECASE)
+
+        if pairs:
+            # Take the first NYSE or NASDAQ pair found
+            exchange, ticker = pairs[0]
+            exchange = exchange.upper()
+
+            if exchange == "NASDAQ":
+                exchange = "NASDAQ"
+            elif exchange == "NYSE":
+                exchange = "NYSE"
+            else:
+                return None
+
+            return TickerInfo(ticker=ticker.upper(), exchange=exchange)
 
     return None
 
