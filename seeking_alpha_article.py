@@ -280,14 +280,15 @@ async def send_article_notification(article, tickers):
         if tickers:
             ticker_info = "\n<b>Tickers:</b>\n"
             for ticker in tickers[:3]:
-                await send_ws_message(
-                    {
-                        "name": f"Seeking Alpha - Article ",
-                        "type": "Buy",
-                        "ticker": ticker,
-                        "sender": "seeking_alpha",
-                    },
-                )
+                if ticker and "symbol" in ticker:
+                    await send_ws_message(
+                        {
+                            "name": f"Seeking Alpha - Article ",
+                            "type": "Buy",
+                            "ticker": ticker["symbol"],
+                            "sender": "seeking_alpha",
+                        },
+                    )
 
                 ticker_info += f"• {ticker['symbol']} - {ticker['company']}\n"
 
