@@ -51,10 +51,13 @@ subscriptions = [
     {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM", "category": "Alerts"},
     {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn", "category": "Alerts"},
     {"name": "pmg", "id": "4B25WARgTMmaRlOCtJYJso", "category": "Alerts"},
+    {"name": "rgf", "id": "47OX3Ub1q9dCSWRWESJLe5", "category": "Alerts"},
+    {"name": "mkv", "id": "6QDB6Y981fUkskp2MzfTz0", "category": "Alerts"},
     {"name": "aln", "id": "6GPKqoNr7GKuuoKRpdMf01", "category": "Issues"},
     {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "category": "Updates"},
     {"name": "taa", "id": "226NJVakKYCxpV8PKbxFdI", "category": "Updates"},
     {"name": "mm2", "id": "2rcJUw40n0QEtHPmYrdeeT", "category": "Reports"},
+    {"name": "rgf", "id": "47OX3Ub1q9dCSWRWESJLe5", "category": "Reports"},
     {"name": "rbc", "id": "2FshbzKdaVQhH3SAoSwOkn", "category": "Reports"},
     {"name": "sei", "id": "32p68JKA43P2tQ0ibAeyDM", "category": "Reports"},
     {"name": "al2", "id": "5CEaime61Vv0QEl5XrRVeb", "category": "Reports"},
@@ -370,7 +373,7 @@ async def send_matches_to_telegram(buy_recs):
         postDate = rec["postDate"]
         sub_name = rec["subscription_name"].upper()
         url = f"https://my.paradigmpressgroup.com/article/{rec['url']}"
-        file_url = rec["file_url"]
+        file_url = rec.get("file_url", None)
 
         post_time = datetime.fromisoformat(postDate.replace("Z", "+00:00"))
 
