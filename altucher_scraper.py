@@ -357,7 +357,7 @@ async def process_reports(session, articles, subscription_name):
     return buy_recommendations
 
 
-async def send_matches_to_telegram(buy_recs):
+async def send_matches_to_telegram(buy_recs, category):
     for rec in buy_recs:
         ticker = rec["ticker"]
 
@@ -382,7 +382,7 @@ async def send_matches_to_telegram(buy_recs):
         )
         current_time_us = get_current_time().strftime("%Y-%m-%d %H:%M:%S %Z")
 
-        message = f"<b>New Buy Recommendation - {sub_name}</b>\n\n"
+        message = f"<b>New Buy Recommendation - {sub_name} {category}</b>\n\n"
         message += f"<b>Stock Symbol:</b> {ticker}\n"
         message += f"<b>Stock Name:</b> {name}\n"
         message += f"<b>Action Desc:</b> {actionDesc}\n"
@@ -442,7 +442,7 @@ async def process_subscription(session, subscription, proxy, processed_urls):
         else:
             buy_recs = await process_articles(new_articles, subscription["name"])
 
-        await send_matches_to_telegram(buy_recs)
+        await send_matches_to_telegram(buy_recs, subscription["category"])
         return new_urls
     return set()
 
