@@ -302,7 +302,31 @@ These steps are only needed if you are using the **Hedgeye** scraper.
    chromedriver --version
    ```
 
-## Step 6: Run the Scripts
+## Step 6: Install and Configure AWS CLI (For Oxford Images/S3 Buckets)
+This step is needed if you are using the **Oxford** scraper.
+
+1. **Install AWS CLI:**
+   ```bash
+   sudo apt install awscli -y
+   ```
+
+2. **Configure AWS Credentials:**
+   ```bash
+   aws configure
+   ```
+   You'll be prompted to enter:
+   - AWS Access Key ID
+   - AWS Secret Access Key
+   - Default region (e.g., us-east-1)
+   - Default output format (json)
+
+3. **Verify Installation:**
+   ```bash
+   aws --version
+   aws s3 ls
+   ```
+
+## Step 7: Run the Scripts
 
 You can run each of the scripts based on your needs:
 
