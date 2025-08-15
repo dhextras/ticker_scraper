@@ -167,6 +167,9 @@ def capture_login_response(message):
             time.sleep(1)
             check_response()
 
+            if ACCESS_TOKEN is not None:
+                break
+
     except Exception as e:
         log_message(f"Error in capture_login_response: {e}", "ERROR")
 
