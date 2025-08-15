@@ -552,7 +552,6 @@ async def get_new_access_token():
     try:
         driver = uc.Chrome(
             enable_cdp_events=True,
-            driver_executable_path="/usr/local/bin/chromedriver",
             options=options,
         )
 
