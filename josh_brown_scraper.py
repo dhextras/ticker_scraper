@@ -53,6 +53,9 @@ last_request_time = 0
 
 # Set up Chrome options
 options = uc.ChromeOptions()
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
 options.add_argument("--maximize-window")
 options.add_argument("--disable-search-engine-choice-screen")
 options.add_argument("--blink-settings=imagesEnabled=false")
@@ -110,15 +113,17 @@ def save_alerts(trade_alerts: Set[str]):
         log_message(f"Error saving alerts: {e}", "ERROR")
 
 
-async def capture_login_response(message):
-    global ACCESS_TOKEN
+def capture_login_response(message):
+    global driver
 
     try:
         response_url = message.get("params", {}).get("response", {}).get("url", "")
+        status = message.get("params", {}).get("response", {}).get("status", "")
 
         if (
             "https://registerng.cnbc.com/api/v4/client/201/users/signin"
             not in response_url
+            or status != 200
         ):
             return
 
@@ -126,35 +131,41 @@ async def capture_login_response(message):
         if not request_id:
             return
 
-        await asyncio.sleep(2)
-
-        try:
-            response_body = driver.execute_cdp_cmd(
-                "Network.getResponseBody", {"requestId": request_id}
-            )
-            response_data = response_body.get("body", "")
+        def check_response():
+            global ACCESS_TOKEN
 
             try:
-                response_json = json.loads(response_data)
-            except json.JSONDecodeError:
-                log_message("Failed to parse response JSON", "CRITICAL")
-                response_json = {}
-
-            access_token = response_json.get("data", {}).get("access_token", None)
-            if access_token == None:
-                await send_critical_alert()
-
-            log_message(f"Intercepted Access Token: {access_token}", "INFO")
-            ACCESS_TOKEN = access_token
-
-        except Exception as e:
-            if "No resource with given identifier found" in str(e):
-                log_message(
-                    "Resource not found or cleared, unable to fetch the response body.",
-                    "WARNING",
+                response_body = driver.execute_cdp_cmd(
+                    "Network.getResponseBody", {"requestId": request_id}
                 )
-            else:
-                raise e
+                response_data = response_body.get("body", "")
+
+                try:
+                    response_json = json.loads(response_data)
+                except json.JSONDecodeError:
+                    log_message("Failed to parse response JSON", "CRITICAL")
+                    response_json = {}
+
+                access_token = response_json.get("data", {}).get("access_token", None)
+                if access_token == None:
+                    asyncio.run(send_critical_alert())
+
+                log_message(f"Intercepted Access Token: {access_token}", "INFO")
+                ACCESS_TOKEN = access_token
+
+            except Exception as e:
+                if "No resource with given identifier found" in str(e):
+                    log_message(
+                        "Resource not found or cleared, unable to fetch the response body.",
+                        "WARNING",
+                    )
+                else:
+                    raise e
+
+        # NOTE: JUst wait for 10 sec and exit if no token found
+        for _ in range(10):
+            time.sleep(1)
+            check_response()
 
     except Exception as e:
         log_message(f"Error in capture_login_response: {e}", "ERROR")
@@ -508,7 +519,9 @@ async def run_alert_monitor(uid):
             await initialize_ticker_deck("Josh Brown")
 
             if not ACCESS_TOKEN:
-                get_new_access_token()
+                await get_new_access_token()
+                if not ACCESS_TOKEN:
+                    await send_critical_alert()
 
             log_message(
                 "Market is open. Starting to check for new Josh Brown posts...", "DEBUG"
@@ -540,32 +553,36 @@ async def run_alert_monitor(uid):
             await asyncio.sleep(5)
 
 
-def get_new_access_token():
+async def get_new_access_token():
     global ACCESS_TOKEN
     global driver
 
     try:
         driver = uc.Chrome(enable_cdp_events=True, options=options)
+
+        driver.execute_cdp_cmd("Network.enable", {})
+
         driver.add_cdp_listener("Network.requestWillBeSent", lambda _: None)
         driver.add_cdp_listener("Network.responseReceived", capture_login_response)
 
+        log_message("Trying to login to cnbc...")
         driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
-        time.sleep(random.uniform(2, 5))
+        await asyncio.sleep(random.uniform(2, 5))
 
         scroll_pause_time = random.uniform(1, 3)
         for _ in range(3):
             driver.execute_script(f"window.scrollBy(0, {random.uniform(300, 500)});")
-            time.sleep(scroll_pause_time)
+            await asyncio.sleep(scroll_pause_time)
 
         driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(scroll_pause_time)
+        await asyncio.sleep(scroll_pause_time)
 
         action = ActionChains(driver)
         sign_in_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CLASS_NAME, "SignInMenu-signInMenu"))
         )
         action.move_to_element(sign_in_button).perform()
-        time.sleep(random.uniform(1, 2))
+        await asyncio.sleep(random.uniform(1, 2))
         sign_in_button.click()
 
         email_input = WebDriverWait(driver, 20).until(
@@ -577,35 +594,32 @@ def get_new_access_token():
             sys.exit(1)
 
         email_input.send_keys(GMAIL_USERNAME)
-        time.sleep(2)
+        await asyncio.sleep(2)
         password_input = driver.find_element(By.NAME, "password")
         password_input.send_keys(GMAIL_PASSWORD)
-        time.sleep(5)
+        await asyncio.sleep(5)
 
         password_input.send_keys(Keys.ENTER)
-        time.sleep(10)
+        await asyncio.sleep(10)
 
         driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
+        await asyncio.sleep(5)
 
     except Exception as e:
         log_message(f"Failed to get a new access token: {e}", "ERROR")
         log_message(f"Using existing access token: {ACCESS_TOKEN}", "INFO")
     finally:
-        driver.quit()
+        if "driver" in globals():
+            driver.quit()
 
 
 def main():
     uid = GMAIL_USERNAME
 
-    # Get initial access token if needed
-    if not ACCESS_TOKEN:
-        get_new_access_token()
-
     if not all(
         [
             TELEGRAM_BOT_TOKEN,
             TELEGRAM_CHAT_ID,
-            ACCESS_TOKEN,
             GMAIL_USERNAME,
             GMAIL_PASSWORD,
             LATEST_ASSETS_SHA,
