@@ -8,7 +8,6 @@ import time
 import urllib.parse
 import uuid
 from datetime import datetime
-from functools import wraps
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
@@ -47,7 +46,7 @@ CRED_FILE = "cred/josh_creds.json"
 ALERTS_FILE = DATA_DIR / "josh_brown_alerts.json"
 
 # NOTE: Only this need to be changed to bypass caching the above 2 sha doesn't change that often
-SESSION_TOKEN = os.getenv("JOSH_BROWN_SESSION_TOKEN")
+ACCESS_TOKEN = None
 
 # Global variables
 last_request_time = 0
@@ -78,15 +77,6 @@ rate_limiter = RateLimiter()
 
 # Global variables to store previous alerts
 previous_trade_alerts = set()
-
-
-def load_creds():
-    try:
-        with open(CRED_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        log_message(f"Error loading credentials: {e}", "ERROR")
-        return None
 
 
 def load_saved_alerts() -> Set[str]:
@@ -120,40 +110,16 @@ def save_alerts(trade_alerts: Set[str]):
         log_message(f"Error saving alerts: {e}", "ERROR")
 
 
-def timing_decorator(func):
-    @wraps(func)
-    async def async_wrapper(*args, **kwargs):
-        start_time = time.time()
-        result = await func(*args, **kwargs)
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        if elapsed_time > 1:
-            log_message(
-                f"{func.__name__} took {elapsed_time:.2f} seconds to execute", "ERROR"
-            )
-        return result
-
-    @wraps(func)
-    def sync_wrapper(*args, **kwargs):
-        start_time = time.time()
-        result = func(*args, **kwargs)
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        if elapsed_time > 1:
-            log_message(
-                f"{func.__name__} took {elapsed_time:.2f} seconds to execute", "ERROR"
-            )
-        return result
-
-    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
-
-
 async def capture_login_response(message):
-    global SESSION_TOKEN
+    global ACCESS_TOKEN
+
     try:
         response_url = message.get("params", {}).get("response", {}).get("url", "")
 
-        if "https://register.cnbc.com/auth/api/v3/signin" not in response_url:
+        if (
+            "https://registerng.cnbc.com/api/v4/client/201/users/signin"
+            not in response_url
+        ):
             return
 
         request_id = message.get("params", {}).get("requestId")
@@ -171,12 +137,15 @@ async def capture_login_response(message):
             try:
                 response_json = json.loads(response_data)
             except json.JSONDecodeError:
-                log_message("Failed to parse response JSON", "WARNING")
+                log_message("Failed to parse response JSON", "CRITICAL")
                 response_json = {}
 
-            session_token = response_json.get("session_token", SESSION_TOKEN)
-            log_message(f"Intercepted Session Token: {session_token}", "INFO")
-            SESSION_TOKEN = session_token
+            access_token = response_json.get("data", {}).get("access_token", None)
+            if access_token == None:
+                await send_critical_alert()
+
+            log_message(f"Intercepted Access Token: {access_token}", "INFO")
+            ACCESS_TOKEN = access_token
 
         except Exception as e:
             if "No resource with given identifier found" in str(e):
@@ -253,13 +222,12 @@ def extract_full_text_content(body_content):
     return full_text.strip()
 
 
-async def get_article_data(article_id, uid, session_token, creds):
+async def get_article_data(article_id, uid, access_token):
     await rate_limiter.acquire()
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
     variables = {
         "id": article_id,
         "uid": uid,
-        "sessionToken": session_token,
         "pid": 33,
         "bedrockV3API": True,
         "sponsoredProExperienceID": "",
@@ -279,7 +247,7 @@ async def get_article_data(article_id, uid, session_token, creds):
     # FIXME: The token Would expire every month and need to be changed again / find a way to do it within here...
     headers = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "authorization": f"Bearer {creds["auth_token"]}",
+        "authorization": f"Bearer {access_token}",
     }
 
     encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
@@ -299,7 +267,7 @@ async def get_article_data(article_id, uid, session_token, creds):
 
                     if not is_authenticated:
                         log_message(
-                            "Authentication required. Please provide a valid session token.",
+                            "Authentication required. Please provide a valid Access token.",
                             "WARNING",
                         )
                         return None
@@ -326,6 +294,11 @@ async def get_article_data(article_id, uid, session_token, creds):
         except Exception as e:
             log_message(f"Exception in get_article_data: {e}", "ERROR")
             return None
+
+
+async def send_critical_alert():
+    alert = f"🚨 ALERT: Couldn't generate new access token...\nPlease check the server immediately!"
+    await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
 
 def get_random_cache_buster():
@@ -437,12 +410,10 @@ async def fetch_latest_assets() -> Tuple[List[Dict], str]:
         return [], key
 
 
-async def process_article(article, uid, session_token, fetch_time, creds):
+async def process_article(article, uid, access_token, fetch_time):
     try:
         start_time = time.time()
-        body_content = await get_article_data(
-            article.get("id"), uid, session_token, creds
-        )
+        body_content = await get_article_data(article.get("id"), uid, access_token)
         fetch_data_time = time.time() - start_time
 
         if body_content:
@@ -495,7 +466,7 @@ async def process_article(article, uid, session_token, fetch_time, creds):
     return False
 
 
-async def check_for_new_alerts(uid, session_token, creds):
+async def check_for_new_alerts(uid, access_token):
     global previous_trade_alerts
 
     try:
@@ -517,7 +488,7 @@ async def check_for_new_alerts(uid, session_token, creds):
                 previous_trade_alerts.add(article_id)
                 articles_updated = True
 
-                await process_article(article, uid, session_token, fetch_time, creds)
+                await process_article(article, uid, access_token, fetch_time)
 
         if articles_updated:
             save_alerts(previous_trade_alerts)
@@ -526,19 +497,18 @@ async def check_for_new_alerts(uid, session_token, creds):
         log_message(f"Error in check_for_new_alerts: {e}", "ERROR")
 
 
-async def run_alert_monitor(uid, session_token):
-    creds = load_creds()
-    if not creds:
-        log_message("Failed to load credentials", "CRITICAL")
-        return
-
+async def run_alert_monitor(uid):
     global previous_trade_alerts
+    global ACCESS_TOKEN
 
     while True:
         try:
             await sleep_until_market_open()
             await initialize_websocket()
             await initialize_ticker_deck("Josh Brown")
+
+            if not ACCESS_TOKEN:
+                get_new_access_token()
 
             log_message(
                 "Market is open. Starting to check for new Josh Brown posts...", "DEBUG"
@@ -554,10 +524,11 @@ async def run_alert_monitor(uid, session_token):
                     log_message(
                         "Market is closed. Waiting for next market open...", "DEBUG"
                     )
+                    ACCESS_TOKEN = None
                     break
 
                 try:
-                    await check_for_new_alerts(uid, session_token, creds)
+                    await check_for_new_alerts(uid, ACCESS_TOKEN)
                     await asyncio.sleep(0.2)
 
                 except Exception as e:
@@ -569,8 +540,8 @@ async def run_alert_monitor(uid, session_token):
             await asyncio.sleep(5)
 
 
-def get_new_session_token():
-    global SESSION_TOKEN
+def get_new_access_token():
+    global ACCESS_TOKEN
     global driver
 
     try:
@@ -583,7 +554,7 @@ def get_new_session_token():
 
         scroll_pause_time = random.uniform(1, 3)
         for _ in range(3):
-            driver.execute_script(f"window.scrollBy(0, {random.randint(300, 500)});")
+            driver.execute_script(f"window.scrollBy(0, {random.uniform(300, 500)});")
             time.sleep(scroll_pause_time)
 
         driver.execute_script("window.scrollTo(0, 0);")
@@ -602,7 +573,7 @@ def get_new_session_token():
         )
 
         if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
-            log_message(f"GMAIL_USERNAME isn't available in the env", "CRITICAL")
+            log_message(f"GMAIL_USERNAME isn't availble in the env", "CRITICAL")
             sys.exit(1)
 
         email_input.send_keys(GMAIL_USERNAME)
@@ -617,8 +588,8 @@ def get_new_session_token():
         driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
 
     except Exception as e:
-        log_message(f"Failed to get a new session token: {e}", "ERROR")
-        log_message(f"Using existing session token: {SESSION_TOKEN}", "INFO")
+        log_message(f"Failed to get a new access token: {e}", "ERROR")
+        log_message(f"Using existing access token: {ACCESS_TOKEN}", "INFO")
     finally:
         driver.quit()
 
@@ -626,11 +597,15 @@ def get_new_session_token():
 def main():
     uid = GMAIL_USERNAME
 
+    # Get initial access token if needed
+    if not ACCESS_TOKEN:
+        get_new_access_token()
+
     if not all(
         [
             TELEGRAM_BOT_TOKEN,
             TELEGRAM_CHAT_ID,
-            SESSION_TOKEN,
+            ACCESS_TOKEN,
             GMAIL_USERNAME,
             GMAIL_PASSWORD,
             LATEST_ASSETS_SHA,
@@ -641,10 +616,7 @@ def main():
         sys.exit(1)
 
     try:
-        if not SESSION_TOKEN:
-            get_new_session_token()
-
-        asyncio.run(run_alert_monitor(uid, SESSION_TOKEN))
+        asyncio.run(run_alert_monitor(uid))
 
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
