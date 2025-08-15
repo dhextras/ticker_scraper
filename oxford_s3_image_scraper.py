@@ -195,7 +195,7 @@ async def run_scraper():
                     save_processed_files(processed_files)
                     log_message(f"Found {len(new_files)} new files", "INFO")
                 else:
-                    log_message("No new files found", "DEBUG")
+                    log_message("No new files found", "INFO")
 
             await asyncio.sleep(SYNC_INTERVAL)
 
