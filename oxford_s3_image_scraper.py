@@ -190,7 +190,7 @@ async def run_scraper():
                 new_files = current_files - processed_files
 
                 if new_files:
-                    # await send_new_files_to_telegram(new_files)
+                    await send_new_files_to_telegram(new_files)
                     processed_files.update(new_files)
                     save_processed_files(processed_files)
                     log_message(f"Found {len(new_files)} new files", "INFO")
