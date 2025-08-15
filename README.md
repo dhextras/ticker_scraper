@@ -303,11 +303,14 @@ These steps are only needed if you are using the **Hedgeye** scraper.
    ```
 
 ## Step 6: Install and Configure AWS CLI (For Oxford Images/S3 Buckets)
-This step is needed if you are using the **Oxford** scraper.
 
 1. **Install AWS CLI:**
    ```bash
-   sudo apt install awscli -y
+   cd /tmp/
+   curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+   unzip awscliv2.zip
+   sudo ./aws/install
+   cd -
    ```
 
 2. **Configure AWS Credentials:**
