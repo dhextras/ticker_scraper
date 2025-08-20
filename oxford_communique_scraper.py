@@ -97,11 +97,20 @@ def extract_tickers(rec_text):
     results = {"Buy": [], "Sell": []}
 
     for action, section in sections.items():
-        # Find all ticker matches
-        matches = re.finditer(r"(NYSE|Nasdaq|CBOE|OTC):\s*([A-Z]+)", section)
-        for match in matches:
+        # First, find matches with exchange prefixes
+        exchange_matches = re.finditer(r"(NYSE|Nasdaq|CBOE|OTC):\s*([A-Z]+)", section)
+        for match in exchange_matches:
             provider, ticker = match.groups()
             results[action].append((provider, ticker))
+
+        # Find direct ticker matches (Buy/Sell TICKER format)
+        direct_matches = re.finditer(rf"{action}\s+([A-Z]{{2,5}})", section)
+        for match in direct_matches:
+            ticker = match.group(1)
+            # Only add if we haven't already found this ticker with an exchange
+            existing_tickers = [t[1] for t in results[action]]
+            if ticker not in existing_tickers:
+                results[action].append(("Unknown", ticker))
 
     return results
 
