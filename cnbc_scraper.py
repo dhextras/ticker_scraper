@@ -13,13 +13,9 @@ from typing import Dict, List, Set, Tuple
 
 import aiohttp
 import requests
-import undetected_chromedriver as uc
 from dotenv import load_dotenv
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from DrissionPage import ChromiumOptions, ChromiumPage
+from DrissionPage.common import Keys
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
@@ -48,15 +44,6 @@ ACCESS_TOKEN = None
 
 # Global variables
 last_request_time = 0
-
-# Set up Chrome options
-options = uc.ChromeOptions()
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-gpu")
-options.add_argument("--maximize-window")
-options.add_argument("--disable-search-engine-choice-screen")
-options.add_argument("--blink-settings=imagesEnabled=false")
 
 
 class RateLimiter:
@@ -110,70 +97,6 @@ def save_alerts(trade_alerts: Set[str]):
             json.dump(data, f, indent=2)
     except Exception as e:
         log_message(f"Error saving alerts: {e}", "ERROR")
-
-
-def capture_login_response(message):
-    global driver
-
-    try:
-        # Check if the URL matches the login endpoint
-        response_url = message.get("params", {}).get("response", {}).get("url", "")
-        status = message.get("params", {}).get("response", {}).get("status", "")
-
-        if (
-            "https://registerng.cnbc.com/api/v4/client/201/users/signin"
-            not in response_url
-            or status != 200
-        ):
-            return
-
-        request_id = message.get("params", {}).get("requestId")
-        if not request_id:
-            return
-
-        def check_response():
-            global ACCESS_TOKEN
-
-            try:
-                # Get response body using CDP command
-                response_body = driver.execute_cdp_cmd(
-                    "Network.getResponseBody", {"requestId": request_id}
-                )
-                response_data = response_body.get("body", "")
-
-                try:
-                    response_json = json.loads(response_data)
-                except json.JSONDecodeError:
-                    log_message("Failed to parse response JSON", "CRITICAL")
-                    response_json = {}
-
-                # Extract and update access token
-                access_token = response_json.get("data", {}).get("access_token", None)
-                if access_token == None:
-                    asyncio.run(send_critical_alert())
-
-                log_message(f"Intercepted Access Token: {access_token}", "INFO")
-                ACCESS_TOKEN = access_token
-
-            except Exception as e:
-                if "No resource with given identifier found" in str(e):
-                    log_message(
-                        "Resource not found or cleared, unable to fetch the response body.",
-                        "WARNING",
-                    )
-                else:
-                    raise e
-
-        # NOTE: JUst wait for 10 sec and exit if no token found
-        for _ in range(10):
-            time.sleep(1)
-            check_response()
-
-            if ACCESS_TOKEN is not None:
-                break
-
-    except Exception as e:
-        log_message(f"Error in capture_login_response: {e}", "ERROR")
 
 
 def extracte_blockquote_text(article_body):
@@ -547,64 +470,144 @@ async def run_alert_monitor(uid):
 
 async def get_new_access_token():
     global ACCESS_TOKEN
-    global driver
+    max_retries = 5
 
-    try:
-        driver = uc.Chrome(
-            enable_cdp_events=True,
-            options=options,
-        )
+    for attempt in range(max_retries):
+        options = ChromiumOptions()
+        options.set_argument("--no-sandbox")
+        options.set_argument("--disable-dev-shm-usage")
+        options.set_argument("--disable-gpu")
+        options.set_argument("--maximize-window")
+        options.set_argument("--disable-search-engine-choice-screen")
+        options.set_argument("--blink-settings=imagesEnabled=false")
+        page = ChromiumPage()
+        page.clear_cache()
 
-        driver.execute_cdp_cmd("Network.enable", {})
-        driver.add_cdp_listener("Network.requestWillBeSent", lambda _: None)
-        driver.add_cdp_listener("Network.responseReceived", capture_login_response)
+        try:
+            log_message(f"Login attempt {attempt + 1}/{max_retries}")
+            page.listen.start(
+                "https://registerng.cnbc.com/api/v4/client/201/users/signin"
+            )
+            log_message("Trying to login to cnbc...")
+            page.get("https://www.cnbc.com/investingclub/trade-alerts/")
+            await asyncio.sleep(random.uniform(2, 4))
 
-        log_message("Trying to login to cnbc...")
-        driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
-        await asyncio.sleep(random.uniform(2, 5))
-
-        scroll_pause_time = random.uniform(1, 3)
-        for _ in range(3):
-            driver.execute_script(f"window.scrollBy(0, {random.uniform(300, 500)});")
+            scroll_pause_time = random.uniform(1, 2)
+            for _ in range(3):
+                page.scroll.down(random.randint(80, 300))
+                await asyncio.sleep(scroll_pause_time)
+            page.scroll.to_top()
             await asyncio.sleep(scroll_pause_time)
 
-        driver.execute_script("window.scrollTo(0, 0);")
-        await asyncio.sleep(scroll_pause_time)
+            async def login():
+                try:
+                    sign_in_button = page.ele("SIGN IN", timeout=5)
+                    await asyncio.sleep(random.uniform(1, 2))
+                    sign_in_button.click()
+                    await asyncio.sleep(2)
 
-        action = ActionChains(driver)
-        sign_in_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, "SignInMenu-signInMenu"))
-        )
-        action.move_to_element(sign_in_button).perform()
-        await asyncio.sleep(random.uniform(1, 2))
-        sign_in_button.click()
+                    email_input = page.ele("email", timeout=1)
+                    password_input = page.ele('css:input[name="password"]', timeout=1)
 
-        email_input = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.NAME, "email"))
-        )
+                    if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
+                        log_message(
+                            f"GMAIL_USERNAME isn't available in the env", "CRITICAL"
+                        )
+                        sys.exit(1)
 
-        if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
-            log_message(f"GMAIL_USERNAME isn't availble in the env", "CRITICAL")
-            sys.exit(1)
+                    email_input.clear()
+                    email_input.input(GMAIL_USERNAME)
 
-        email_input.send_keys(GMAIL_USERNAME)
-        await asyncio.sleep(2)
-        password_input = driver.find_element(By.NAME, "password")
-        password_input.send_keys(GMAIL_PASSWORD)
-        await asyncio.sleep(5)
+                    password_input.clear()
+                    await asyncio.sleep(2)
+                    password_input.input(GMAIL_PASSWORD + Keys.ENTER)
+                    await asyncio.sleep(3)
 
-        password_input.send_keys(Keys.ENTER)
-        await asyncio.sleep(10)
+                    sign_in_ele = page.ele('css:button[name="signin"]', timeout=5)
+                    if "NoneElement" not in str(sign_in_ele):
+                        sign_in_ele.click()
 
-        driver.get("https://www.cnbc.com/investingclub/trade-alerts/")
-        await asyncio.sleep(5)
+                    return True
+                except Exception as login_error:
+                    log_message(f"Login attempt failed: {login_error}", "WARNING")
+                    return False
 
-    except Exception as e:
-        log_message(f"Failed to get a new access token: {e}", "ERROR")
-        log_message(f"Using existing access token: {ACCESS_TOKEN}", "INFO")
-    finally:
-        if "driver" in globals():
-            driver.quit()
+            login_success = await login()
+            if not login_success:
+                log_message(f"Login failed on attempt {attempt + 1}", "WARNING")
+                raise Exception("Login failed")
+
+            token_found = False
+
+            i = 0
+            for packet in page.listen.steps():
+                try:
+                    if (
+                        packet.response
+                        and packet.response.extra_info
+                        and packet.response.extra_info.all_info
+                    ):
+                        status_code = packet.response.extra_info.all_info.get(
+                            "statusCode"
+                        )
+
+                        if packet.response.body:
+                            access_token = packet.response.body.get("data", {}).get(
+                                "access_token", None
+                            )
+
+                            if access_token and status_code == 200:
+                                log_message(
+                                    f"Successfully intercepted Access Token: {access_token[:30]}...",
+                                    "INFO",
+                                )
+                                ACCESS_TOKEN = access_token
+                                token_found = True
+                                return
+                            else:
+                                log_message(
+                                    f"Invalid token or status code. Status: {status_code}, Token present: {access_token is not None}",
+                                    "WARNING",
+                                )
+
+                except Exception as packet_error:
+                    log_message(f"Error processing packet: {packet_error}", "WARNING")
+                    continue
+
+                # NOTE: This is just here to break the page.liste.steps() from waiting forever
+                if i >= 1:
+                    break
+                i += 1
+
+            page.listen.stop()
+
+            if not token_found:
+                raise Exception("No valid access token found in response")
+
+        except Exception as e:
+            log_message(f"Attempt {attempt + 1} failed: {e}", "ERROR")
+
+            try:
+                page.clear_cache()
+                page.quit()
+            except:
+                pass
+
+            if attempt < max_retries - 1:
+                wait_time = random.uniform(3, 6)
+                log_message(f"Waiting {wait_time:.1f} seconds before retry...", "INFO")
+                await asyncio.sleep(wait_time)
+            else:
+                log_message(f"All {max_retries} login attempts failed", "ERROR")
+                log_message(f"Using existing access token: {ACCESS_TOKEN}", "INFO")
+                await send_critical_alert()
+                return
+        finally:
+            try:
+                page.clear_cache()
+                page.quit()
+            except:
+                pass
 
 
 def main():
