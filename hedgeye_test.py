@@ -51,7 +51,8 @@ LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
 FETCH_PER_ACCOUNT = (
     27  # Max is 30 so we can adjust this accordingly if needed ( We will use -+2)
 )
-SLEEP_BETWEEN_REQUESTS = 0.4  # Adjust this depend on how they rate limit
+SLEEP_BETWEEN_REQUESTS = 0.6  # Adjust this depend on how they rate limit
+BATCH_SIZE = 5  # Number of accounts to rotate through
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -132,9 +133,8 @@ class AccountManager:
     def __init__(self, accounts: List[Tuple[str, str]]):
         self.accounts = accounts
         self.rate_limited: Dict[str, datetime] = self._load_rate_limited()
-        self.currently_running: Set[str] = set()
         self.lock = asyncio.Lock()
-        self.current_index = 0
+        self.batch_index = 0
 
     def _load_rate_limited(self) -> Dict[str, datetime]:
         if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
@@ -153,7 +153,9 @@ class AccountManager:
             rate_limited = {k: v.isoformat() for k, v in self.rate_limited.items()}
             json.dump(rate_limited, f)
 
-    async def get_all_available_accounts(self) -> Tuple[int, List[Tuple[str, str]]]:
+    async def get_account_batch(
+        self, batch_size: int = BATCH_SIZE
+    ) -> List[Tuple[str, str]]:
         async with self.lock:
             current_time = get_current_time()
             expired_accounts = [
@@ -172,70 +174,26 @@ class AccountManager:
             if expired_accounts:
                 self._save_rate_limited()
 
-            # Get available accounts
             available = [
-                acc
-                for acc in self.accounts
-                if acc[0] not in self.rate_limited
-                and acc[0] not in self.currently_running
+                acc for acc in self.accounts if acc[0] not in self.rate_limited
             ]
 
             if not available:
-                return 0, []
+                return []
 
-            self.currently_running.update(email for email, _ in available)
-            return len(available), available
-
-    async def get_available_accounts(
-        self, count: int
-    ) -> Tuple[int, List[Tuple[str, str]]]:
-        async with self.lock:
-            current_time = get_current_time()
-            expired_accounts = [
-                email
-                for email, limit_time in self.rate_limited.items()
-                if (current_time - limit_time).total_seconds() >= 1800  # 30 minutes
+            # Create batches and return the current one
+            batches = [
+                available[i : i + batch_size]
+                for i in range(0, len(available), batch_size)
             ]
 
-            for email in expired_accounts:
-                del self.rate_limited[email]
-                log_message(
-                    f"Account {email} removed from rate limits (30-minute expired)",
-                    "INFO",
-                )
+            if self.batch_index >= len(batches):
+                self.batch_index = 0
 
-            if expired_accounts:
-                self._save_rate_limited()
+            current_batch = batches[self.batch_index]
+            self.batch_index += 1
 
-            # Get available accounts
-            available = [
-                acc
-                for acc in self.accounts
-                if acc[0] not in self.rate_limited
-                and acc[0] not in self.currently_running
-            ]
-
-            if not available:
-                return 0, []
-
-            selected = []
-            remaining = count
-
-            while remaining > 0 and available:
-                if self.current_index >= len(available):
-                    self.current_index = 0
-
-                selected.append(available[self.current_index])
-                self.current_index += 1
-                remaining -= 1
-
-            self.currently_running.update(email for email, _ in selected)
-            return len(available), selected
-
-    async def release_account(self, email: str):
-        async with self.lock:
-            if email in self.currently_running:
-                self.currently_running.remove(email)
+            return current_batch
 
     def mark_rate_limited(self, email: str):
         log_message(
@@ -246,7 +204,7 @@ class AccountManager:
 
     def clear_rate_limits(self):
         self.rate_limited.clear()
-        self.currently_running.clear()
+        self.batch_index = 0
         if os.path.exists(RATE_LIMIT_ACCOUNTS_FILE):
             os.remove(RATE_LIMIT_ACCOUNTS_FILE)
         log_message("All account rate limits cleared", "INFO")
@@ -760,86 +718,61 @@ async def process_accounts_continuously(
     account_manager: AccountManager,
     proxy_manager: ProxyManager,
     last_alert_lock: asyncio.Lock,
-    init_valid_accounts: int,
 ):
-    start_time = time.time()
-    all_diffs = generate_equalized_differentiators(init_valid_accounts)
-
     while True:
         try:
-            # available_len, accounts = await account_manager.get_available_accounts(1)
-            available_len, accounts = await account_manager.get_all_available_accounts()
-            if not accounts and len(accounts) < 1:
-                # If no accounts available, wait briefly and try again
-                log_message("No available account found to process", "Warning")
+            current_batch = await account_manager.get_account_batch()
+            if not current_batch:
+                log_message("No available accounts found to process", "WARNING")
                 await asyncio.sleep(1)
                 continue
 
-            # NOTE: Proccess all the acounts one by one then do the same for the next account before processing the next cycle
-            # Incase in future you update this function handle it in other ways.
-            for account in accounts:
-                if len(all_diffs) < 1:
-                    log_message(
-                        f"Finished processing single cycle of all accounts in {time.time() - start_time:.2f}s",
-                        "INFO",
-                    )
-                    start_time = time.time()
-                    all_diffs = generate_equalized_differentiators(available_len)
+            batch_size = len(current_batch)
+            all_diffs = generate_equalized_differentiators(batch_size)
 
-                # email, password = accounts[0]
-                email, password = account
-                proxy = (
-                    proxy_manager.get_next_proxy()
-                )  # NOTE: Use the same proxy for a single account to avoid being flagged
+            # Assign proxies to each account in the batch
+            account_proxies = {}
+            for email, password in current_batch:
+                try:
+                    account_proxies[email] = proxy_manager.get_next_proxy()
+                except Exception as e:
+                    log_message(f"No available proxy for {email}: {str(e)}", "WARNING")
+                    continue
 
-                # Use the first diff and then remove it after processing it
-                fetch_count = FETCH_PER_ACCOUNT + (all_diffs[0])
-                log_message(
-                    f"Start processing {email} with {fetch_count} requests using proxy {proxy}",
-                    "INFO",
-                )
-                for _ in range(fetch_count):
-                    asyncio.create_task(
-                        process_account_with_release(
-                            email,
-                            password,
-                            proxy,
-                            proxy_manager,
-                            last_alert_lock,
-                            account_manager,
+            log_message(f"Processing batch of {batch_size} accounts", "INFO")
+
+            # Calculate total requests per account
+            requests_per_account = [FETCH_PER_ACCOUNT + diff for diff in all_diffs]
+
+            # Rotate through accounts
+            max_requests = max(requests_per_account)
+            for request_round in range(max_requests):
+                tasks = []
+                for idx, (email, password) in enumerate(current_batch):
+                    if email not in account_proxies:
+                        continue
+
+                    if request_round < requests_per_account[idx]:
+                        proxy = account_proxies[email]
+                        task = asyncio.create_task(
+                            process_account(
+                                email,
+                                password,
+                                proxy,
+                                proxy_manager,
+                                account_manager,
+                                last_alert_lock,
+                            )
                         )
-                    )
+                        tasks.append(task)
 
+                if tasks:
+                    await asyncio.gather(*tasks)
                     await asyncio.sleep(SLEEP_BETWEEN_REQUESTS)
-
-                all_diffs.pop(0)
-
-                await account_manager.release_account(email)
 
         except Exception as e:
             log_message(f"Error in process_accounts_continuously: {str(e)}", "ERROR")
             await asyncio.sleep(1)
-
-
-async def process_account_with_release(
-    email: str,
-    password: str,
-    proxy: str,
-    proxy_manager: ProxyManager,
-    last_alert_lock: asyncio.Lock,
-    account_manager: AccountManager,
-):
-    try:
-        await process_account(
-            email,
-            password,
-            proxy,
-            proxy_manager,
-            account_manager,
-            last_alert_lock,
-        )
-    finally:
-        pass
 
 
 async def main():
@@ -887,7 +820,6 @@ async def main():
                     account_manager,
                     proxy_manager,
                     last_alert_lock,
-                    len(valid_accounts),
                 )
             )
 
