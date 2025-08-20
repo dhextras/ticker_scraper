@@ -548,9 +548,7 @@ async def get_new_access_token():
                     await simulate_human_browser_behavior(page)
                     sign_in_button = page.ele("SIGN IN", timeout=5)
                     if "NoneElement" in str(sign_in_button):
-                        page.ele(
-                            "css:.SignInMenu-accountMenuAllAccess", timeout=1
-                        ).click()
+                        page.ele("css:.SignInMenu-accountMenuPro", timeout=1).click()
                         page.ele(
                             "css:.AccountSideDrawer-signOutLink", timeout=1
                         ).click()
