@@ -9,6 +9,7 @@ import urllib.parse
 import uuid
 from datetime import datetime
 from pathlib import Path
+from time import sleep
 from typing import Dict, List, Set, Tuple
 
 import aiohttp
@@ -468,6 +469,48 @@ async def run_alert_monitor(uid):
             await asyncio.sleep(5)
 
 
+async def simulate_human_browser_behavior(page):
+    """Simulate human-like browsing behavior"""
+    try:
+        log_message(
+            f"Simulating human browsing behavior...",
+            "INFO",
+        )
+
+        sleep_interval = 5
+        common_pages = [
+            "https://www.cnbc.com/tv/",
+            "https://www.cnbc.com/markets/",
+            "https://www.cnbc.com/personal-finance/",
+            "https://www.cnbc.com/technology/",
+            "https://www.cnbc.com/pro/analyst-stock-picks/",
+        ]
+
+        pages_to_visit = random.sample(common_pages, 3)
+
+        for page_url in pages_to_visit:
+            log_message(f"Visiting page: {page_url}", "INFO")
+            page.get(page_url)
+
+            scroll_count = random.randint(3, 8)
+            for _ in range(scroll_count):
+                scroll_amount = random.randint(100, 500)
+                page.scroll.down(scroll_amount)
+
+                scroll_pause = random.uniform(0.5, min(2.0, sleep_interval / 5))
+                sleep(scroll_pause)
+
+            between_pages_sleep = random.uniform(1, sleep_interval)
+            log_message(
+                f"Sleeping for {between_pages_sleep:.2f} seconds between pages", "INFO"
+            )
+            sleep(between_pages_sleep)
+
+        log_message("Human browsing simulation complete", "INFO")
+    except Exception as e:
+        log_message(f"Error during human simulation: {e}", "WARNING")
+
+
 async def get_new_access_token():
     global ACCESS_TOKEN
     max_retries = 5
@@ -481,7 +524,6 @@ async def get_new_access_token():
         options.set_argument("--disable-search-engine-choice-screen")
         options.set_argument("--blink-settings=imagesEnabled=false")
         page = ChromiumPage()
-        page.clear_cache()
 
         try:
             log_message(f"Login attempt {attempt + 1}/{max_retries}")
@@ -502,6 +544,15 @@ async def get_new_access_token():
             async def login():
                 try:
                     sign_in_button = page.ele("SIGN IN", timeout=5)
+                    if "NoneElement" not in str(sign_in_button):
+                        page.ele(
+                            "css:.SignInMenu-accountMenuAllAccess", timeout=1
+                        ).click()
+                        page.ele(
+                            "css:.AccountSideDrawer-signOutLink", timeout=1
+                        ).click()
+
+                    await simulate_human_browser_behavior(page)
                     await asyncio.sleep(random.uniform(1, 2))
                     sign_in_button.click()
                     await asyncio.sleep(2)
@@ -588,7 +639,6 @@ async def get_new_access_token():
             log_message(f"Attempt {attempt + 1} failed: {e}", "ERROR")
 
             try:
-                page.clear_cache()
                 page.quit()
             except:
                 pass
@@ -604,7 +654,6 @@ async def get_new_access_token():
                 return
         finally:
             try:
-                page.clear_cache()
                 page.quit()
             except:
                 pass
