@@ -53,6 +53,42 @@ def extract_ticker(text):
     return "Unknown"
 
 
+async def fetch_content_and_ticker(session, url):
+    """Fetch content from URL and extract ticker."""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                html = await response.text()
+                soup = BeautifulSoup(html, "html.parser")
+
+                content_element = soup.select_one("div.entry-content")
+                if content_element:
+                    content = content_element.text.strip()
+                    ticker = extract_ticker(content)
+                    if ticker != "Unknown":
+                        log_message(
+                            f"Extracted ticker '{ticker}' from URL content: {url}",
+                            "INFO",
+                        )
+                        return ticker
+
+                log_message(f"No ticker found in URL content: {url}", "WARNING")
+                return "Unknown"
+            else:
+                log_message(
+                    f"Failed to fetch URL content: HTTP {response.status} for {url}",
+                    "WARNING",
+                )
+                return "Unknown"
+    except Exception as e:
+        log_message(f"Error fetching content from {url}: {e}", "ERROR")
+        return "Unknown"
+
+
 async def fetch_reports(session):
     try:
         headers = {
@@ -93,7 +129,25 @@ async def fetch_reports(session):
                         else ""
                     )
 
-                    ticker = extract_ticker(content)
+                    title_ticker = extract_ticker(title)
+                    content_ticker = extract_ticker(content)
+
+                    # Priority: title -> content -> URL fetch
+                    if title_ticker != "Unknown":
+                        ticker = title_ticker
+                        log_message(f"Using ticker from title: {ticker}", "WARNING")
+                    elif content_ticker != "Unknown":
+                        ticker = content_ticker
+                        log_message(f"Using ticker from content: {ticker}", "WARNING")
+                    elif url:
+                        log_message(
+                            f"No ticker found in title/content, fetching from URL: {url}",
+                            "WARNING",
+                        )
+                        ticker = await fetch_content_and_ticker(session, url)
+                    else:
+                        ticker = "Unknown"
+                        log_message("No ticker found and no URL available", "WARNING")
 
                     reports.append(
                         {
