@@ -542,6 +542,7 @@ async def get_new_access_token():
                             "css:.AccountSideDrawer-signOutLink", timeout=1
                         ).click()
 
+                    sign_in_button = page.ele("SIGN IN", timeout=5)
                     await asyncio.sleep(random.uniform(1, 2))
                     sign_in_button.click()
                     await asyncio.sleep(2)
