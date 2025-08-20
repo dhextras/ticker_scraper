@@ -129,33 +129,12 @@ async def fetch_reports(session):
                         else ""
                     )
 
-                    title_ticker = extract_ticker(title)
-                    content_ticker = extract_ticker(content)
-
-                    # Priority: title -> content -> URL fetch
-                    if title_ticker != "Unknown":
-                        ticker = title_ticker
-                        log_message(f"Using ticker from title: {ticker}", "WARNING")
-                    elif content_ticker != "Unknown":
-                        ticker = content_ticker
-                        log_message(f"Using ticker from content: {ticker}", "WARNING")
-                    elif url:
-                        log_message(
-                            f"No ticker found in title/content, fetching from URL: {url}",
-                            "WARNING",
-                        )
-                        ticker = await fetch_content_and_ticker(session, url)
-                    else:
-                        ticker = "Unknown"
-                        log_message("No ticker found and no URL available", "WARNING")
-
                     reports.append(
                         {
                             "url": url,
                             "title": title,
                             "content": content,
                             "date": date,
-                            "ticker": ticker,
                         }
                     )
 
@@ -222,15 +201,39 @@ async def run_report_monitor():
                 reports = await fetch_reports(session)
 
                 for report in reports:
-                    report_url = report["url"]
+                    url = report["url"]
+                    title = report["title"]
+                    content = report["content"]
 
-                    if report_url not in processed_reports:
+                    ticker = "Unknown"
+                    title_ticker = extract_ticker(title)
+                    content_ticker = extract_ticker(content)
+
+                    # Priority: title -> content -> URL fetch
+                    if title_ticker != "Unknown":
+                        ticker = title_ticker
+                        log_message(f"Using ticker from title: {ticker}", "WARNING")
+                    elif content_ticker != "Unknown":
+                        ticker = content_ticker
+                        log_message(f"Using ticker from content: {ticker}", "WARNING")
+                    elif url:
+                        log_message(
+                            f"No ticker found in title/content, fetching from URL: {url}",
+                            "WARNING",
+                        )
+                        ticker = await fetch_content_and_ticker(session, url)
+                    else:
+                        ticker = "Unknown"
+                        log_message("No ticker found and no URL available", "WARNING")
+
+                    report["ticker"] = ticker
+                    if url not in processed_reports:
                         log_message(
                             f"Found new report: {report['url']}",
                             "INFO",
                         )
                         await send_report_to_telegram(report)
-                        processed_reports.add(report_url)
+                        processed_reports.add(url)
 
                 if reports:
                     save_processed_reports(processed_reports)
