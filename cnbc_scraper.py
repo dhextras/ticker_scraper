@@ -9,7 +9,6 @@ import urllib.parse
 import uuid
 from datetime import datetime
 from pathlib import Path
-from time import sleep
 from typing import Dict, List, Set, Tuple
 
 import aiohttp
@@ -498,17 +497,19 @@ async def simulate_human_browser_behavior(page):
                 page.scroll.down(scroll_amount)
 
                 scroll_pause = random.uniform(0.5, min(2.0, sleep_interval / 5))
-                sleep(scroll_pause)
+                await asyncio.sleep(scroll_pause)
 
             between_pages_sleep = random.uniform(1, sleep_interval)
             log_message(
                 f"Sleeping for {between_pages_sleep:.2f} seconds between pages", "INFO"
             )
-            sleep(between_pages_sleep)
+            await asyncio.sleep(between_pages_sleep)
 
         log_message("Human browsing simulation complete", "INFO")
     except Exception as e:
         log_message(f"Error during human simulation: {e}", "WARNING")
+    finally:
+        page.scroll.to_top()
 
 
 async def get_new_access_token():
@@ -517,13 +518,8 @@ async def get_new_access_token():
 
     for attempt in range(max_retries):
         options = ChromiumOptions()
-        options.set_argument("--no-sandbox")
-        options.set_argument("--disable-dev-shm-usage")
-        options.set_argument("--disable-gpu")
         options.set_argument("--maximize-window")
-        options.set_argument("--disable-search-engine-choice-screen")
-        options.set_argument("--blink-settings=imagesEnabled=false")
-        page = ChromiumPage()
+        page = ChromiumPage(options)
 
         try:
             log_message(f"Login attempt {attempt + 1}/{max_retries}")
@@ -532,19 +528,13 @@ async def get_new_access_token():
             )
             log_message("Trying to login to cnbc...")
             page.get("https://www.cnbc.com/investingclub/trade-alerts/")
-            await asyncio.sleep(random.uniform(2, 4))
-
-            scroll_pause_time = random.uniform(1, 2)
-            for _ in range(3):
-                page.scroll.down(random.randint(80, 300))
-                await asyncio.sleep(scroll_pause_time)
-            page.scroll.to_top()
-            await asyncio.sleep(scroll_pause_time)
 
             async def login():
                 try:
+                    await simulate_human_browser_behavior(page)
+
                     sign_in_button = page.ele("SIGN IN", timeout=5)
-                    if "NoneElement" not in str(sign_in_button):
+                    if "NoneElement" in str(sign_in_button):
                         page.ele(
                             "css:.SignInMenu-accountMenuAllAccess", timeout=1
                         ).click()
@@ -552,7 +542,6 @@ async def get_new_access_token():
                             "css:.AccountSideDrawer-signOutLink", timeout=1
                         ).click()
 
-                    await simulate_human_browser_behavior(page)
                     await asyncio.sleep(random.uniform(1, 2))
                     sign_in_button.click()
                     await asyncio.sleep(2)
