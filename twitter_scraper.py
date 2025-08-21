@@ -48,6 +48,8 @@ co = ChromiumOptions()
 page = ChromiumPage(co)
 processed_data_global = {"posts": [], "last_post": None}
 
+connected_websockets = set()
+
 
 class EncryptedTcpClient:
     def __init__(self, server_ip, server_port, shared_secret, username):
@@ -231,14 +233,53 @@ async def send_found_post(data, source):
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
+async def websocket_ping_loop():
+    """Send ping frames to all connected WebSocket clients every 10 seconds"""
+    while True:
+        await asyncio.sleep(10)  # Wait 10 seconds
+
+        if connected_websockets:
+            log_message(
+                f"[WebSocket] Sending ping to {len(connected_websockets)} connected clients",
+                "INFO",
+            )
+
+            clients_to_ping = connected_websockets.copy()
+
+            for websocket in clients_to_ping:
+                try:
+                    await websocket.send(json.dumps({"type": "ping"}))
+                except websockets.exceptions.ConnectionClosed:
+                    log_message(
+                        "[WebSocket] Client disconnected during ping", "WARNING"
+                    )
+                    connected_websockets.discard(websocket)
+                except Exception as e:
+                    log_message(
+                        f"[WebSocket] Error sending ping to client: {e}", "WARNING"
+                    )
+                    connected_websockets.discard(websocket)
+
+
 async def handle_websocket_message(websocket):
     global processed_data_global
+
+    connected_websockets.add(websocket)
+    client_address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+    log_message(f"[WebSocket] New client connected: {client_address}", "INFO")
+    log_message(
+        f"[WebSocket] Total connected clients: {len(connected_websockets)}", "INFO"
+    )
 
     try:
         async for message in websocket:
             try:
                 data = json.loads(message)
                 search_content = data.get("content", "")
+                type_message = data.get("type", "")
+
+                if type_message and type_message == "pong":
+                    continue
 
                 if not search_content:
                     await send_alert(
@@ -298,7 +339,17 @@ async def handle_websocket_message(websocket):
                 log_message(f"WebSocket error: {e}", "ERROR")
 
     except websockets.exceptions.ConnectionClosed:
-        log_message("WebSocket connection closed", "INFO")
+        log_message(f"[WebSocket] Client {client_address} disconnected", "INFO")
+    except Exception as e:
+        log_message(f"[WebSocket] Error handling client {client_address}: {e}", "ERROR")
+    finally:
+        connected_websockets.discard(websocket)
+        log_message(
+            f"[WebSocket] Client {client_address} removed from connected set", "INFO"
+        )
+        log_message(
+            f"[WebSocket] Total connected clients: {len(connected_websockets)}", "INFO"
+        )
 
 
 def load_processed_posts():
@@ -451,7 +502,7 @@ def extract_posts():
                         posts.append(post_data)
 
             except Exception as e:
-                log_message(f"Error parsing individual post: {e}", "DEBUG")
+                log_message(f"Error parsing individual post: {e}", "ERROR")
                 continue
 
         return posts
@@ -647,11 +698,13 @@ async def main_async():
         shared_secret=TCP_SECRET,
         username=TCP_USERNAME,
     )
-    tcp_client.start()  # Start in a separate thread
+    tcp_client.start()
     websocket_server = await start_websocket_server()
 
     try:
-        await asyncio.gather(run_scraper(), websocket_server.wait_closed())
+        ping_task = asyncio.create_task(websocket_ping_loop())
+
+        await asyncio.gather(run_scraper(), websocket_server.wait_closed(), ping_task)
     except Exception as e:
         log_message(f"Error in main async: {e}", "CRITICAL")
         websocket_server.close()
