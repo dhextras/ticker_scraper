@@ -95,20 +95,35 @@ async def process_page(
                     re.IGNORECASE,
                 )
 
-                if (
-                    sell_match
-                    and ticker_match
-                    and sell_match.start() < ticker_match.start()
-                ):
-                    ticker = ticker_match.group(1)
-                    return ticker, "Sell"
-                elif (
-                    buy_match
-                    and ticker_match
-                    and buy_match.start() < ticker_match.start()
-                ):
-                    ticker = ticker_match.group(1)
-                    return ticker, "Buy"
+                ticker: str = ""
+
+                if ticker_match:
+                    ticker = ticker_match.group(2)
+                else:
+                    ticker_match = re.search(
+                        r"\(?\*?([A-Z]{1,5})\*?\)?",
+                        section,
+                        re.IGNORECASE,
+                    )
+                    if ticker_match:
+                        ticker = ticker_match.group(1)
+
+                if ticker:
+                    if (
+                        sell_match
+                        and ticker_match
+                        and sell_match.start() < ticker_match.start()
+                    ):
+                        ticker = ticker_match.group(1)
+                        return ticker, "Sell"
+
+                    elif (
+                        buy_match
+                        and ticker_match
+                        and buy_match.start() < ticker_match.start()
+                    ):
+                        ticker = ticker_match.group(1)
+                        return ticker, "Buy"
 
             log_message(f"No ticker found in URL: {url}", "WARNING")
         else:

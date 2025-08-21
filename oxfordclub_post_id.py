@@ -153,28 +153,44 @@ async def process_page(
                     re.IGNORECASE,
                 )
 
-                if (
-                    sell_match
-                    and ticker_match
-                    and sell_match.start() < ticker_match.start()
-                ):
-                    exchange, ticker = ticker_match.groups()
-                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-                    await send_match_to_telegram(
-                        url, ticker, exchange, "Sell", timestamp, total_seconds
+                exchange: str = ""
+                ticker: str = ""
+
+                if ticker_match:
+                    exchange = ticker_match.group(1)
+                    ticker = ticker_match.group(2)
+                else:
+                    # fallback: ticker only, no exchange
+                    ticker_match = re.search(
+                        r"\(?\*?([A-Z]{1,5})\*?\)?",
+                        section,
+                        re.IGNORECASE,
                     )
-                    return (ticker, exchange, "Sell", total_seconds)
-                elif (
-                    buy_match
-                    and ticker_match
-                    and buy_match.start() < ticker_match.start()
-                ):
-                    exchange, ticker = ticker_match.groups()
-                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-                    await send_match_to_telegram(
-                        url, ticker, exchange, "Buy", timestamp, total_seconds
-                    )
-                    return (ticker, exchange, "Buy", total_seconds)
+                    if ticker_match:
+                        ticker = ticker_match.group(1)
+
+                if ticker:
+                    if (
+                        sell_match
+                        and ticker_match
+                        and sell_match.start() < ticker_match.start()
+                    ):
+                        timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                        await send_match_to_telegram(
+                            url, ticker, exchange, "Sell", timestamp, total_seconds
+                        )
+                        return (ticker, exchange, "Sell", total_seconds)
+
+                    elif (
+                        buy_match
+                        and ticker_match
+                        and buy_match.start() < ticker_match.start()
+                    ):
+                        timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                        await send_match_to_telegram(
+                            url, ticker, exchange, "Buy", timestamp, total_seconds
+                        )
+                        return (ticker, exchange, "Buy", total_seconds)
 
             log_message(
                 f"Took {total_seconds:.2f}s to fetch and process URL: {url}", "WARNING"
