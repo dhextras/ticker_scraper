@@ -181,7 +181,7 @@ async def process_page(
                 buy_match = re.search(r"Buy", section, re.IGNORECASE)
                 sell_match = re.search(r"Sell", section, re.IGNORECASE)
                 ticker_match = re.search(
-                    r"(?:NYSE|NASDAQ:)?\s*\(?\*?([A-Z]{1,5})\*?\)?",
+                    r"(?:NYSE|NASDAQ)\s*:\s*\(?\*?([A-Z]{1,5})\*?\)?",
                     section,
                     re.IGNORECASE,
                 )
