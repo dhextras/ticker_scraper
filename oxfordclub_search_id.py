@@ -162,7 +162,7 @@ async def process_page(
                 else:
                     # fallback: ticker only, no exchange
                     ticker_match = re.search(
-                        r"\(?\*?([A-Z]{1,5})\*?\)?",
+                        r"\(\s*([A-Z]{1,5})\s*\)",
                         section,
                         re.IGNORECASE,
                     )

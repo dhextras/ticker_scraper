@@ -101,7 +101,7 @@ async def process_page(
                     ticker = ticker_match.group(2)
                 else:
                     ticker_match = re.search(
-                        r"\(?\*?([A-Z]{1,5})\*?\)?",
+                        r"\(\s*([A-Z]{1,5})\s*\)",
                         section,
                         re.IGNORECASE,
                     )
