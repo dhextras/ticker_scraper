@@ -138,6 +138,8 @@ def extracte_blockquote_text(article_body):
 
 
 async def get_article_data(article_id, uid, access_token):
+    global ACCESS_TOKEN
+
     await rate_limiter.acquire()
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
     variables = {
@@ -162,7 +164,7 @@ async def get_article_data(article_id, uid, access_token):
     # FIXME: The token Would expire every month and need to be changed again / find a way to do it within here...
     headers = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "authorization": f"Bearer {access_token}",
+        "authorization": f"Bearer {ACCESS_TOKEN}",
     }
 
     encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
@@ -480,12 +482,14 @@ async def simulate_human_browser_behavior(page):
         common_pages = [
             "https://www.cnbc.com/tv/",
             "https://www.cnbc.com/markets/",
-            "https://www.cnbc.com/personal-finance/",
             "https://www.cnbc.com/technology/",
             "https://www.cnbc.com/pro/analyst-stock-picks/",
         ]
 
-        pages_to_visit = random.sample(common_pages, 3)
+        pages_to_visit = random.sample(common_pages, 1)
+        pages_to_visit.append("https://youtube.com/")
+        pages_to_visit.append("https://x.com")
+        pages_to_visit.append("https://www.cnbc.com/personal-finance/")
 
         for page_url in pages_to_visit:
             log_message(f"Visiting page: {page_url}", "INFO")
