@@ -55,6 +55,10 @@ initializing_clients = set()  # Set of clients currently initializing
 account_usage_count = {}  # email -> count of
 waiting_clients = set()  # Set of clients waiting for accounts
 system_paused = False  # Global pause when all accounts are banned
+skip_check_active = False
+skip_check_last_time = 0
+skip_check_results = {}  # client_id -> {comment_id: result}
+skip_check_timeout = 30  # seconds to wait for skip check results
 
 
 def load_credentials():
@@ -939,9 +943,118 @@ async def handle_client(websocket):
             log_message(f"Cleaned up all resources for client {client_id}", "INFO")
 
 
+async def perform_skip_check():
+    """Perform skip detection check using regular job distribution"""
+    global skip_check_active, skip_check_results, skip_check_pending, current_comment_id
+
+    available_clients = [
+        client_id
+        for client_id, status in client_status.items()
+        if status["status"] == "available"
+        and client_id in connected_clients
+        and client_id not in initializing_clients
+        and client_id not in waiting_clients
+    ]
+
+    if len(available_clients) < 2:
+        log_message("Not enough available clients for skip check", "CRITICAL")
+        return False
+
+    log_message(f"Starting skip check with {len(available_clients)} clients", "INFO")
+
+    skip_check_active = True
+    skip_check_results.clear()
+    skip_check_pending.clear()
+
+    # Assign different comment IDs to check (current + next 4)
+    check_ids = [current_comment_id + i for i in range(min(5, len(available_clients)))]
+    skip_check_pending = set(check_ids)
+
+    for i, client_id in enumerate(available_clients[: len(check_ids)]):
+        comment_id_to_check = check_ids[i]
+
+        try:
+            websocket = connected_clients[client_id]
+            account_idx, email, is_banned = get_available_account(client_id)
+
+            if account_idx is None:
+                continue
+
+            client_status[client_id]["status"] = "busy"
+            client_status[client_id]["current_cid"] = comment_id_to_check
+            client_status[client_id]["account_index"] = account_idx
+
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "job",
+                        "comment_id": comment_id_to_check,
+                        "account_index": account_idx,
+                        "email": email,
+                        "is_banned": is_banned,
+                        "processing_start_time": time.time(),
+                    }
+                )
+            )
+
+            log_message(
+                f"Sent skip check job for ID {comment_id_to_check} to client {client_id}",
+                "DEBUG",
+            )
+
+        except Exception as e:
+            log_message(
+                f"Error sending skip check job to client {client_id}: {e}", "ERROR"
+            )
+            client_status[client_id]["status"] = "available"
+            if account_idx is not None and account_idx < len(accounts):
+                release_account(accounts[account_idx]["email"])
+
+    start_time = time.time()
+    while skip_check_pending and time.time() - start_time < 30:
+        await asyncio.sleep(1)
+
+    if skip_check_results:
+        highest_with_content = max(
+            [
+                cid
+                for cid, has_content in skip_check_results.items()
+                if has_content and cid > current_comment_id
+            ],
+            default=None,
+        )
+
+        if highest_with_content:
+            log_message(
+                f"Found skipped content at ID {highest_with_content}, jumping from {current_comment_id}",
+                "WARNING",
+            )
+            current_comment_id = highest_with_content
+            await save_comment_id(current_comment_id)
+            log_message(
+                f"Updated current comment ID to {current_comment_id} due to skip detection",
+                "INFO",
+            )
+            skip_check_active = False
+            return True
+
+    skip_check_active = False
+    log_message("Skip check completed, no skips detected", "DEBUG")
+    return False
+
+
 async def process_commentary_result(comment_id, data):
     """Process commentary result from client"""
-    global current_comment_id
+    global current_comment_id, skip_check_active, skip_check_results, skip_check_pending
+
+    if skip_check_active and comment_id in skip_check_pending:
+        has_content = bool(data.get("html_content"))
+        skip_check_results[comment_id] = has_content
+        skip_check_pending.discard(comment_id)
+        log_message(
+            f"Skip check result for ID {comment_id}: has_content={has_content}", "DEBUG"
+        )
+        return
 
     if current_comment_id != comment_id:
         return
@@ -1059,8 +1172,8 @@ async def disconnect_all_clients():
 
 
 async def job_distributor():
-    """Distribute jobs to available clients with proper market handling"""
-    global current_comment_id, initializing_clients
+    """Distribute jobs to available clients with proper market handling and skip detection"""
+    global current_comment_id, initializing_clients, skip_check_last_time, skip_check_active
     last_assignment_time = 0
     MIN_ASSIGNMENT_INTERVAL = 1.0
 
@@ -1084,8 +1197,25 @@ async def job_distributor():
                     await disconnect_all_clients()
                     break
 
+                # Perform skip check every 5 minutes (only if not already active)
+                current_timestamp = time.time()
+                if (
+                    current_timestamp - skip_check_last_time
+                ) >= 300 and not skip_check_active:
+                    log_message("Performing periodic skip detection check", "INFO")
+                    skip_check_last_time = current_timestamp
+
+                    try:
+                        await perform_skip_check()
+                    except Exception as e:
+                        log_message(f"Error during skip check: {e}", "ERROR")
+
+                if skip_check_active:
+                    await asyncio.sleep(1)
+                    continue
+
                 try:
-                    # To avoid getting stuck in the queue, use timeout
+                    # NOTE: To avoid getting stuck in the queue, use timeout
                     try:
                         client_id = await asyncio.wait_for(
                             processing_queue.get(), timeout=10
