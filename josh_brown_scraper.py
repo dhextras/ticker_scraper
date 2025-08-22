@@ -163,6 +163,8 @@ def extract_full_text_content(body_content):
 
 
 async def get_article_data(article_id, uid, access_token):
+    global ACCESS_TOKEN
+
     await rate_limiter.acquire()
     base_url = "https://webql-redesign.cnbcfm.com/graphql"
     variables = {
@@ -185,9 +187,10 @@ async def get_article_data(article_id, uid, access_token):
     }
 
     # FIXME: The token Would expire every month and need to be changed again / find a way to do it within here...
+    # Also remove the access_token that is being passed from
     headers = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "authorization": f"Bearer {access_token}",
+        "authorization": f"Bearer {ACCESS_TOKEN}",
     }
 
     encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
