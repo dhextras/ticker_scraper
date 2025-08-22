@@ -17,6 +17,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -235,6 +236,18 @@ async def send_matches_to_telegram(trade_alerts):
         message += f"<b>Title:</b> {title}\n"
 
         if ticker:
+            shorten_name = "".join(word[0].lower() for word in sub_name.split(" "))
+
+            await send_ws_message(
+                {
+                    "name": f"Banyan - {shorten_name}",
+                    "type": "Buy",
+                    "ticker": ticker,
+                    "sender": "banyan",
+                    "target": "CSS",
+                },
+            )
+
             message += f"<b>Ticker:</b> {ticker}\n"
 
         message += f"<b>Current Time:</b> {current_time_us}\n"
@@ -294,6 +307,7 @@ async def run_scraper():
     async with aiohttp.ClientSession() as session:
         while True:
             await sleep_until_market_open()
+            await initialize_websocket()
 
             log_message(
                 "Market is open. Starting to check for new articles...", "DEBUG"
