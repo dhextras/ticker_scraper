@@ -58,6 +58,7 @@ system_paused = False  # Global pause when all accounts are banned
 skip_check_active = False
 skip_check_last_time = 0
 skip_check_results = {}  # client_id -> {comment_id: result}
+skip_check_pending = set()
 skip_check_timeout = 30  # seconds to wait for skip check results
 
 
