@@ -128,7 +128,7 @@ def analyze_email_from_oxfordclub(email_body):
             r"[.,/|~`'!@#$%^&*?+_=<>\-\"\[\]\{\}]", "", after_action_text
         )  # Clean out unnecessary characters
         buy_pattern = (
-            r"Buy\s+\*?([A-Za-z\s]+)\*?\s*\(\*?(?:NYSE|NASDAQ:)?\s*([A-Z]{1,5})\*?\)"
+            r"\*?Buy\s+\*?([A-Za-z\s]+)\*?\s*\(\*?(NYSE|NASDAQ):\s*([A-Z]{1,5})\*?\)"
         )
         match = re.search(buy_pattern, after_action_text, re.IGNORECASE)
         if match:
