@@ -157,8 +157,7 @@ async def process_page(
                 ticker: str = ""
 
                 if ticker_match:
-                    exchange = ticker_match.group(1)
-                    ticker = ticker_match.group(2)
+                    ticker = ticker_match.group(1)
                 else:
                     # fallback: ticker only, no exchange
                     ticker_match = re.search(
