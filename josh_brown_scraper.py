@@ -580,10 +580,7 @@ async def get_new_access_token():
 
                     sign_in_ele = page.ele('css:button[name="signin"]', timeout=5)
                     if "NoneElement" not in str(sign_in_ele):
-                        password_input.input(Keys.BACKSPACE)
-                        await asyncio.sleep(0.3)
-                        password_input.input(GMAIL_PASSWORD[-1])
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(180)
 
                         sign_in_ele.click()
 

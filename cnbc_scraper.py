@@ -482,14 +482,12 @@ async def simulate_human_browser_behavior(page):
         common_pages = [
             "https://www.cnbc.com/tv/",
             "https://www.cnbc.com/markets/",
+            "https://www.cnbc.com/personal-finance/",
             "https://www.cnbc.com/technology/",
             "https://www.cnbc.com/pro/analyst-stock-picks/",
         ]
 
-        pages_to_visit = random.sample(common_pages, 1)
-        pages_to_visit.append("https://youtube.com/")
-        pages_to_visit.append("https://x.com")
-        pages_to_visit.append("https://www.cnbc.com/personal-finance/")
+        pages_to_visit = random.sample(common_pages, 3)
 
         for page_url in pages_to_visit:
             log_message(f"Visiting page: {page_url}", "INFO")
@@ -570,10 +568,7 @@ async def get_new_access_token():
 
                     sign_in_ele = page.ele('css:button[name="signin"]', timeout=5)
                     if "NoneElement" not in str(sign_in_ele):
-                        password_input.input(Keys.BACKSPACE)
-                        await asyncio.sleep(0.3)
-                        password_input.input(GMAIL_PASSWORD[-1])
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(180)
                         sign_in_ele.click()
 
                     return True
