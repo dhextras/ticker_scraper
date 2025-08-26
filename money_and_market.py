@@ -23,7 +23,7 @@ load_dotenv()
 
 AJAX_URL = "https://moneyandmarkets.com/wp-admin/admin-ajax.php"
 CHECK_INTERVAL = 1
-PROCESSED_IDS_FILE = "data/moneyandmarkets_processed_ids.json"
+PROCESSED_URLS_FILE = "data/moneyandmarkets_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("MONEYANDMARKETS_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("MONEYANDMARKETS_TELEGRAM_GRP")
 PROXY_FILE = "cred/proxies.json"
@@ -92,18 +92,18 @@ def load_proxies():
         sys.exit(1)
 
 
-def load_processed_ids():
+def load_processed_urls():
     try:
-        with open(PROCESSED_IDS_FILE, "r") as f:
+        with open(PROCESSED_URLS_FILE, "r") as f:
             return set(json.load(f))
     except FileNotFoundError:
         return set()
 
 
-def save_processed_ids(ids):
-    with open(PROCESSED_IDS_FILE, "w") as f:
-        json.dump(list(ids), f, indent=2)
-    log_message("Processed IDs saved.", "INFO")
+def save_processed_urls(urls):
+    with open(PROCESSED_URLS_FILE, "w") as f:
+        json.dump(list(urls), f, indent=2)
+    log_message("Processed URLs saved.", "INFO")
 
 
 async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
@@ -157,9 +157,11 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
                             if not title_link:
                                 continue
 
-                            post_id = title_link.get("data-post-id")
                             title = title_link.get_text(strip=True)
                             url = title_link.get("href")
+
+                            if not url:
+                                continue
 
                             date_span = item.find("span", class_="archive_date")
                             date_text = (
@@ -178,10 +180,9 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
 
                             ticker = parse_ticker_from_title(title)
 
-                            if post_id and title:
+                            if title and url:
                                 articles.append(
                                     {
-                                        "post_id": post_id,
                                         "title": title,
                                         "url": url,
                                         "date": date_text,
@@ -225,6 +226,7 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
 async def send_matches_to_telegram(trade_alerts):
     for alert in trade_alerts:
         title = alert["title"]
+        description = alert["description"]
         date = alert["date"]
         url = alert["url"]
         sub_name = alert["subscription_name"]
@@ -263,7 +265,7 @@ async def send_matches_to_telegram(trade_alerts):
         )
 
 
-async def process_subscription(session, subscription, proxy, processed_ids):
+async def process_subscription(session, subscription, proxy, processed_urls):
     articles = await fetch_articles(
         session, subscription["name"], subscription["term_id"], proxy
     )
@@ -275,9 +277,9 @@ async def process_subscription(session, subscription, proxy, processed_ids):
     new_articles = [
         article
         for article in articles
-        if article.get("post_id") and article["post_id"] not in processed_ids
+        if article.get("url") and article["url"] not in processed_urls
     ]
-    new_ids = {article["post_id"] for article in articles if article.get("post_id")}
+    new_urls = {article["url"] for article in articles if article.get("url")}
 
     if new_articles:
         buy_articles = [article for article in new_articles if article.get("ticker")]
@@ -298,12 +300,12 @@ async def process_subscription(session, subscription, proxy, processed_ids):
             json.dump(new_articles, f, indent=2)
 
         await send_matches_to_telegram(new_articles)
-        return new_ids
+        return new_urls
     return set()
 
 
 async def run_scraper():
-    processed_ids = load_processed_ids()
+    processed_urls = load_processed_urls()
     proxies = load_proxies()
 
     async with aiohttp.ClientSession() as session:
@@ -335,16 +337,16 @@ async def run_scraper():
 
                     tasks.append(
                         process_subscription(
-                            session, subscription, proxy, processed_ids
+                            session, subscription, proxy, processed_urls
                         )
                     )
 
-                new_ids_list = await asyncio.gather(*tasks)
-                all_new_ids = set().union(*new_ids_list)
+                new_urls_list = await asyncio.gather(*tasks)
+                all_new_urls = set().union(*new_urls_list)
 
-                if all_new_ids:
-                    processed_ids.update(all_new_ids)
-                    save_processed_ids(processed_ids)
+                if all_new_urls:
+                    processed_urls.update(all_new_urls)
+                    save_processed_urls(processed_urls)
                 else:
                     log_message("No new articles found.", "INFO")
 
