@@ -19,12 +19,13 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
 # Constants
 JSON_URL = "https://jcapitalresearch.substack.com/api/v1/posts"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 1.3  # seconds
 PROCESSED_URLS_FILE = "data/jcapital_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
@@ -181,6 +182,15 @@ async def send_to_telegram(post_data):
     message += f"<b>Current Date:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
 
     if ticker:
+        await send_ws_message(
+            {
+                "name": "J capital",
+                "type": "Buy",
+                "ticker": ticker,
+                "sender": "jcapital",
+            },
+        )
+
         message += f"<b>Ticker:</b> {ticker}\n"
 
     message += f"<b>Title:</b> {title}\n"
@@ -196,6 +206,7 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
 
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
