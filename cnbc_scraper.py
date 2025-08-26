@@ -568,7 +568,7 @@ async def get_new_access_token():
 
                     sign_in_ele = page.ele('css:button[name="signin"]', timeout=5)
                     if "NoneElement" not in str(sign_in_ele):
-                        await asyncio.sleep(180)
+                        await asyncio.sleep(300)
                         sign_in_ele.click()
 
                     return True
