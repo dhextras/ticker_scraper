@@ -80,13 +80,15 @@ def extract_action_details(content: str) -> Optional[Tuple[str, str, str]]:
     Returns: (ticker, action, exchange) or None
     """
     try:
-        # Find all "Action to Take" sections (case insensitive)
+        skip_sells = False
         action_sections = re.split(
             r"Action\s+to\s+Take\s*:", content, flags=re.IGNORECASE
         )
 
         if len(action_sections) < 2:
             return None
+        elif len(action_sections) > 2:
+            skip_sells = True
 
         for section in action_sections[1:]:
             action_match = re.search(r"^\s*(Buy|Sell)", section.strip(), re.IGNORECASE)
@@ -94,6 +96,9 @@ def extract_action_details(content: str) -> Optional[Tuple[str, str, str]]:
                 continue
 
             action = action_match.group(1).lower().capitalize()
+
+            if action == "Sell" and skip_sells:
+                continue
 
             # Look for ticker in parentheses:
             # (ABCD), (Nasdaq: ABCD), (NYSE: ABC), etc..
