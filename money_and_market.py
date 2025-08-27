@@ -426,10 +426,6 @@ async def process_subscription(
             "INFO",
         )
 
-        date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S_%f")
-        with open(f"data/moneyandmarkets_{date}.json", "w") as f:
-            json.dump(new_articles, f, indent=2)
-
         await process_new_articles(requests_session, new_articles)
 
         return new_urls
