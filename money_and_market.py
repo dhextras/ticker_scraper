@@ -5,8 +5,10 @@ import random
 import re
 import sys
 import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
@@ -22,6 +24,9 @@ from utils.websocket_sender import initialize_websocket, send_ws_message
 load_dotenv()
 
 AJAX_URL = "https://moneyandmarkets.com/wp-admin/admin-ajax.php"
+LOGIN_URL = "https://moneyandmarkets.com/wp-login.php"
+USERNAME = os.getenv("MONEYANDMARKETS_USERNAME")
+PASSWORD = os.getenv("MONEYANDMARKETS_PASSWORD")
 CHECK_INTERVAL = 1
 PROCESSED_URLS_FILE = "data/moneyandmarkets_processed_urls.json"
 TELEGRAM_BOT_TOKEN = os.getenv("MONEYANDMARKETS_TELEGRAM_BOT_TOKEN")
@@ -38,35 +43,128 @@ subscriptions = [
 os.makedirs("data", exist_ok=True)
 
 
-def parse_ticker_from_title(title):
+def login_sync(session: requests.Session) -> bool:
+    """Login to Money and Markets using requests session"""
+    try:
+        payload = {"log": USERNAME, "pwd": PASSWORD}
+        response = session.post(LOGIN_URL, data=payload)
+        if response.status_code == 200:
+            log_message("Money and Markets login successful", "INFO")
+            return True
+        else:
+            log_message(
+                f"Money and Markets login failed: HTTP {response.status_code}", "ERROR"
+            )
+            return False
+    except Exception as e:
+        log_message(f"Error during Money and Markets login: {e}", "ERROR")
+        return False
+
+
+def get_headers() -> Dict[str, str]:
+    """Get headers for requests"""
+    return {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
+
+def extract_action_details(content: str) -> Optional[Tuple[str, str, str]]:
     """
-    Extract the first ticker symbol from buy alerts only.
-    Returns None if it's not a buy alert or no ticker found.
+    Extract ticker, action (buy/sell) from 'Action to Take' sections
+    Returns: (ticker, action, exchange) or None
     """
-    if not title:
+    try:
+        # Find all "Action to Take" sections (case insensitive)
+        action_sections = re.split(
+            r"Action\s+to\s+Take\s*:", content, flags=re.IGNORECASE
+        )
+
+        if len(action_sections) < 2:
+            return None
+
+        for section in action_sections[1:]:
+            action_match = re.search(r"^\s*(Buy|Sell)", section.strip(), re.IGNORECASE)
+            if not action_match:
+                continue
+
+            action = action_match.group(1).lower().capitalize()
+
+            # Look for ticker in parentheses:
+            # (ABCD), (Nasdaq: ABCD), (NYSE: ABC), etc..
+            ticker_patterns = [
+                r"\(\s*(?:NYSE|NASDAQ|Nasdaq|Nyse)\s*:\s*([A-Z]{1,6})\s*\)",
+                r"\(\s*([A-Z]{1,6})\s*\)",
+            ]
+
+            for pattern in ticker_patterns:
+                ticker_match = re.search(pattern, section)
+                if ticker_match:
+                    ticker = ticker_match.group(1).upper()
+
+                    exchange = ""
+                    exchange_match = re.search(
+                        r"\(\s*(NYSE|NASDAQ|Nasdaq|Nyse)\s*:\s*[A-Z]{1,6}\s*\)",
+                        section,
+                        re.IGNORECASE,
+                    )
+                    if exchange_match:
+                        exchange = exchange_match.group(1).upper()
+
+                    # Verify it ends with "at the market" or "at the open"
+                    if re.search(r"at\s+the\s+(market|open)", section, re.IGNORECASE):
+                        log_message(
+                            f"Found action: {action} {ticker} ({exchange})", "INFO"
+                        )
+                        return (ticker, action, exchange)
+
         return None
 
-    title_lower = title.lower()
-
-    if not re.search(r"\b(buy|buying)\b", title_lower):
+    except Exception as e:
+        log_message(f"Error extracting action details: {e}", "ERROR")
         return None
 
-    if re.search(r"\b(sell|selling|take gains)\b", title_lower):
-        return None
 
-    ticker_patterns = [
-        r"\((?:NYSE|NASDAQ|Nasdaq):\s*([A-Z]+)\)",
-        r"\(([A-Z]{2,6})\)",
-        r"\b(?:buy|buying)\s+(?:back\s+into\s+|into\s+)?([A-Z]{2,6})\b",
-        r"\b(?:buy|buying)\s+([A-Z]{2,6})(?:\s*,|\s*&)",
-    ]
+async def fetch_page_content(
+    session: requests.Session, url: str
+) -> Optional[Tuple[str, str, str, float]]:
+    """
+    Fetch page content and extract ticker/action information
+    Returns: (ticker, exchange, action, fetch_time) or None
+    """
+    try:
+        start_time = time.time()
+        response = await asyncio.to_thread(
+            session.get, url, headers=get_headers(), timeout=15
+        )
+        fetch_time = time.time() - start_time
 
-    for pattern in ticker_patterns:
-        match = re.search(pattern, title, re.IGNORECASE)
-        if match:
-            ticker = match.group(1).upper()
-            if ticker not in ["BACK", "INTO", "THESE", "NOW"]:
-                return ticker
+        if response.status_code == 200:
+            content = response.text
+            soup = BeautifulSoup(content, "html.parser")
+            all_text = soup.get_text(separator=" ", strip=True)
+
+            action_details = extract_action_details(all_text)
+            if action_details:
+                ticker, action, exchange = action_details
+                log_message(
+                    f"Successfully extracted from {url}: {action} {ticker} ({exchange})",
+                    "INFO",
+                )
+                return (ticker, exchange, action, fetch_time)
+            else:
+                log_message(f"No valid action found in {url}", "WARNING")
+
+        else:
+            log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
+
+    except Exception as e:
+        log_message(f"Error fetching page content from {url}: {e}", "ERROR")
 
     return None
 
@@ -178,8 +276,6 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
                                     read_more_link.decompose()
                                 description = description_p.get_text(strip=True)
 
-                            ticker = parse_ticker_from_title(title)
-
                             if title and url:
                                 articles.append(
                                     {
@@ -188,7 +284,6 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
                                         "date": date_text,
                                         "description": description,
                                         "subscription_name": subscription_name,
-                                        "ticker": ticker,  # Added ticker field
                                     }
                                 )
 
@@ -223,51 +318,95 @@ async def fetch_articles(session, subscription_name, term_id, proxy, offset=0):
         return []
 
 
-async def send_matches_to_telegram(trade_alerts):
-    for alert in trade_alerts:
-        title = alert["title"]
-        description = alert["description"]
-        date = alert["date"]
-        url = alert["url"]
-        sub_name = alert["subscription_name"]
-        ticker = alert.get("ticker")
-        short_name = alert.get("short_name")
+async def send_matches_to_telegram(
+    url: str,
+    title: str,
+    ticker: str,
+    exchange: str,
+    action: str,
+    sub_name: str,
+    short_name: str,
+    date: str,
+    fetch_time: float,
+) -> None:
+    """Send ticker match to Telegram and WebSocket"""
 
-        current_time_us = get_current_time().strftime("%Y-%m-%d %H:%M:%S %Z")
+    await send_ws_message(
+        {
+            "name": f"MoneyMarkets - {short_name}",
+            "type": action,
+            "ticker": ticker,
+            "sender": "moneyandmarkets",
+        },
+    )
 
-        message = f"<b>New Alert - {sub_name}</b>\n\n"
-        message += f"<b>Title:</b> {title}\n"
+    current_time_us = get_current_time().strftime("%Y-%m-%d %H:%M:%S %Z")
 
-        if ticker:
-            await send_ws_message(
-                {
-                    "name": f"MoneyMarkets - {short_name}",
-                    "type": "Buy",
-                    "ticker": ticker,
-                    "sender": "moneyandmarkets",
-                },
-            )
+    message = f"<b>New Stock Match - {sub_name}</b>\n\n"
+    message += f"<b>Current Time:</b> {current_time_us}\n"
+    message += f"<b>Title:</b> {title}\n"
+    message += f"<b>Stock Symbol:</b> {exchange}:{ticker}\n"
+    message += f"<b>Action:</b> {action}\n"
+    message += f"<b>Post Time:</b> {date}\n"
+    message += f"<b>Article Fetch Time:</b> {fetch_time:.2f}s\n"
+    message += f"<b>URL:</b> {url}"
 
-            message += f"<b>Ticker:</b> {ticker}\n"
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    log_message(
+        f"Match sent to Telegram: {exchange}:{ticker} ({action}) - {url}", "INFO"
+    )
 
-        message += f"<b>Current Time:</b> {current_time_us}\n"
-        message += f"<b>Post Time:</b> {date}\n"
-        message += f"<b>URL:</b> {url}\n"
-        # NOTE: This just returns empty account login descirption so no need to send it now
-        # message += f"<b>Description:</b> {description[:500]}{'...' if len(description) > 500 else ''}\n"
 
-        await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+async def process_new_articles(
+    requests_session: requests.Session, new_articles: List[Dict[str, Any]]
+) -> None:
+    """Process new articles one by one with 1 second sleep between each"""
 
-        ticker_info = f" (Ticker: {ticker})" if ticker else ""
+    if not new_articles:
+        return
+
+    log_message(
+        f"Processing {len(new_articles)} new articles for content extraction...", "INFO"
+    )
+
+    for i, article in enumerate(new_articles):
+        url = article["url"]
+        title = article["title"]
+        sub_name = article["subscription_name"]
+        short_name = article["short_name"]
+        date = article["date"]
+
         log_message(
-            f"Alert for `{sub_name}` sent to Telegram: {title[:50]}...{ticker_info} - {url}",
-            "INFO",
+            f"Processing article {i+1}/{len(new_articles)}: {title[:50]}...", "INFO"
         )
 
+        result = await fetch_page_content(requests_session, url)
 
-async def process_subscription(session, subscription, proxy, processed_urls):
+        if result:
+            ticker, exchange, action, fetch_time = result
+            await send_matches_to_telegram(
+                url,
+                title,
+                ticker,
+                exchange,
+                action,
+                sub_name,
+                short_name,
+                date,
+                fetch_time,
+            )
+        else:
+            log_message(f"No actionable content found in: {title[:50]}...", "WARNING")
+
+        if i < len(new_articles) - 1:
+            await asyncio.sleep(1)
+
+
+async def process_subscription(
+    aio_session, requests_session, subscription, proxy, processed_urls
+):
     articles = await fetch_articles(
-        session, subscription["name"], subscription["term_id"], proxy
+        aio_session, subscription["name"], subscription["term_id"], proxy
     )
 
     # Add short_name to each article
@@ -282,24 +421,17 @@ async def process_subscription(session, subscription, proxy, processed_urls):
     new_urls = {article["url"] for article in articles if article.get("url")}
 
     if new_articles:
-        buy_articles = [article for article in new_articles if article.get("ticker")]
-        if buy_articles:
-            ticker_list = [article["ticker"] for article in buy_articles]
-            log_message(
-                f"Found {len(new_articles)} new articles for {subscription['name']}, {len(buy_articles)} with tickers: {', '.join(ticker_list)}",
-                "INFO",
-            )
-        else:
-            log_message(
-                f"Found {len(new_articles)} new articles for {subscription['name']}, no buy alerts with tickers.",
-                "INFO",
-            )
+        log_message(
+            f"Found {len(new_articles)} new articles for {subscription['name']}",
+            "INFO",
+        )
 
         date = get_current_time().strftime("%Y_%m_%d_%H_%M_%S_%f")
         with open(f"data/moneyandmarkets_{date}.json", "w") as f:
             json.dump(new_articles, f, indent=2)
 
-        await send_matches_to_telegram(new_articles)
+        await process_new_articles(requests_session, new_articles)
+
         return new_urls
     return set()
 
@@ -308,7 +440,12 @@ async def run_scraper():
     processed_urls = load_processed_urls()
     proxies = load_proxies()
 
-    async with aiohttp.ClientSession() as session:
+    requests_session = requests.Session()
+    if not login_sync(requests_session):
+        log_message("Failed to login to Money and Markets", "CRITICAL")
+        return
+
+    async with aiohttp.ClientSession() as aio_session:
         while True:
             await sleep_until_market_open()
             await initialize_websocket()
@@ -337,7 +474,11 @@ async def run_scraper():
 
                     tasks.append(
                         process_subscription(
-                            session, subscription, proxy, processed_urls
+                            aio_session,
+                            requests_session,
+                            subscription,
+                            proxy,
+                            processed_urls,
                         )
                     )
 
@@ -354,7 +495,7 @@ async def run_scraper():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
+    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
