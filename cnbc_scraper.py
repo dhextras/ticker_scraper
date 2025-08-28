@@ -19,8 +19,11 @@ from DrissionPage.common import Keys
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import (get_current_time, get_next_market_times,
-                              sleep_until_market_open)
+from utils.time_utils import (
+    get_current_time,
+    get_next_market_times,
+    sleep_until_market_open,
+)
 from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
@@ -223,7 +226,7 @@ async def send_critical_alert():
 async def send_login_failed_alert():
     alert = f"🚨 LOGIN FAILED ALERT Login attempt failed!\nWaiting for manual login and script restart."
 
-    for _ in range(3)
+    for _ in range(3):
         await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
         await asyncio.sleep(0.5)
 
