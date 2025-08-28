@@ -394,7 +394,7 @@ async def get_article_data_via_browser(article_url):
         browser_page.get(article_url)
 
         article_data = None
-        max_attempts = 10
+        max_attempts = 5
         attempt = 0
 
         for packet in browser_page.listen.steps():
@@ -435,7 +435,7 @@ async def get_article_data_via_browser(article_url):
                                     "Authentication required in intercepted response.",
                                     "WARNING",
                                 )
-                                continue
+                                break
 
                             article_body = (
                                 response_data.get("data", {})
@@ -445,12 +445,7 @@ async def get_article_data_via_browser(article_url):
                             )
 
                             article_data = extracte_blockquote_text(article_body)
-                            if article_data:
-                                log_message(
-                                    f"Successfully extracted article data from attempt {attempt}",
-                                    "INFO",
-                                )
-                                break
+                            break
 
             except Exception as packet_error:
                 log_message(
