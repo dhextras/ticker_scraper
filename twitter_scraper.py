@@ -248,7 +248,7 @@ async def websocket_ping_loop():
 
             for websocket in clients_to_ping:
                 try:
-                    await websocket.send(json.dumps({"type": "ping"}))
+                    await websocket.send(json.dumps({"dt": "ping"}))
                 except websockets.exceptions.ConnectionClosed:
                     log_message(
                         "[WebSocket] Client disconnected during ping", "WARNING"
@@ -275,13 +275,13 @@ async def handle_websocket_message(websocket):
         async for message in websocket:
             try:
                 data = json.loads(message)
-                search_content = data.get("content", "")
-                type_message = data.get("type", "")
+                search_content = data.get("m", "")
+                dtype = data.get("dt", "")
 
-                if type_message and type_message == "pong":
+                if dtype and dtype == "pong":
                     continue
 
-                if not search_content:
+                if dtype != "s" or not search_content:
                     await send_alert(
                         f"<b>Couldn't found post</b>\n\n<b>Reason:</b> Search content was not provided"
                     )
