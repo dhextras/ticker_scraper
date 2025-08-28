@@ -714,7 +714,13 @@ async def run_alert_monitor():
                     )
                     break
 
-                await asyncio.sleep(60)
+                try:
+                    await check_for_new_alerts()
+                    await asyncio.sleep(0.2)
+
+                except Exception as e:
+                    log_message(f"Error checking alerts: {e}", "ERROR")
+                    await asyncio.sleep(5)
 
         except Exception as e:
             log_message(f"Error in monitor loop: {e}", "ERROR")
