@@ -275,13 +275,13 @@ async def handle_websocket_message(websocket):
         async for message in websocket:
             try:
                 data = json.loads(message)
-                search_content = data.get("m", "")
+                search_content = data.get("te", "")
                 dtype = data.get("dt", "")
 
                 if dtype and dtype == "pong":
                     continue
 
-                if dtype != "s" or not search_content:
+                if not search_content:
                     await send_alert(
                         f"<b>Couldn't found post</b>\n\n<b>Reason:</b> Search content was not provided"
                     )
