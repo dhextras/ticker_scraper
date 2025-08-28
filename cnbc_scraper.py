@@ -19,11 +19,8 @@ from DrissionPage.common import Keys
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import (
-    get_current_time,
-    get_next_market_times,
-    sleep_until_market_open,
-)
+from utils.time_utils import (get_current_time, get_next_market_times,
+                              sleep_until_market_open)
 from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
@@ -44,6 +41,7 @@ ACCESS_TOKEN = None
 
 # Global variables
 last_request_time = 0
+browser_page = None
 
 
 class RateLimiter:
@@ -137,6 +135,7 @@ def extracte_blockquote_text(article_body):
     return None
 
 
+"""
 async def get_article_data(article_id, uid, access_token):
     global ACCESS_TOKEN
 
@@ -213,11 +212,20 @@ async def get_article_data(article_id, uid, access_token):
         except Exception as e:
             log_message(f"Exception in get_article_data: {e}", "ERROR")
             return None
+"""
 
 
 async def send_critical_alert():
     alert = f"🚨 ALERT: Couldn't generate new access token...\nPlease check the server immediately!"
     await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
+
+async def send_login_failed_alert():
+    alert = f"🚨 LOGIN FAILED ALERT Login attempt failed!\nWaiting for manual login and script restart."
+
+    for _ in range(3)
+        await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+        await asyncio.sleep(0.5)
 
 
 def get_ticker(data):
@@ -341,10 +349,134 @@ async def fetch_latest_assets() -> Tuple[List[Dict], str]:
         return [], key
 
 
-async def process_article(article, uid, access_token, fetch_time):
+async def check_login_status():
+    """Check if we're still logged in by visiting the trade alerts page"""
+    global browser_page
+
+    try:
+        if browser_page is None:
+            return False
+
+        log_message("Checking login status...", "INFO")
+        browser_page.get("https://www.cnbc.com/investingclub/trade-alerts/")
+        await asyncio.sleep(10)  # Wait for page to load
+
+        sign_in_button = browser_page.ele("SIGN IN", timeout=2)
+        if "NoneElement" not in str(sign_in_button):
+            log_message("Detected we are logged out", "WARNING")
+            return False
+
+        log_message("Login status confirmed - still logged in", "INFO")
+        return True
+
+    except Exception as e:
+        log_message(f"Error checking login status: {e}", "ERROR")
+        return False
+
+
+async def get_article_data_via_browser(article_url):
+    """Get article data by navigating to the URL and intercepting the GraphQL response"""
+    global browser_page
+
+    try:
+        if browser_page is None:
+            log_message("Browser page is None", "ERROR")
+            return None
+
+        browser_page.listen.start(
+            "https://webql-redesign.cnbcfm.com/graphql?operationName=getArticleData"
+        )
+
+        log_message(f"Navigating to article: {article_url}", "INFO")
+        browser_page.get(article_url)
+
+        article_data = None
+        max_attempts = 10
+        attempt = 0
+
+        for packet in browser_page.listen.steps():
+            try:
+                attempt += 1
+                if attempt > max_attempts:
+                    break
+
+                if (
+                    packet.response
+                    and packet.response.extra_info
+                    and packet.response.extra_info.all_info
+                ):
+
+                    status_code = packet.response.extra_info.all_info.get("statusCode")
+
+                    if packet.response.body and status_code == 200:
+                        response_data = packet.response.body
+
+                        # Check if response has valid structure
+                        if (
+                            isinstance(response_data, dict)
+                            and "data" in response_data
+                            and response_data.get("data")
+                            and "article" in response_data["data"]
+                        ):
+
+                            # Check authentication
+                            is_authenticated = (
+                                response_data.get("data", {})
+                                .get("article", {})
+                                .get("body", {})
+                                .get("isAuthenticated", False)
+                            )
+
+                            if not is_authenticated:
+                                log_message(
+                                    "Authentication required in intercepted response.",
+                                    "WARNING",
+                                )
+                                continue
+
+                            article_body = (
+                                response_data.get("data", {})
+                                .get("article", {})
+                                .get("body", {})
+                                .get("content", [])
+                            )
+
+                            article_data = extracte_blockquote_text(article_body)
+                            if article_data:
+                                log_message(
+                                    f"Successfully extracted article data from attempt {attempt}",
+                                    "INFO",
+                                )
+                                break
+
+            except Exception as packet_error:
+                log_message(
+                    f"Error processing packet {attempt}: {packet_error}", "WARNING"
+                )
+                continue
+
+        browser_page.listen.stop()
+        return article_data
+
+    except Exception as e:
+        log_message(f"Error getting article data via browser: {e}", "ERROR")
+        try:
+            browser_page.listen.stop()
+        except:
+            pass
+        return None
+
+
+async def process_article(article, fetch_time):
     try:
         start_time = time.time()
-        article_data = await get_article_data(article.get("id"), uid, access_token)
+        article_url = article.get("url", "")
+
+        if not article_url:
+            log_message(f"No URL found for article {article.get('id')}", "ERROR")
+            return False
+
+        article_data = await get_article_data_via_browser(article_url)
         fetch_data_time = time.time() - start_time
 
         if article_data:
@@ -390,7 +522,7 @@ async def process_article(article, uid, access_token, fetch_time):
     return False
 
 
-async def check_for_new_alerts(uid, access_token):
+async def check_for_new_alerts():
     global previous_trade_alerts
 
     try:
@@ -413,7 +545,7 @@ async def check_for_new_alerts(uid, access_token):
                 previous_trade_alerts.add(article_id)
                 articles_updated = True
 
-                await process_article(article, uid, access_token, fetch_time)
+                await process_article(article, fetch_time)
 
         # Save alerts if there were any updates
         if articles_updated:
@@ -421,53 +553,6 @@ async def check_for_new_alerts(uid, access_token):
 
     except Exception as e:
         log_message(f"Error in check_for_new_alerts: {e}", "ERROR")
-
-
-async def run_alert_monitor(uid):
-    global previous_trade_alerts
-    global ACCESS_TOKEN
-
-    while True:
-        try:
-            # Wait until market open
-            await sleep_until_market_open()
-            await initialize_websocket()
-            if not ACCESS_TOKEN:
-                await get_new_access_token()
-                if not ACCESS_TOKEN:
-                    await send_critical_alert()
-
-            log_message(
-                "Market is open. Starting to check for new blog posts...", "DEBUG"
-            )
-
-            # Get market close time
-            _, _, market_close_time = get_next_market_times()
-
-            # Load saved alerts at startup
-            previous_trade_alerts = load_saved_alerts()
-
-            # Main market hours loop
-            while True:
-                current_time = get_current_time()
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    ACCESS_TOKEN = None
-                    break
-
-                try:
-                    await check_for_new_alerts(uid, ACCESS_TOKEN)
-                    await asyncio.sleep(0.2)
-
-                except Exception as e:
-                    log_message(f"Error checking alerts: {e}", "ERROR")
-                    await asyncio.sleep(5)
-
-        except Exception as e:
-            log_message(f"Error in monitor loop: {e}", "ERROR")
-            await asyncio.sleep(5)
 
 
 async def simulate_human_browser_behavior(page):
@@ -514,147 +599,126 @@ async def simulate_human_browser_behavior(page):
         page.scroll.to_top()
 
 
-async def get_new_access_token():
-    global ACCESS_TOKEN
-    max_retries = 5
+async def perform_login():
+    """Perform login process"""
+    global browser_page
 
-    for attempt in range(max_retries):
-        options = ChromiumOptions()
-        options.set_argument("--maximize-window")
-        page = ChromiumPage(options)
+    try:
+        log_message("Attempting to login to CNBC...")
 
+        if browser_page is None:
+            options = ChromiumOptions()
+            options.set_argument("--maximize-window")
+            browser_page = ChromiumPage(options)
+
+        await simulate_human_browser_behavior(browser_page)
+
+        sign_in_button = browser_page.ele("SIGN IN", timeout=5)
+        if "NoneElement" in str(sign_in_button):
+            browser_page.ele("css:.SignInMenu-accountMenuAllAccess", timeout=1).click()
+            browser_page.ele("css:.AccountSideDrawer-signOutLink", timeout=1).click()
+
+        sign_in_button = browser_page.ele("SIGN IN", timeout=5)
+        await asyncio.sleep(random.uniform(1, 2))
+        sign_in_button.click()
+        await asyncio.sleep(2)
+
+        email_input = browser_page.ele("email", timeout=1)
+        password_input = browser_page.ele('css:input[name="password"]', timeout=1)
+
+        if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
+            log_message(f"GMAIL_USERNAME isn't available in the env", "CRITICAL")
+            sys.exit(1)
+
+        email_input.clear()
+        email_input.input(GMAIL_USERNAME)
+
+        password_input.clear()
+        await asyncio.sleep(2)
+        password_input.input(GMAIL_PASSWORD + Keys.ENTER)
+        await asyncio.sleep(3)
+
+        sign_in_ele = browser_page.ele('css:button[name="signin"]', timeout=5)
+        if "NoneElement" not in str(sign_in_ele):
+            await asyncio.sleep(300)
+            sign_in_ele.click()
+
+        await asyncio.sleep(5)
+        if await check_login_status():
+            log_message("Login successful!", "INFO")
+            return True
+        else:
+            log_message("Login failed", "ERROR")
+            return False
+
+    except Exception as e:
+        log_message(f"Login attempt failed: {e}", "ERROR")
+        return False
+
+
+async def ensure_logged_in():
+    """Ensure we are logged in, attempt login if needed"""
+    if await check_login_status():
+        return True
+
+    if await perform_login():
+        return True
+    else:
+        await send_login_failed_alert()
+        log_message(
+            "Waiting for manual intervention...",
+            "CRITICAL",
+        )
+
+        while True:
+            await asyncio.sleep(300)
+            if await check_login_status():
+                log_message("Manual login detected! Resuming operations...", "INFO")
+                return True
+
+
+async def run_alert_monitor():
+    global previous_trade_alerts, browser_page
+
+    while True:
         try:
-            log_message(f"Login attempt {attempt + 1}/{max_retries}")
-            page.listen.start(
-                "https://registerng.cnbc.com/api/v4/client/201/users/signin"
+            await sleep_until_market_open()
+            await initialize_websocket()
+
+            if browser_page is None:
+                options = ChromiumOptions()
+                options.set_argument("--maximize-window")
+                browser_page = ChromiumPage(options)
+
+            if not await ensure_logged_in():
+                log_message("Could not ensure login. Retrying in 5 minutes...", "ERROR")
+                await asyncio.sleep(300)
+                continue
+
+            log_message(
+                "Market is open and logged in. Starting to check for new blog posts...",
+                "DEBUG",
             )
-            log_message("Trying to login to cnbc...")
-            page.get("https://www.cnbc.com/investingclub/trade-alerts/")
 
-            async def login():
-                try:
-                    await simulate_human_browser_behavior(page)
+            _, _, market_close_time = get_next_market_times()
+            previous_trade_alerts = load_saved_alerts()
 
-                    sign_in_button = page.ele("SIGN IN", timeout=5)
-                    if "NoneElement" in str(sign_in_button):
-                        page.ele(
-                            "css:.SignInMenu-accountMenuAllAccess", timeout=1
-                        ).click()
-                        page.ele(
-                            "css:.AccountSideDrawer-signOutLink", timeout=1
-                        ).click()
-
-                    sign_in_button = page.ele("SIGN IN", timeout=5)
-                    await asyncio.sleep(random.uniform(1, 2))
-                    sign_in_button.click()
-                    await asyncio.sleep(2)
-
-                    email_input = page.ele("email", timeout=1)
-                    password_input = page.ele('css:input[name="password"]', timeout=1)
-
-                    if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
-                        log_message(
-                            f"GMAIL_USERNAME isn't available in the env", "CRITICAL"
-                        )
-                        sys.exit(1)
-
-                    email_input.clear()
-                    email_input.input(GMAIL_USERNAME)
-
-                    password_input.clear()
-                    await asyncio.sleep(2)
-                    password_input.input(GMAIL_PASSWORD + Keys.ENTER)
-                    await asyncio.sleep(3)
-
-                    sign_in_ele = page.ele('css:button[name="signin"]', timeout=5)
-                    if "NoneElement" not in str(sign_in_ele):
-                        await asyncio.sleep(300)
-                        sign_in_ele.click()
-
-                    return True
-                except Exception as login_error:
-                    log_message(f"Login attempt failed: {login_error}", "WARNING")
-                    return False
-
-            login_success = await login()
-            if not login_success:
-                log_message(f"Login failed on attempt {attempt + 1}", "WARNING")
-                raise Exception("Login failed")
-
-            token_found = False
-
-            i = 0
-            for packet in page.listen.steps():
-                try:
-                    if (
-                        packet.response
-                        and packet.response.extra_info
-                        and packet.response.extra_info.all_info
-                    ):
-                        status_code = packet.response.extra_info.all_info.get(
-                            "statusCode"
-                        )
-
-                        if packet.response.body:
-                            access_token = packet.response.body.get("data", {}).get(
-                                "access_token", None
-                            )
-
-                            if access_token and status_code == 200:
-                                log_message(
-                                    f"Successfully intercepted Access Token: {access_token[:30]}...",
-                                    "INFO",
-                                )
-                                ACCESS_TOKEN = access_token
-                                token_found = True
-                                return
-                            else:
-                                log_message(
-                                    f"Invalid token or status code. Status: {status_code}, Token present: {access_token is not None}",
-                                    "WARNING",
-                                )
-
-                except Exception as packet_error:
-                    log_message(f"Error processing packet: {packet_error}", "WARNING")
-                    continue
-
-                # NOTE: This is just here to break the page.liste.steps() from waiting forever
-                if i >= 1:
+            while True:
+                current_time = get_current_time()
+                if current_time > market_close_time:
+                    log_message(
+                        "Market is closed. Waiting for next market open...", "DEBUG"
+                    )
                     break
-                i += 1
 
-            page.listen.stop()
-
-            if not token_found:
-                raise Exception("No valid access token found in response")
+                await asyncio.sleep(60)
 
         except Exception as e:
-            log_message(f"Attempt {attempt + 1} failed: {e}", "ERROR")
-
-            try:
-                page.quit()
-            except:
-                pass
-
-            if attempt < max_retries - 1:
-                wait_time = random.uniform(3, 6)
-                log_message(f"Waiting {wait_time:.1f} seconds before retry...", "INFO")
-                await asyncio.sleep(wait_time)
-            else:
-                log_message(f"All {max_retries} login attempts failed", "ERROR")
-                log_message(f"Using existing access token: {ACCESS_TOKEN}", "INFO")
-                await send_critical_alert()
-                return
-        finally:
-            try:
-                page.quit()
-            except:
-                pass
+            log_message(f"Error in monitor loop: {e}", "ERROR")
+            await asyncio.sleep(5)
 
 
 def main():
-    uid = GMAIL_USERNAME
-
     if not all(
         [
             TELEGRAM_BOT_TOKEN,
@@ -670,7 +734,7 @@ def main():
 
     try:
         # Start the async event loop
-        asyncio.run(run_alert_monitor(uid))
+        asyncio.run(run_alert_monitor())
 
     except KeyboardInterrupt:
         log_message("Shutting down gracefully...", "INFO")
