@@ -12,11 +12,7 @@ from dotenv import load_dotenv
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
-from utils.time_utils import (
-    get_current_time,
-    get_next_market_times,
-    sleep_until_market_open,
-)
+from utils.time_utils import get_current_time
 from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
@@ -267,30 +263,19 @@ async def run_server():
         log_message("Failed to login to Oxford Club", "ERROR")
         return
 
-    while True:
-        await sleep_until_market_open()
-        await initialize_websocket()
+    await initialize_websocket()
 
-        log_message("Market is open. Starting Oxford Club SMS server...", "DEBUG")
-        _, _, market_close_time = get_next_market_times()
+    log_message("Market is open. Starting Oxford Club SMS server...", "DEBUG")
+    websocket_server = await start_websocket_server()
+    ping_task = asyncio.create_task(websocket_ping_loop())
 
-        websocket_server = await start_websocket_server()
-        ping_task = asyncio.create_task(websocket_ping_loop())
-
-        try:
-            while True:
-                current_time = get_current_time()
-
-                if current_time > market_close_time:
-                    log_message("Market is closed. Stopping server...", "DEBUG")
-                    break
-
-                await asyncio.sleep(60)
-
-        finally:
-            ping_task.cancel()
-            websocket_server.close()
-            await websocket_server.wait_closed()
+    try:
+        while True:
+            await asyncio.sleep(60)
+    finally:
+        ping_task.cancel()
+        websocket_server.close()
+        await websocket_server.wait_closed()
 
 
 async def main_async():
