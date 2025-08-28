@@ -124,15 +124,23 @@ def analyze_email_from_oxfordclub(email_body):
     action_index = email_body.find(action_to_take)
     if action_index != -1:
         after_action_text = email_body[action_index + len(action_to_take) :]
-        after_action_text = re.sub(
-            r"[.,/|~`'!@#$%^&*?+_=<>\-\"\[\]\{\}]", "", after_action_text
-        )  # Clean out unnecessary characters
-        buy_pattern = (
-            r"\*?Buy\s+\*?([A-Za-z\s]+)\*?\s*\(\*?(NYSE|NASDAQ):\s*([A-Z]{1,5})\*?\)"
+
+        ticker_match = re.search(
+            r"(?:NYSE|NASDAQ)\s*:\s*\(?\*?([A-Z]{1,5})\*?\)?",
+            after_action_text,
+            re.IGNORECASE,
         )
-        match = re.search(buy_pattern, after_action_text, re.IGNORECASE)
-        if match:
-            return match.group(2) if match.group(2) else match.group(1).strip()
+        if ticker_match:
+            return ticker_match.group(1)
+
+        ticker_match = re.search(
+            r"\(\s*([A-Z]{1,5})\s*\)",
+            after_action_text,
+            re.IGNORECASE,
+        )
+        if ticker_match:
+            return ticker_match.group(1)
+
     return None
 
 
