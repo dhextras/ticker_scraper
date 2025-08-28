@@ -643,7 +643,7 @@ async def perform_login():
 
         sign_in_ele = browser_page.ele('css:button[name="signin"]', timeout=5)
         if "NoneElement" not in str(sign_in_ele):
-            await asyncio.sleep(300)
+            await asyncio.sleep(5)
             sign_in_ele.click()
 
         await asyncio.sleep(5)
