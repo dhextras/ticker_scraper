@@ -400,9 +400,6 @@ async def process_posts(session, processed_slugs):
             content_data = await fetch_post_content(session, post.get("slug", ""))
             post_info.update(content_data)
 
-            with open(f"data/prosperity_{date}_{i+1}.json", "w") as f:
-                json.dump(post_info, f, indent=2)
-
             await send_alerts(post_info)
 
             if i < len(new_posts) - 1:
