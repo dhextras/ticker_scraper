@@ -207,7 +207,15 @@ async def send_alert(msg: str):
 
 
 def text_similarity(text1, text2, threshold=0.95):
-    similarity = difflib.SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
+    clean_text1 = text1.lower().strip()
+    clean_text2 = text2.lower().strip()
+
+    min_length = min(len(clean_text1), len(clean_text2))
+
+    truncated_text1 = clean_text1[:min_length]
+    truncated_text2 = clean_text2[:min_length]
+
+    similarity = difflib.SequenceMatcher(None, truncated_text1, truncated_text2).ratio()
     return similarity >= threshold
 
 
