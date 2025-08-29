@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import sys
 
 from dotenv import load_dotenv
@@ -15,6 +16,7 @@ from utils.time_utils import (
     get_next_market_times,
     sleep_until_market_open,
 )
+from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
@@ -140,6 +142,16 @@ def extract_channel_name(url):
     return channel_mapping.get(channel_id, f"Channel-{channel_id}")
 
 
+def extract_ticker_from_mystic_alerts(content):
+    # Pattern: $ followed by uppercase letters
+    pattern = r"\$([A-Z]+)"
+
+    match = re.search(pattern, content)
+    if match:
+        return match.group(1)
+    return None
+
+
 async def random_scroll(current_tab):
     try:
         if random.random() < 0.1:
@@ -204,19 +216,35 @@ async def get_latest_message(tab_id, channel_url):
 
 async def send_new_message_notification(message_data, channel_name):
     current_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+    content = message_data["content"]
 
     telegram_message = f"<b>New Discord Message</b>\n\n"
     telegram_message += f"<b>Channel:</b> {channel_name}\n"
     telegram_message += f"<b>Message Time:</b> {message_data['timestamp']}\n"
     telegram_message += f"<b>Current Time:</b> {current_time}\n"
-    telegram_message += f"<b>Content:</b>\n{message_data['content']}\n"
+    telegram_message += f"<b>Content:</b>\n{content}\n"
     telegram_message += f"<b>Channel URL:</b> {message_data['channel_url']}"
 
-    await send_ticker_deck_message(
-        sender="discord",
-        name=channel_name,
-        content=f"New message in {channel_name}: {message_data['content']}",
-    )
+    # NOTE: Custom parsing, if its got complicated move it to a seperate function
+    ticker = None
+    if channel_name == "Mystic" and content.startswith("@Alerts"):
+        ticker = extract_ticker_from_mystic_alerts(content)
+
+    if ticker:
+        await send_ws_message(
+            {
+                "name": f"{channel_name} - Discord",
+                "type": "Buy",
+                "ticker": ticker,
+                "sender": "mystic",
+            },
+        )
+    else:
+        await send_ticker_deck_message(
+            sender="discord",
+            name=channel_name,
+            content=f"New message in {channel_name}: {message_data['content']}",
+        )
     await send_telegram_message(telegram_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
     log_message(f"New message notification sent for {channel_name}", "INFO")
@@ -244,6 +272,7 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
         await initialize_ticker_deck("Discord Scraper")
 
         log_message("Market is open. Starting to monitor Discord channels...", "DEBUG")
