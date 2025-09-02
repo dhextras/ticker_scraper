@@ -139,17 +139,17 @@ async def send_to_telegram_and_ws(article_data):
     message += f"<b>Title:</b> {article_data['title']}\n"
     message += f"<b>PDF URL:</b> {article_data['url']}\n"
     message += f"<b>Extracted Ticker:</b> {article_data['ticker']}\n"
-    #
-    # await send_ws_message(
-    #     {
-    #         "name": "Culper Research Article",
-    #         "type": "Sell",
-    #         "ticker": article_data["ticker"],
-    #         "sender": "culperresearch",
-    #     },
-    # )
 
-    # await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    await send_ws_message(
+        {
+            "name": "Culper Research Article",
+            "type": "Sell",
+            "ticker": article_data["ticker"],
+            "sender": "culperresearch",
+        },
+    )
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
     log_message(
         f"Found a new pdf: {article_data['url']}, found ticker: {article_data['ticker']}"
@@ -161,7 +161,7 @@ async def run_scraper():
     session = requests.Session()
 
     while True:
-        # await sleep_until_market_open()
+        await sleep_until_market_open()
         await initialize_websocket()
 
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
