@@ -146,19 +146,30 @@ class GodelChatMonitor:
 
         return False
 
-    async def subscribe_to_chat(self):
+    async def subscribe_to_all_channels(self):
         if not self.ws or self.ws.closed:
             return False
 
-        headers = {
-            "id": "sub-0",
-            "destination": f"/topic/chat_events/{CHAT_CHANNEL_ID}",
-        }
+        # Subscribe to multiple channels to keep connection alive (Just like from the website)
+        subscriptions = [
+            {"id": "sub-0", "destination": "/topic/errors"},
+            {"id": "sub-1", "destination": "/topic/market/status"},
+            {"id": "sub-2", "destination": "/user/queue/notifications"},
+            {"id": "sub-3", "destination": "/topic/channel_events"},
+            {"id": "sub-4", "destination": f"/topic/chat_events/{CHAT_CHANNEL_ID}"},
+        ]
 
-        subscribe_message = self.format_stomp_message("SUBSCRIBE", headers)
-        await self.ws.send_str(subscribe_message)
-        log_message(f"Subscribed to chat events for channel: {CHAT_CHANNEL_ID}", "INFO")
-        return True
+        try:
+            for sub in subscriptions:
+                subscribe_message = self.format_stomp_message("SUBSCRIBE", sub)
+                await self.ws.send_str(subscribe_message)
+
+            log_message("Subscribed to all channels", "INFO")
+            log_message(f"Main monitoring channel: {CHAT_CHANNEL_ID}", "INFO")
+            return True
+        except Exception as e:
+            log_message(f"Error subscribing to channels: {e}", "ERROR")
+            return False
 
     def extract_message_info(self, body):
         try:
@@ -275,7 +286,7 @@ class GodelChatMonitor:
             return False
         if not await self.send_connect():
             return False
-        if not await self.subscribe_to_chat():
+        if not await self.subscribe_to_all_channels():
             return False
         return True
 
