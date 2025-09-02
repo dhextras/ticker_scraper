@@ -105,15 +105,17 @@ async def process_page(
                         ticker = ticker_match.group(1)
 
                 if ticker:
+                    # NOTE: For now we are leaving all the sells and just sending first buys
+                    # if (
+                    #     sell_match
+                    #     and ticker_match
+                    #     and sell_match.start() < ticker_match.start()
+                    # ):
+                    #     ticker = ticker_match.group(1)
+                    #     return ticker, "Sell"
+                    #
+                    # elif (
                     if (
-                        sell_match
-                        and ticker_match
-                        and sell_match.start() < ticker_match.start()
-                    ):
-                        ticker = ticker_match.group(1)
-                        return ticker, "Sell"
-
-                    elif (
                         buy_match
                         and ticker_match
                         and buy_match.start() < ticker_match.start()

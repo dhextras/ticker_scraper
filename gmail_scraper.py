@@ -119,25 +119,24 @@ def get_email_received_time(headers):
 
 
 def analyze_email_from_oxfordclub(email_body):
-    action_to_take = "Action to Take"
-    action_index = email_body.find(action_to_take)
-    if action_index != -1:
-        after_action_text = email_body[action_index + len(action_to_take) :]
-
+    # NOTE: For now we are leaving all the sells and just sending first buys
+    action_sections = email_body.split("Action to Take")
+    for section in action_sections[1:]:
+        buy_match = re.search(r"Buy", section, re.IGNORECASE)
         ticker_match = re.search(
             r"(?:NYSE|NASDAQ)\s*:\s*\(?\*?([A-Z]{1,5})\*?\)?",
-            after_action_text,
+            section,
             re.IGNORECASE,
         )
-        if ticker_match:
+        if buy_match and ticker_match and buy_match.start() < ticker_match.start():
             return ticker_match.group(1)
 
         ticker_match = re.search(
             r"\(\s*([A-Z]{1,5})\s*\)",
-            after_action_text,
+            section,
             re.IGNORECASE,
         )
-        if ticker_match:
+        if buy_match and ticker_match and buy_match.start() < ticker_match.start():
             return ticker_match.group(1)
 
     return None
@@ -218,6 +217,7 @@ async def process_email(service, message_id):
     if from_email in ["oxford@mp.oxfordclub.com", "oxford@mb.oxfordclub.com"]:
         sender_type = "oxfordclub"
         stock_symbol = analyze_email_from_oxfordclub(email_body)
+        order_type = "Buy"
     elif from_email == "stewie@artoftrading.net":
         sender_type = "stewie"
         stock_symbol = analyze_email_from_artoftrading(subject)

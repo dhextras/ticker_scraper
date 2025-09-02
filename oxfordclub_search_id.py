@@ -169,18 +169,20 @@ async def process_page(
                         ticker = ticker_match.group(1)
 
                 if ticker:
+                    # NOTE: For now we are leaving all the sells and just sending first buys
+                    # if (
+                    #     sell_match
+                    #     and ticker_match
+                    #     and sell_match.start() < ticker_match.start()
+                    # ):
+                    #     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    #     await send_match_to_telegram(
+                    #         url, ticker, exchange, "Sell", timestamp, total_seconds
+                    #     )
+                    #     return (ticker, exchange, "Sell", total_seconds)
+                    #
+                    # elif (
                     if (
-                        sell_match
-                        and ticker_match
-                        and sell_match.start() < ticker_match.start()
-                    ):
-                        timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-                        await send_match_to_telegram(
-                            url, ticker, exchange, "Sell", timestamp, total_seconds
-                        )
-                        return (ticker, exchange, "Sell", total_seconds)
-
-                    elif (
                         buy_match
                         and ticker_match
                         and buy_match.start() < ticker_match.start()
