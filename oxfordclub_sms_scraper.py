@@ -50,13 +50,13 @@ def get_headers() -> Dict[str, str]:
     }
 
 
-def parse_message(message: str) -> Optional[Tuple[str, str, str]]:
-    pattern = r"The Oxford Club:\s+(.+?)\s+\[(.+?)\]\s+(https?://[^\s]+)"
+def parse_message(message: str) -> Optional[Tuple[Optional[str], Optional[str], str]]:
+    pattern = r"The Oxford Club:\s*(?:([^\[]+?)\s+)?\[(.+?)\]\s+(https?://\S+)"
     match = re.search(pattern, message, re.IGNORECASE)
 
     if match:
-        service_name = match.group(1).strip()
-        sentiment = match.group(2).strip().lower()
+        service_name = match.group(1).strip() if match.group(1) else None
+        sentiment = match.group(2).strip().lower() if match.group(2) else None
         url = match.group(3).strip()
         return service_name, sentiment, url
 
