@@ -1049,7 +1049,7 @@ async def process_commentary_result(comment_id, data):
     global current_comment_id, skip_check_active, skip_check_results, skip_check_pending
 
     if skip_check_active and comment_id in skip_check_pending:
-        has_content = bool(data.get("html_content"))
+        has_content = bool(data.get("title")) and bool(data.get("content"))
         skip_check_results[comment_id] = has_content
         skip_check_pending.discard(comment_id)
         log_message(
