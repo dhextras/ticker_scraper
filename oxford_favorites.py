@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
+from utils.oxford_fetch_server import WebSocketFetchServer
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
     get_current_time,
@@ -40,7 +41,7 @@ FAVORITES_WINDOW = 50  # Number of favorites to maintain
 BATCH_SIZE = 10
 BATCH_DELAY = 0.1  # Delay between batch operations (seconds)
 CHECK_INTERVAL = 0.3  # Interval to check favorites page (seconds)
-MAX_NO_FAVORITES_COUNT = 10  # Restart threshold
+MAX_NO_FAVORITES_COUNT = 3  # Restart threshold
 
 # File paths
 DATA_DIR = "data"
@@ -603,7 +604,6 @@ async def initialize_favorites(
 
 
 async def run_favorites_manager() -> None:
-    """Main function to run the favorites manager"""
     while True:
         try:
             state = FavoritesState()
@@ -620,6 +620,11 @@ async def run_favorites_manager() -> None:
                 state.save_state()
 
             await initialize_websocket()
+
+            # Start WebSocket fetch server
+            fetch_server = WebSocketFetchServer(session, host="0.0.0.0", port=8765)
+            server = await fetch_server.start_server()
+
             await initialize_favorites(session, state)
 
             while True:
@@ -654,8 +659,12 @@ async def run_favorites_manager() -> None:
                 )
 
                 session.close()
+                if "server" in locals():
+                    server.close()
+                    await server.wait_closed()
+
                 log_message(
-                    "Session closed and operational counters reset, restarting in 10 seconds...",
+                    "Session and server closed, restarting in 10 seconds...",
                     "INFO",
                 )
             except Exception as cleanup_error:
