@@ -622,7 +622,7 @@ async def run_favorites_manager() -> None:
             await initialize_websocket()
 
             # Start WebSocket fetch server
-            fetch_server = WebSocketFetchServer(session, host="0.0.0.0", port=8765)
+            fetch_server = WebSocketFetchServer(session, host="0.0.0.0", port=8788)
             server = await fetch_server.start_server()
 
             await initialize_favorites(session, state)
