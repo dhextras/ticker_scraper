@@ -47,7 +47,7 @@ class WebSocketFetchServer:
             try:
                 with open(cache_file, "r", encoding="utf-8") as f:
                     cached_data = json.load(f)
-                    log_message(f"Cache hit for URL: {url}", "DEBUG")
+                    log_message(f"Cache hit for URL: {url}", "INFO")
                     return cached_data
             except Exception as e:
                 log_message(f"Error reading cache: {e}", "WARNING")

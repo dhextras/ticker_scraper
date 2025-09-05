@@ -664,7 +664,7 @@ async def run_favorites_manager() -> None:
                     await server.wait_closed()
 
                 log_message(
-                    "Session and server closed, restarting in 10 seconds...",
+                    "Session and server closed, restarting...",
                     "INFO",
                 )
             except Exception as cleanup_error:
@@ -673,7 +673,7 @@ async def run_favorites_manager() -> None:
                     "WARNING",
                 )
 
-            await asyncio.sleep(10)
+            await asyncio.sleep(1)
             continue
 
 
