@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
+from utils.oxford_fetch_client import fetch_url_request, initialize_fetch_websocket
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
     get_current_time,
@@ -48,7 +49,7 @@ def save_processed_urls(urls):
     log_message("Processed URLs saved.", "INFO")
 
 
-def fetch_json(session):
+def fetch_json():
     timestamp = int(time.time() * 10000)
     cache_uuid = uuid4()
 
@@ -62,7 +63,7 @@ def fetch_json(session):
             "cache-uuid": str(cache_uuid),
         }
 
-        response = session.get(JSON_URL, headers=headers)
+        response = requests.get(JSON_URL, headers=headers)
         if response.status_code == 200:
             data = response.json()
             log_message(f"Fetched {len(data)} posts from JSON", "INFO")
@@ -81,37 +82,15 @@ def fetch_json(session):
         return []
 
 
-def login_sync(session):
+async def process_page(url):
     try:
-        payload = {"log": USERNAME, "pwd": PASSWORD}
-        response = session.post(LOGIN_URL, data=payload)
-        if response.status_code == 200:
-            log_message("Login successful", "INFO")
-            return True
-        else:
-            log_message(f"Login failed: HTTP {response.status_code}", "ERROR")
-            return False
-    except Exception as e:
-        log_message(f"Error during login: {e}", "ERROR")
-        return False
-
-
-async def process_page(session, url):
-
-    try:
-        headers = {
-            "Connection": "keep-alive",
-            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
-            "pragma": "no-cache",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
-        }
-
         start_time = time.time()
-        response = session.get(url, headers=headers)
+        response = await fetch_url_request(url, timeout=15)
+
         total_seconds = time.time() - start_time
 
-        if response.status_code == 200:
-            content = response.text
+        if response["status_code"] == 200:
+            content = response["html"]
             soup = BeautifulSoup(content, "html.parser")
             all_text = soup.get_text(separator=" ", strip=True)
 
@@ -164,7 +143,9 @@ async def process_page(session, url):
 
             log_message(f"Took {total_seconds:.2f} to fetch url: {url}", "WARNING")
         else:
-            log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
+            log_message(
+                f"Failed to fetch page: HTTP {response["status_code"]}", "ERROR"
+            )
     except Exception as e:
         log_message(f"Error processing page {url}: {e}", "ERROR")
 
@@ -207,13 +188,10 @@ async def send_match_to_telegram(
 async def run_scraper():
     processed_urls = load_processed_urls()
 
-    session = requests.Session()
-    if not login_sync(session):
-        return
-
     while True:
         await sleep_until_market_open()
         await initialize_websocket()
+        await initialize_fetch_websocket()
 
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
@@ -229,7 +207,7 @@ async def run_scraper():
 
             log_message("Checking for new posts...")
             start_time = time.time()
-            posts = fetch_json(session)
+            posts = fetch_json()
             time_to_fetch = time.time() - start_time
 
             new_urls = [
@@ -243,7 +221,7 @@ async def run_scraper():
                 timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
                 for url in new_urls:
-                    await process_page(session, url)
+                    await process_page(url)
                     processed_urls.add(url)
 
                 await send_posts_to_telegram(new_urls, timestamp, time_to_fetch)

@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
+from utils.oxford_fetch_client import fetch_url_request, initialize_fetch_websocket
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
     get_current_time,
@@ -53,21 +54,6 @@ def save_latest_id(latest_id: int) -> None:
     log_message(f"Latest ID saved: {latest_id}", "INFO")
 
 
-def login_sync(session: requests.Session) -> bool:
-    try:
-        payload = {"log": USERNAME, "pwd": PASSWORD}
-        response = session.post(LOGIN_URL, data=payload)
-        if response.status_code == 200:
-            log_message("Login successful", "INFO")
-            return True
-        else:
-            log_message(f"Login failed: HTTP {response.status_code}", "ERROR")
-            return False
-    except Exception as e:
-        log_message(f"Error during login: {e}", "ERROR")
-        return False
-
-
 def get_headers() -> Dict[str, str]:
     timestamp = int(time.time() * 10000)
     cache_uuid = uuid4()
@@ -82,9 +68,7 @@ def get_headers() -> Dict[str, str]:
     }
 
 
-async def check_post_by_id(
-    session: requests.Session, post_id: int
-) -> Optional[List[Dict[str, Any]]]:
+async def check_post_by_id(post_id: int) -> Optional[List[Dict[str, Any]]]:
     """
     Check if a post with the given ID exists by querying the Posts API
     """
@@ -92,7 +76,7 @@ async def check_post_by_id(
         start_time = time.time()
         url = f"{SEARCH_URL}?include={post_id}"
         response = await asyncio.to_thread(
-            session.get, url, headers=get_headers(), timeout=15
+            requests.get, url, headers=get_headers(), timeout=15
         )
         time_to_fetch = time.time() - start_time
 
@@ -105,7 +89,7 @@ async def check_post_by_id(
                     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
                     url = found_post.get("url", "")
-                    await process_page(session, url)
+                    await process_page(url)
 
                     await send_post_to_telegram(found_post, timestamp, time_to_fetch)
 
@@ -124,18 +108,14 @@ async def check_post_by_id(
         return None
 
 
-async def process_page(
-    session: requests.Session, url: str
-) -> Optional[Tuple[str, str, str, float]]:
+async def process_page(url: str) -> Optional[Tuple[str, str, str, float]]:
     try:
         start_time = time.time()
-        response = await asyncio.to_thread(
-            session.get, url, headers=get_headers(), timeout=15
-        )
+        response = await fetch_url_request(url, timeout=15)
         total_seconds = time.time() - start_time
 
-        if response.status_code == 200:
-            content = response.text
+        if response["status_code"] == 200:
+            content = response["html"]
             soup = BeautifulSoup(content, "html.parser")
             all_text = soup.get_text(separator=" ", strip=True)
 
@@ -197,7 +177,9 @@ async def process_page(
                 f"Took {total_seconds:.2f}s to fetch and process URL: {url}", "WARNING"
             )
         else:
-            log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
+            log_message(
+                f"Failed to fetch page: HTTP {response['status_code']}", "ERROR"
+            )
     except Exception as e:
         log_message(f"Error processing page {url}: {e}", "ERROR")
 
@@ -244,15 +226,13 @@ async def send_match_to_telegram(
     log_message(f"Match sent to Telegram: {exchange}:{ticker} - {url}", "INFO")
 
 
-async def check_batch_of_posts(
-    session: requests.Session, latest_id: int, batch_size: int
-) -> int:
+async def check_batch_of_posts(latest_id: int, batch_size: int) -> int:
     """Check a batch of post IDs concurrently"""
     tasks = []
 
     for offset in range(batch_size):
         current_id = latest_id + offset + 1
-        tasks.append(check_post_by_id(session, current_id))
+        tasks.append(check_post_by_id(current_id))
 
     results = await asyncio.gather(*tasks)
 
@@ -273,13 +253,10 @@ async def run_scraper() -> None:
         latest_id = STARTING_ID
         save_latest_id(latest_id)
 
-    session = requests.Session()
-    if not login_sync(session):
-        return
-
     while True:
         await sleep_until_market_open()
         await initialize_websocket()
+        await initialize_fetch_websocket()
 
         log_message("Market is open. Starting to check for new posts...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
@@ -296,7 +273,7 @@ async def run_scraper() -> None:
             log_message(f"Checking for new posts from ID: {latest_id + 1}", "INFO")
 
             # Check a batch of posts concurrently
-            found_id = await check_batch_of_posts(session, latest_id, BATCH_SIZE)
+            found_id = await check_batch_of_posts(latest_id, BATCH_SIZE)
 
             if found_id > latest_id:
                 latest_id = found_id

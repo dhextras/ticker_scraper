@@ -5,12 +5,12 @@ import re
 import sys
 from typing import Dict, Optional, Tuple
 
-import requests
 import websockets
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
+from utils.oxford_fetch_client import fetch_url_request, initialize_fetch_websocket
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import get_current_time
 from utils.websocket_sender import initialize_websocket, send_ws_message
@@ -25,22 +25,6 @@ TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
 WEBSOCKET_PORT = 8765
 
 connected_websockets = set()
-session = None
-
-
-def login_sync(session: requests.Session) -> bool:
-    try:
-        payload = {"log": USERNAME, "pwd": PASSWORD}
-        response = session.post(LOGIN_URL, data=payload)
-        if response.status_code == 200:
-            log_message("Login successful", "INFO")
-            return True
-        else:
-            log_message(f"Login failed: HTTP {response.status_code}", "ERROR")
-            return False
-    except Exception as e:
-        log_message(f"Error during login: {e}", "ERROR")
-        return False
 
 
 def get_headers() -> Dict[str, str]:
@@ -63,16 +47,12 @@ def parse_message(message: str) -> Optional[Tuple[Optional[str], Optional[str], 
     return None
 
 
-async def process_page(
-    session: requests.Session, url: str
-) -> Optional[Tuple[str, str]]:
+async def process_page(url: str) -> Optional[Tuple[str, str]]:
     try:
-        response = await asyncio.to_thread(
-            session.get, url, headers=get_headers(), timeout=15
-        )
+        response = await fetch_url_request(url, timeout=15)
 
-        if response.status_code == 200:
-            content = response.text
+        if response["status_code"] == 200:
+            content = response["html"]
             soup = BeautifulSoup(content, "html.parser")
             all_text = soup.get_text(separator=" ", strip=True)
 
@@ -125,16 +105,16 @@ async def process_page(
 
             log_message(f"No ticker found in URL: {url}", "WARNING")
         else:
-            log_message(f"Failed to fetch page: HTTP {response.status_code}", "ERROR")
+            log_message(
+                f"Failed to fetch page: HTTP {response['status_code']}", "ERROR"
+            )
     except Exception as e:
         log_message(f"Error processing page {url}: {e}", "ERROR")
 
     return None
 
 
-async def process_sms_message(
-    session: requests.Session, message: str, message_timestamp: str
-):
+async def process_sms_message(message: str, message_timestamp: str):
     current_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     parsed = parse_message(message)
@@ -148,7 +128,7 @@ async def process_sms_message(
         return
 
     service_name, sentiment, url = parsed
-    result = await process_page(session, url)
+    result = await process_page(url)
 
     telegram_message = f"<b>Oxford Club SMS - {service_name}</b>\n\n"
 
@@ -204,15 +184,6 @@ async def websocket_ping_loop():
 
 
 async def handle_websocket_message(websocket):
-    global session
-
-    if not session:
-        session = requests.Session()
-
-        if not login_sync(session):
-            log_message("Failed to login to Oxford Club", "ERROR")
-            return
-
     connected_websockets.add(websocket)
     client_address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
     log_message(f"[WebSocket] New client connected: {client_address}", "INFO")
@@ -232,9 +203,7 @@ async def handle_websocket_message(websocket):
 
                     if sms_message:
                         log_message(f"Received SMS: {sms_message[:100]}...", "INFO")
-                        await process_sms_message(
-                            session, sms_message, message_timestamp
-                        )
+                        await process_sms_message(sms_message, message_timestamp)
                     else:
                         log_message("Received empty SMS message", "WARNING")
 
@@ -258,14 +227,8 @@ async def start_websocket_server():
 
 
 async def run_server():
-    global session
-
-    session = requests.Session()
-    if not login_sync(session):
-        log_message("Failed to login to Oxford Club", "ERROR")
-        return
-
     await initialize_websocket()
+    await initialize_fetch_websocket()
 
     log_message("Market is open. Starting Oxford Club SMS server...", "DEBUG")
     websocket_server = await start_websocket_server()
