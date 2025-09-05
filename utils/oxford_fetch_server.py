@@ -1,9 +1,11 @@
 import asyncio
 import hashlib
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Set
+from uuid import uuid4
 
 import websockets
 from websockets.server import WebSocketServerProtocol
@@ -62,18 +64,26 @@ class WebSocketFetchServer:
         except Exception as e:
             log_message(f"Error saving to cache: {e}", "WARNING")
 
+    def get_headers(self) -> Dict[str, str]:
+        timestamp = int(time.time() * 10000)
+        cache_uuid = uuid4()
+
+        return {
+            "Connection": "keep-alive",
+            "cache-control": "no-cache, no-store, max-age=0, must-revalidate, private",
+            "pragma": "no-cache",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
+            "cache-timestamp": str(timestamp),
+            "cache-uuid": str(cache_uuid),
+        }
+
     def fetch_url(self, url: str) -> Dict:
         cached_response = self.get_cached_response(url)
         if cached_response:
             return cached_response
 
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            }
-
-            response = self.session.get(url, headers=headers, timeout=30)
+            response = self.session.get(url, headers=self.get_headers(), timeout=30)
 
             response_data = {
                 "status_code": response.status_code,
@@ -112,7 +122,7 @@ class WebSocketFetchServer:
     def fetch_in_thread(self, url: str) -> Dict:
         return self.fetch_url(url)
 
-    async def handle_client(self, websocket: WebSocketServerProtocol, path: str):
+    async def handle_client(self, websocket, path):
         await self.register_client(websocket)
 
         try:
