@@ -122,7 +122,7 @@ class WebSocketFetchServer:
     def fetch_in_thread(self, url: str) -> Dict:
         return self.fetch_url(url)
 
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         await self.register_client(websocket)
 
         try:
