@@ -223,6 +223,11 @@ async def send_critical_alert():
     await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 
 
+async def send_critical_alert_custom(message):
+    alert = f"🚨 ALERT: {message}\nPlease check the server immediately!"
+    await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+
+
 async def send_login_failed_alert():
     alert = f"🚨 LOGIN FAILED ALERT Login attempt failed!\nWaiting for manual login and script restart."
 
@@ -378,13 +383,13 @@ async def check_login_status():
 
 
 async def get_article_data_via_browser(article_url):
-    """Get article data by navigating to the URL and intercepting the GraphQL response"""
+    """Get article data by navigating to the URL and intercepting the GraphQL response with timeout"""
     global browser_page
 
     try:
         if browser_page is None:
             log_message("Browser page is None", "ERROR")
-            return None
+            return "Browser page is not available"
 
         browser_page.listen.start(
             "https://webql-redesign.cnbcfm.com/graphql?operationName=getArticleData"
@@ -394,67 +399,147 @@ async def get_article_data_via_browser(article_url):
         browser_page.get(article_url)
 
         article_data = None
-        max_attempts = 5
-        attempt = 0
+        timeout_reached = threading.Event()
+        processing_complete = threading.Event()
+        result_lock = threading.Lock()
 
-        for packet in browser_page.listen.steps():
+        def process_packets():
+            nonlocal article_data
+            max_attempts = 5
+            attempt = 0
+
             try:
-                attempt += 1
-                if attempt > max_attempts:
-                    break
+                for packet in browser_page.listen.steps():
+                    if timeout_reached.is_set():
+                        break
 
-                if (
-                    packet.response
-                    and packet.response.extra_info
-                    and packet.response.extra_info.all_info
-                ):
-
-                    status_code = packet.response.extra_info.all_info.get("statusCode")
-
-                    if packet.response.body and status_code == 200:
-                        response_data = packet.response.body
-
-                        # Check if response has valid structure
-                        if (
-                            isinstance(response_data, dict)
-                            and "data" in response_data
-                            and response_data.get("data")
-                            and "article" in response_data["data"]
-                        ):
-
-                            # Check authentication
-                            is_authenticated = (
-                                response_data.get("data", {})
-                                .get("article", {})
-                                .get("body", {})
-                                .get("isAuthenticated", False)
-                            )
-
-                            if not is_authenticated:
-                                log_message(
-                                    "Authentication required in intercepted response.",
-                                    "WARNING",
-                                )
-                                break
-
-                            article_body = (
-                                response_data.get("data", {})
-                                .get("article", {})
-                                .get("body", {})
-                                .get("content", [])
-                            )
-
-                            article_data = extracte_blockquote_text(article_body)
+                    try:
+                        attempt += 1
+                        if attempt > max_attempts:
                             break
 
-            except Exception as packet_error:
-                log_message(
-                    f"Error processing packet {attempt}: {packet_error}", "WARNING"
-                )
-                continue
+                        if (
+                            packet.response
+                            and packet.response.extra_info
+                            and packet.response.extra_info.all_info
+                        ):
 
-        browser_page.listen.stop()
-        return article_data
+                            status_code = packet.response.extra_info.all_info.get(
+                                "statusCode"
+                            )
+                            if packet.response.body and status_code == 200:
+                                response_data = packet.response.body
+                                # Check if response has valid structure
+                                if (
+                                    isinstance(response_data, dict)
+                                    and "data" in response_data
+                                    and response_data.get("data")
+                                    and "article" in response_data["data"]
+                                ):
+                                    # Check authentication
+                                    is_authenticated = (
+                                        response_data.get("data", {})
+                                        .get("article", {})
+                                        .get("body", {})
+                                        .get("isAuthenticated", False)
+                                    )
+                                    if not is_authenticated:
+                                        log_message(
+                                            "Authentication required in intercepted response.",
+                                            "WARNING",
+                                        )
+                                        break
+
+                                    article_body = (
+                                        response_data.get("data", {})
+                                        .get("article", {})
+                                        .get("body", {})
+                                        .get("content", [])
+                                    )
+                                    with result_lock:
+                                        article_data = extracte_blockquote_text(
+                                            article_body
+                                        )
+                                    processing_complete.set()
+                                    return
+
+                    except Exception as packet_error:
+                        log_message(
+                            f"Error processing packet {attempt}: {packet_error}",
+                            "WARNING",
+                        )
+                        continue
+
+            except Exception as e:
+                log_message(f"Error in packet processing: {e}", "WARNING")
+            finally:
+                processing_complete.set()
+
+        def check_timeout_and_error_page():
+            start_time = time.time()
+            timeout_duration = 15  # 15 seconds
+
+            while not processing_complete.is_set():
+                elapsed_time = time.time() - start_time
+
+                if elapsed_time >= timeout_duration:
+                    asyncio.run(
+                        send_critical_alert_custom("Timeout reached after 15 seconds")
+                    )
+                    timeout_reached.set()
+
+                    # Check for error in page
+                    try:
+                        error_element = browser_page.ele(
+                            "We're sorry, the page you were looking for cannot be found.",
+                            timeout=0.5,
+                        )
+                        if error_element:
+                            log_message("Error page detected", "WARNING")
+                            return "We're sorry, the page you were looking for cannot be found."
+                        else:
+                            log_message(
+                                "Timeout reached but no error page found", "WARNING"
+                            )
+                            return "Request timed out after 15 seconds - page may be loading slowly or unavailable"
+                    except Exception as e:
+                        log_message(f"Error checking for error page: {e}", "WARNING")
+                        return "Request timed out after 15 seconds - unable to verify page status"
+
+                time.sleep(0.5)
+
+            return None
+
+        packet_thread = threading.Thread(target=process_packets)
+        timeout_thread = threading.Thread(target=check_timeout_and_error_page)
+
+        packet_thread.start()
+        timeout_thread.start()
+
+        packet_thread.join(timeout=16)
+        timeout_thread.join(timeout=1)
+
+        try:
+            browser_page.listen.stop()
+        except:
+            pass
+
+        with result_lock:
+            if article_data is not None:
+                return article_data
+
+        try:
+            error_element = browser_page.ele(
+                "We're sorry, the page you were looking for cannot be found."
+            )
+            if error_element:
+                return "We're sorry, the page you were looking for cannot be found."
+        except Exception as e:
+            log_message(f"Error checking for error page at end: {e}", "WARNING")
+
+        return (
+            "No article data found - page may require authentication or be unavailable"
+        )
 
     except Exception as e:
         log_message(f"Error getting article data via browser: {e}", "ERROR")
@@ -462,7 +547,7 @@ async def get_article_data_via_browser(article_url):
             browser_page.listen.stop()
         except:
             pass
-        return None
+        return f"Error occurred while processing article: {str(e)}"
 
 
 async def process_article(article, fetch_time):
