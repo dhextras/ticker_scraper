@@ -44,6 +44,15 @@ def parse_message(message: str) -> Optional[Tuple[Optional[str], Optional[str], 
         url = match.group(3).strip()
         return service_name, sentiment, url
 
+    url_pattern = r"(https?://\S+)(?:\s|$)"
+    url_match = re.search(url_pattern, message, re.IGNORECASE)
+
+    if url_match:
+        url = url_match.group(1).strip()
+        service_name = "Unknown"
+        sentiment = None
+        return service_name, sentiment, url
+
     return None
 
 
