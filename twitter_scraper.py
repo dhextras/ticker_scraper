@@ -33,8 +33,8 @@ TCP_PORT = int(os.getenv("TCP_PORT", 3005))
 TCP_SECRET = os.getenv("TCP_SECRET")
 TCP_USERNAME = os.getenv("TCP_USERNAME")
 TWITTER_HOME_URL = "https://x.com/home"
-REFRESH_INTERVAL = random.uniform(5, 10)
-PROCESSED_POSTS_FILE = "data/twitter_processed_posts.json"
+TWITTER_DATA_DIR = "data/twitter_data"
+LAST_POST_FILE = "data/twitter_last_post.json"
 SESSION_FILE = "data/twitter_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("TWITTER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("TWITTER_TELEGRAM_GRP")
@@ -42,11 +42,13 @@ TWITTER_USERNAME = os.getenv("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.getenv("TWITTER_PASSWORD")
 
 os.makedirs("data", exist_ok=True)
+os.makedirs(TWITTER_DATA_DIR, exist_ok=True)
 
 tcp_client = None
 co = ChromiumOptions()
 page = ChromiumPage(co)
-processed_data_global = {"posts": [], "last_post": None}
+last_received_content = ""
+posts_memory_cache = []  # In-memory cache for yesterday and today's posts
 
 connected_websockets = set()
 
@@ -196,6 +198,73 @@ class EncryptedTcpClient:
             self.send_message("HEARTBEAT")
 
 
+def get_date_file_path(date_obj):
+    """Get the file path for storing posts of a specific date"""
+    year = date_obj.strftime("%Y")
+    month = date_obj.strftime("%m")
+    day = date_obj.strftime("%d")
+
+    year_dir = os.path.join(TWITTER_DATA_DIR, year)
+    month_dir = os.path.join(year_dir, month)
+
+    os.makedirs(month_dir, exist_ok=True)
+
+    return os.path.join(month_dir, f"{day}.json")
+
+
+def load_posts_for_date(date_obj):
+    """Load posts for a specific date"""
+    file_path = get_date_file_path(date_obj)
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+
+def save_posts_for_date(date_obj, posts):
+    """Save posts for a specific date"""
+    file_path = get_date_file_path(date_obj)
+    with open(file_path, "w") as f:
+        json.dump(posts, f, indent=2)
+
+
+def load_last_post():
+    """Load the last processed post"""
+    try:
+        with open(LAST_POST_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+def save_last_post(post_data):
+    """Save the last processed post"""
+    with open(LAST_POST_FILE, "w") as f:
+        json.dump(post_data, f, indent=2)
+
+
+def load_recent_posts_to_memory():
+    """Load yesterday's and today's posts into memory cache"""
+    global posts_memory_cache
+
+    today = datetime.datetime.now().date()
+    yesterday = today - datetime.timedelta(days=1)
+
+    posts_memory_cache = []
+
+    yesterday_posts = load_posts_for_date(yesterday)
+    posts_memory_cache.extend(yesterday_posts)
+
+    today_posts = load_posts_for_date(today)
+    posts_memory_cache.extend(today_posts)
+
+    log_message(
+        f"Loaded {len(posts_memory_cache)} posts into memory cache (yesterday: {len(yesterday_posts)}, today: {len(today_posts)})",
+        "INFO",
+    )
+
+
 async def send_alert(msg: str):
     alert = f"🚨 ALERT: {msg}\n\nPlease check the server!"
     await send_telegram_message(alert, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
@@ -215,9 +284,19 @@ def text_similarity(text1, text2, threshold=0.95):
 
 
 def find_matching_post(search_content, posts_list):
+    """Find matching post with timing"""
+    start_time = time.time()
+
     for post in posts_list:
         if text_similarity(search_content, post["content"]):
+            search_time = (time.time() - start_time) * 1000
+            log_message(f"Post matching algorithm took: {search_time:.2f}ms", "INFO")
             return post
+
+    search_time = (time.time() - start_time) * 1000
+    log_message(
+        f"Post matching algorithm took: {search_time:.2f}ms (no match found)", "INFO"
+    )
     return None
 
 
@@ -265,7 +344,8 @@ async def websocket_ping_loop():
 
 
 async def handle_websocket_message(websocket):
-    global processed_data_global
+    global posts_memory_cache
+    global last_received_content
 
     connected_websockets.add(websocket)
     client_address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
@@ -277,6 +357,7 @@ async def handle_websocket_message(websocket):
     try:
         async for message in websocket:
             try:
+                request_start_time = time.time()
                 data = json.loads(message)
                 search_content = data.get("te", "")
                 dtype = data.get("dt", "")
@@ -291,12 +372,19 @@ async def handle_websocket_message(websocket):
                     log_message(f"Search content was empty content: {data}")
                     continue
 
+                if search_content == last_received_content:
+                    log_message(
+                        "Received the same content to check ignoring...", "WARNING"
+                    )
+                    continue
+
+                last_received_content = search_content
                 log_message(
-                    f"Recevied a search for content: {search_content[:300]}...." "INFO"
+                    f"Received a search request for content: {search_content[:300]}....",
+                    "INFO",
                 )
-                matching_post = find_matching_post(
-                    search_content, processed_data_global["posts"]
-                )
+
+                matching_post = find_matching_post(search_content, posts_memory_cache)
 
                 if matching_post:
                     # FIXME: Send to tcp and also after that send to telegram as well and when error shows up like not found or something like that send to telegram twitter channel as well
@@ -306,15 +394,21 @@ async def handle_websocket_message(websocket):
                         "te": matching_post["content"],
                         "ts": time.time() * 1000,
                     }
-                    await send_found_post(response_data, "database")
+                    total_time = (time.time() - request_start_time) * 1000
+                    log_message(
+                        f"Found post in memory cache. Total request time: {total_time:.2f}ms",
+                        "INFO",
+                    )
+                    await send_found_post(response_data, "memory_cache")
                     continue
 
-                # If not found, refresh and check again
-                log_message("Post not found in DB, refreshing feed", "INFO")
+                # If not found in cache, refresh and check again
+                log_message("Post not found in memory cache, refreshing feed", "INFO")
+                fresh_posts_start = time.time()
                 fresh_posts = await refresh_and_get_posts()
+                fresh_posts_time = (time.time() - fresh_posts_start) * 1000
 
                 if fresh_posts:
-                    await store_new_posts(fresh_posts, processed_data_global)
                     matching_post = find_matching_post(search_content, fresh_posts)
 
                     if matching_post:
@@ -324,11 +418,24 @@ async def handle_websocket_message(websocket):
                             "te": matching_post["content"],
                             "ts": time.time() * 1000,
                         }
+                        total_time = (time.time() - request_start_time) * 1000
+                        log_message(
+                            f"Found post in fresh fetch. Fresh fetch took: {fresh_posts_time:.2f}ms, Total request time: {total_time:.2f}ms",
+                            "INFO",
+                        )
                         await send_found_post(response_data, "fresh_fetch")
                         continue
 
+                    await store_new_posts(fresh_posts)
+                    load_recent_posts_to_memory()
+
+                total_time = (time.time() - request_start_time) * 1000
+                log_message(
+                    f"Post not found anywhere. Fresh fetch took: {fresh_posts_time:.2f}ms, Total request time: {total_time:.2f}ms",
+                    "WARNING",
+                )
                 await send_alert(
-                    f"<b>Couldn't found post</b>\n\n<b>Reason:</b> Couldn't find the post in DB/Fresh fetch\n<b>Content</b>: {search_content[:200]}\n\n content is trimmed....."
+                    f"<b>Couldn't found post</b>\n\n<b>Reason:</b> Couldn't find the post in memory cache/Fresh fetch\n<b>Content</b>: {search_content[:200]}\n\n content is trimmed....."
                 )
 
             except json.JSONDecodeError:
@@ -353,25 +460,6 @@ async def handle_websocket_message(websocket):
         log_message(
             f"[WebSocket] Total connected clients: {len(connected_websockets)}", "INFO"
         )
-
-
-def load_processed_posts():
-    global processed_data_global
-    try:
-        with open(PROCESSED_POSTS_FILE, "r") as f:
-            processed_data_global = json.load(f)
-            return processed_data_global
-    except FileNotFoundError:
-        processed_data_global = {"posts": [], "last_post": None}
-        return processed_data_global
-
-
-def save_processed_posts(posts_data):
-    global processed_data_global
-    with open(PROCESSED_POSTS_FILE, "w") as f:
-        json.dump(posts_data, f, indent=2)
-    processed_data_global = posts_data
-    log_message("Processed posts saved.", "INFO")
 
 
 async def send_captcha_notification():
@@ -454,6 +542,8 @@ async def login_twitter():
 def extract_posts():
     try:
         # NOTE: Wait till the first username loads this way we can make sure that the content is loaded
+        extraction_start = time.time()
+
         page.ele(
             'css:div[aria-label="Timeline: Your Home Timeline"] > div > div div[data-testid="User-Name"] > div:nth-child(1) > div > a > div > div > span > span',
             timeout=5,
@@ -467,6 +557,8 @@ def extract_posts():
         if len(post_containers) == 0:
             log_message("Couldn't found any post in the page", "WARNING")
             return []
+
+        parsing_start = time.time()
 
         for container in post_containers:
             try:
@@ -508,10 +600,25 @@ def extract_posts():
                 log_message(f"Error parsing individual post: {e}", "ERROR")
                 continue
 
+        parsing_time = (time.time() - parsing_start) * 1000
+        total_extraction_time = (time.time() - extraction_start) * 1000
+
+        log_message(
+            f"Post extraction completed: {len(posts)} posts found. Parsing took: {parsing_time:.2f}ms, Total extraction: {total_extraction_time:.2f}ms",
+            "INFO",
+        )
+
         return posts
 
     except Exception as e:
-        log_message(f"Error extracting posts: {e}", "ERROR")
+        extraction_time = (
+            (time.time() - extraction_start) * 1000
+            if "extraction_start" in locals()
+            else 0
+        )
+        log_message(
+            f"Error extracting posts (took {extraction_time:.2f}ms): {e}", "ERROR"
+        )
         return []
 
 
@@ -522,7 +629,7 @@ async def navigate_to_following():
 
         # FIXME: fix this shit too it should propery log things
         page.ele("Following").click()
-        log_message("I think we did navigate to following page", "WARNING")
+        log_message("Navigated to following page", "INFO")
         return True
 
     except Exception as e:
@@ -530,8 +637,8 @@ async def navigate_to_following():
         return False
 
 
-async def scroll_to_find_last_post(processed_data, max_scrolls=100):
-    last_post_data = processed_data["last_post"]
+async def scroll_to_find_last_post(max_scrolls=100):
+    last_post_data = load_last_post()
     if not last_post_data:
         return True
 
@@ -543,11 +650,11 @@ async def scroll_to_find_last_post(processed_data, max_scrolls=100):
         posts = extract_posts()
         if scroll_count > 0:
             log_message(
-                f"Found {len(posts)} posts after scrolling. total time took: {(time.time() - start):.2f}"
+                f"Found {len(posts)} posts after scrolling. total time took: {(time.time() - start):.2f}s"
             )
 
         if len(posts) > 0:
-            await store_new_posts(posts, processed_data)
+            await store_new_posts(posts)
 
         for post in posts:
             if (
@@ -567,36 +674,83 @@ async def scroll_to_find_last_post(processed_data, max_scrolls=100):
 
 async def refresh_and_get_posts():
     try:
+        refresh_start = time.time()
         log_message(f"Starting post refresh...")
+
         page.scroll.to_top()
+        scroll_time = time.time()
+
         page.refresh()
+        refresh_time = time.time()
+
         posts = extract_posts()
-        log_message(f"Extracted {len(posts)} posts", "INFO")
+        extraction_time = time.time()
+
+        total_time = (extraction_time - refresh_start) * 1000
+        scroll_duration = (scroll_time - refresh_start) * 1000
+        refresh_duration = (refresh_time - scroll_time) * 1000
+        extraction_duration = (extraction_time - refresh_time) * 1000
+
+        log_message(
+            f"Post refresh completed: {len(posts)} posts. Scroll: {scroll_duration:.2f}ms, Refresh: {refresh_duration:.2f}ms, Extraction: {extraction_duration:.2f}ms, Total: {total_time:.2f}ms",
+            "INFO",
+        )
         return posts
 
     except Exception as e:
-        log_message(f"Error refreshing and getting posts: {e}", "ERROR")
+        total_time = (
+            (time.time() - refresh_start) * 1000 if "refresh_start" in locals() else 0
+        )
+        log_message(
+            f"Error refreshing and getting posts (took {total_time:.2f}ms): {e}",
+            "ERROR",
+        )
         return []
 
 
-async def store_new_posts(new_posts, processed_data):
-    stored_count = 0
+async def store_new_posts(new_posts):
+    """Store new posts in date-based files and update memory cache"""
+    if not new_posts:
+        return 0
 
-    existing_post_ids = {post["post_id"] for post in processed_data["posts"]}
+    stored_count = 0
+    posts_by_date = {}
 
     for post in new_posts:
-        if post["post_id"] not in existing_post_ids:
-            processed_data["posts"].append(post)
-            stored_count += 1
+        try:
+            post_date = datetime.datetime.strptime(
+                post["timestamp"], "%Y-%m-%d %H:%M:%S"
+            ).date()
+            if post_date not in posts_by_date:
+                posts_by_date[post_date] = []
+            posts_by_date[post_date].append(post)
+        except ValueError:
+            log_message(
+                f"Invalid timestamp format in post: {post['timestamp']}", "ERROR"
+            )
+            continue
+
+    for date_obj, date_posts in posts_by_date.items():
+        existing_posts = load_posts_for_date(date_obj)
+        existing_post_ids = {post["post_id"] for post in existing_posts}
+
+        new_posts_for_date = []
+        for post in date_posts:
+            if post["post_id"] not in existing_post_ids:
+                new_posts_for_date.append(post)
+                stored_count += 1
+
+        if new_posts_for_date:
+            all_posts_for_date = existing_posts + new_posts_for_date
+            save_posts_for_date(date_obj, all_posts_for_date)
 
     if stored_count > 0:
-        processed_data["last_post"] = new_posts[0] if new_posts else None
+        save_last_post(new_posts[0])
+        load_recent_posts_to_memory()
 
-        if len(processed_data["posts"]) > 1000:
-            processed_data["posts"] = processed_data["posts"][-500:]
-
-        save_processed_posts(processed_data)
-        log_message(f"Stored {stored_count} new posts", "INFO")
+        log_message(
+            f"Stored {stored_count} new posts across {len(posts_by_date)} dates", "INFO"
+        )
 
     return stored_count
 
@@ -607,9 +761,10 @@ async def start_websocket_server():
 
 
 async def run_scraper():
-    processed_data = load_processed_posts()
     failed_login_attempts = 0
     max_failed_attempts = 3
+
+    load_recent_posts_to_memory()
 
     while failed_login_attempts < max_failed_attempts:
         if await login_twitter():
@@ -634,7 +789,7 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
-        await scroll_to_find_last_post(processed_data)
+        await scroll_to_find_last_post()
 
         log_message("Market is open. Starting to monitor Twitter following...", "DEBUG")
         _, _, market_close_time = get_next_market_times()
@@ -660,10 +815,10 @@ async def run_scraper():
                 posts = await refresh_and_get_posts()
 
                 if posts:
-                    stored_count = await store_new_posts(posts, processed_data)
+                    stored_count = await store_new_posts(posts)
                     if stored_count > 0:
                         log_message(
-                            f"Total posts in storage: {len(processed_data['posts'])}",
+                            f"Total posts in memory cache: {len(posts_memory_cache)}",
                             "INFO",
                         )
                     consecutive_errors = 0  # Reset error counter on success
@@ -682,7 +837,7 @@ async def run_scraper():
                         log_message("Re-login failed, continuing with errors", "ERROR")
 
                 refresh_count += 1
-                refresh_delay = random.uniform(60, 240)
+                refresh_delay = random.uniform(30, 120)
                 await asyncio.sleep(refresh_delay)
 
             except Exception as e:
