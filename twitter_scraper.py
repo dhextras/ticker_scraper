@@ -701,7 +701,7 @@ async def main_async():
         shared_secret=TCP_SECRET,
         username=TCP_USERNAME,
     )
-    tcp_client.start()
+    tcp_client.connect()
     websocket_server = await start_websocket_server()
 
     try:
