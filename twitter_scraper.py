@@ -12,7 +12,7 @@ import time
 
 import websockets
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import pad, unpad
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
 from DrissionPage.common import Keys
@@ -60,9 +60,9 @@ class EncryptedTcpClient:
         self.sock = None
         self.key = None
         self.connected = False
-        self.thread = None
-        self.message_queue = []
         self.lock = threading.Lock()
+        self.cond = threading.Condition(self.lock)
+        self.stop_event = threading.Event()
 
     def _get_utc_date(self):
         return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
@@ -74,27 +74,35 @@ class EncryptedTcpClient:
     def _encrypt(self, plaintext: str) -> bytes:
         iv = b"\x00" * 16
         cipher = AES.new(self.key, AES.MODE_CBC, iv)
-        padded = pad(plaintext.encode("utf-8"), AES.block_size)
-        return cipher.encrypt(padded)
+        return cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
+
+    def _decrypt(self, ciphertext: bytes) -> str:
+        iv = b"\x00" * 16
+        cipher = AES.new(self.key, AES.MODE_CBC, iv)
+        decrypted_padded = cipher.decrypt(ciphertext)
+        return unpad(decrypted_padded, AES.block_size).decode("utf-8")
 
     def connect(self):
-        """
-        Connects to the server, performs authentication (IV + ciphertext),
-        starts receiver and heartbeat threads.
-        """
-        while not self.connected:  # Keep trying to connect if disconnected
-            try:
-                # Establish TCP connection
-                self.sock = socket.create_connection((self.server_ip, self.server_port))
-                self.connected = True
-                log_message(
-                    f"[TCP] Connected to {self.server_ip}:{self.server_port}", "INFO"
-                )
+        threading.Thread(target=self._connection_loop, daemon=True).start()
 
-                # Derive fresh key daily
+    def _connection_loop(self):
+        while not self.stop_event.is_set():
+            with self.lock:
+                while self.connected and not self.stop_event.is_set():
+                    self.cond.wait()
+
+            if self.stop_event.is_set():
+                break
+
+            log_message("Attempting to connect...", "INFO")
+            try:
+                self.sock = socket.create_connection(
+                    (self.server_ip, self.server_port), timeout=60
+                )
+                self.sock.settimeout(140)
                 self.key = self._derive_key()
 
-                # 1) Send authentication payload (IV + encrypted username)
+                # Authenticate
                 iv = b"\x00" * 16
                 encrypted_username = self._encrypt(self.username)
                 self.sock.sendall(iv + encrypted_username)
@@ -102,103 +110,90 @@ class EncryptedTcpClient:
                     f"[TCP] Sent encrypted auth for username '{self.username}'", "INFO"
                 )
 
-                # 2) Start background threads
+                with self.lock:
+                    self.connected = True
+
+                log_message(
+                    f"[TCP] Connected to {self.server_ip}:{self.server_port}", "INFO"
+                )
+
                 threading.Thread(target=self._receive_loop, daemon=True).start()
                 threading.Thread(target=self._heartbeat_loop, daemon=True).start()
-                threading.Thread(target=self._message_processor, daemon=True).start()
 
-                # 3) Send initial hello after a short pause
-                time.sleep(1)
+                time.sleep(0.5)
                 self.send_message("Hello, server!")
 
             except Exception as e:
                 log_message(f"[TCP] Connection error: {e}", "ERROR")
-                self.connected = False
-                log_message("[TCP] Attempting to reconnect...", "WARNING")
+                if self.sock:
+                    try:
+                        self.sock.close()
+                    except Exception:
+                        pass
+                    self.sock = None
+                time.sleep(2)
 
-                # Sleep before reconnecting
-                time.sleep(5)
-
-    def send_message(self, message):
-        """
-        Public method: queues a message to be encrypted and sent to the server.
-        Can accept string or dict (which will be converted to JSON).
-        """
+    def disconnect(self):
+        self.stop_event.set()
         with self.lock:
-            self.message_queue.append(message)
-
-    def _message_processor(self):
-        """Process messages from queue and send them to the server."""
-        while True:
-            if self.message_queue and self.connected:
-                with self.lock:
-                    message = self.message_queue.pop(0)
-
+            self.connected = False
+            self.cond.notify()
+            if self.sock:
                 try:
-                    # Convert dict to JSON if needed
-                    if isinstance(message, dict):
-                        message = json.dumps(message)
+                    self.sock.close()
+                except Exception:
+                    pass
+                self.sock = None
+        log_message("[TCP] Server disconnected", "WARNING")
 
-                    # Send message
-                    self.sock.sendall((f"{message}<END>").encode("utf-8"))
-                    if "heartbeat" not in message.lower():
-                        log_message(f"[TCP] Sent message: {message}", "INFO")
-                except Exception as e:
-                    log_message(f"[TCP] Send error: {e}", "ERROR")
-                    self.connected = False
-                    self.reconnect()
+    def send_message(self, message: str):
+        with self.lock:
+            if not self.connected:
+                log_message("Cannot send message: not connected", "WARNING")
+                return
 
-            time.sleep(0.1)  # Small delay to prevent CPU hogging
+        try:
+            framed = (message + "<END>").encode("utf-8")
+            self.sock.sendall(framed)
+            if message != "HEARTBEAT":
+                log_message(f"Sent: {message}", "INFO")
+        except Exception as e:
+            log_message(f"Send error: {e}", "ERROR")
+            with self.lock:
+                self.connected = False
+                self.cond.notify()
 
     def _receive_loop(self):
-        while self.connected:
+        buffer = b""
+        while not self.stop_event.is_set():
             try:
                 data = self.sock.recv(4096)
                 if not data:
-                    log_message("[TCP] Server disconnected", "WARNING")
-                    self.connected = False
-                    self.reconnect()
+                    log_message("Server closed connection", "WARNING")
                     break
 
-                text = data.decode("utf-8", errors="ignore")
-                log_message(f"[TCP] Received: {text}", "INFO")
+                buffer += data
+                while b"<END>" in buffer:
+                    msg, buffer = buffer.split(b"<END>", 1)
+                    try:
+                        decrypted = self._decrypt(msg)
+                        log_message(f"Received (decrypted): {decrypted}", "INFO")
+                    except Exception:
+                        text = msg.decode("utf-8", errors="ignore")
+                        log_message(f"Received (plaintext): {text}", "INFO")
+
             except Exception as e:
-                log_message(f"[TCP] Receive error: {e}", "ERROR")
-                self.connected = False
-                self.reconnect()
+                log_message(f"Receive error: {e}", "ERROR")
+                break
+
+        with self.lock:
+            self.connected = False
+            self.cond.notify()
 
     def _heartbeat_loop(self):
-        while self.connected:
-            time.sleep(60)  # Send heartbeat every 60 seconds
-            try:
-                self.send_message(f"HEARTBEAT")
-            except Exception as e:
-                log_message(f"[TCP] Heartbeat error: {e}", "ERROR")
-                self.connected = False
-                self.reconnect()
-
-    def reconnect(self):
-        """Attempt to reconnect to the server"""
-        log_message("[TCP] Reconnecting...", "WARNING")
-        if self.sock:
-            try:
-                self.sock.close()
-            except:
-                pass
-            self.sock = None
-
-        # Wait a moment before reconnecting
-        time.sleep(5)
-        self.connect()
-
-    def start(self):
-        """Start the TCP client in a separate thread."""
-        if self.thread is None or not self.thread.is_alive():
-            self.thread = threading.Thread(target=self.connect, daemon=True)
-            self.thread.start()
-            log_message("[TCP] Client thread started", "INFO")
-        else:
-            log_message("[TCP] Client thread already running", "INFO")
+        while not self.stop_event.is_set():
+            time.sleep(5)
+            self.send_message("HEARTBEAT")
 
 
 async def send_alert(msg: str):
