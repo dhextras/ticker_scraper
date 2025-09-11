@@ -304,7 +304,7 @@ async def send_found_post(data, source):
     global tcp_client
 
     if tcp_client and tcp_client.connected:
-        tcp_client.send_message(data)
+        tcp_client.send_message(str(data))
     else:
         await send_alert("<b>TCP_CLIENT isn't Connected</b>")
 
