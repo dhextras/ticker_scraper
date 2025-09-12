@@ -7,9 +7,10 @@ import sys
 import uuid
 from pathlib import Path
 from time import time
-from typing import Set, Tuple
+from typing import List, Set, Tuple
 
 import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -111,6 +112,42 @@ def extract_tickers(title):
     return tickers
 
 
+def fetch_weekly_article_content(url) -> List[str]:
+    """Fetch weekly article and extract h2 titles that start with 'Buy' or 'Sell'"""
+    try:
+        headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code != 200:
+            log_message(
+                f"Error fetching weekly article {url}: {response.status_code}",
+                "WARNING",
+            )
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        h2_elements = soup.select("div.article-content > h2")
+
+        buy_or_sell_titles = []
+        for h2 in h2_elements:
+            title_text = h2.get_text(strip=True)
+            if title_text.startswith("Buy") or title_text.startswith("Sell"):
+                buy_or_sell_titles.append(title_text)
+
+        log_message(
+            f"Found {len(buy_or_sell_titles)} 'Buy' or 'Sell' titles in weekly article: {url}"
+        )
+        return buy_or_sell_titles
+
+    except requests.Timeout:
+        log_message(f"Timeout fetching weekly article: {url}", "WARNING")
+        return []
+    except Exception as e:
+        log_message(f"Error fetching weekly article {url}: {e}", "ERROR")
+        return []
+
+
 def generate_urls(current_time):
     date_str = current_time.strftime("%Y%m%d")
     year = current_time.strftime("%Y")
@@ -122,6 +159,7 @@ def generate_urls(current_time):
         f"{BASE_URL}/{year}/{month}/{day}/{date_str}-buy-alert/",
         f"{BASE_URL}/{year}/{month}/{day}/{date_str}-sell-alert/",
         f"{BASE_URL}/{year}/{month}/{day}/{date_str}-alert/",
+        f"{BASE_URL}/{year}/{month}/{day}/{date_str}-weekly/",
     ]
 
     # Generate OEmbed URLs with cache busting
@@ -181,6 +219,28 @@ def fetch_oembed_content(original_url, oembed_url):
         return None, None
 
 
+async def process_weekly_titles(titles: List[str], article_url: str) -> None:
+    """Process weekly article titles and send alerts"""
+    current_time = get_current_time()
+
+    for title in titles:
+        tickers = extract_tickers(title)
+        ticker_text = "\n".join([f"- {action}: {ticker}" for action, ticker in tickers])
+
+        message = (
+            f"<b>New InvestorPlace Weekly Alert (New Method)</b>\n"
+            f"<b>Title:</b> {title}\n"
+            f"<b>URL:</b> {article_url}\n"
+            f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+        )
+
+        if tickers:
+            message += f"\n<b>Detected Tickers:</b>\n{ticker_text}"
+
+        await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+        log_message(f"Sent weekly alert to Telegram, title: {title}")
+
+
 async def process_alert() -> bool:
     global previous_alerts
     current_time = get_current_time()
@@ -196,6 +256,17 @@ async def process_alert() -> bool:
             continue
 
         if status_code == 200 and title:
+            if original_url.endswith("-weekly/"):
+                log_message(f"Processing weekly article: {original_url}")
+                titles = fetch_weekly_article_content(original_url)
+
+                if titles:
+                    await process_weekly_titles(titles, original_url)
+
+                previous_alerts.add(original_url)
+                save_alerts(previous_alerts)
+                return True
+
             tickers = extract_tickers(title)
 
             ticker_text = "\n".join(

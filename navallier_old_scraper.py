@@ -12,6 +12,7 @@ from typing import List, Set, Tuple
 
 import pytz
 import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from utils.logger import log_message
@@ -32,7 +33,7 @@ IPA_LOGIN_COOKIE = os.getenv("IPA_LOGIN_COOKIE")
 CHECK_INTERVAL = 0.3  # seconds
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "investorplace_alerts.json"
-JSON_URL = "https://investorplace.com/acceleratedprofits/wp-json/wp/v2/posts?author=25699,25547&categories=8&per_page=3"
+JSON_URL = "https://investorplace.com/acceleratedprofits/wp-json/wp/v2/posts?author=25699,25547&categories=8,16&per_page=3"
 PROXY_FILE = "cred/proxies.json"
 
 # Global variables to store previous alerts
@@ -138,6 +139,46 @@ def extract_tickers(title):
     return tickers
 
 
+def fetch_weekly_article_content(url, proxy) -> List[str]:
+    """Fetch weekly article and extract h2 titles that start with 'Buy' or 'Sell'"""
+    try:
+        headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
+        proxies = (
+            {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
+        )
+
+        response = requests.get(url, headers=headers, proxies=proxies, timeout=10)
+
+        if response.status_code != 200:
+            log_message(
+                f"Error fetching weekly article {url}: {response.status_code}",
+                "WARNING",
+            )
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        h2_elements = soup.select("div.article-content > h2")
+
+        buy_or_sell_titles = []
+        for h2 in h2_elements:
+            title_text = h2.get_text(strip=True)
+            if title_text.startswith("Buy") or title_text.startswith("Sell"):
+                buy_or_sell_titles.append(title_text)
+
+        log_message(
+            f"Found {len(buy_or_sell_titles)} 'Buy' or 'Sell' titles in weekly article: {url}"
+        )
+        return buy_or_sell_titles
+
+    except requests.Timeout:
+        log_message(f"Timeout fetching weekly article: {url}", "WARNING")
+        return []
+    except Exception as e:
+        log_message(f"Error fetching weekly article {url}: {e}", "ERROR")
+        return []
+
+
 def fetch_flash_alerts(proxy) -> List:
     """Fetch and parse article data from InvestorPlace"""
     try:
@@ -174,6 +215,61 @@ def fetch_flash_alerts(proxy) -> List:
         return []
 
 
+async def process_weekly_titles(
+    titles: List[str], article_url: str, published_time: datetime
+) -> None:
+    """Process weekly article titles and send alerts"""
+    current_time = get_current_time()
+
+    for title in titles:
+        tickers = extract_tickers(title)
+        if tickers:
+            buy_tickers = [
+                (action, ticker)
+                for action, ticker in tickers
+                if action.lower() == "buy"
+            ]
+            sell_tickers = [
+                (action, ticker)
+                for action, ticker in tickers
+                if action.lower() == "sell"
+            ]
+            s_action = None
+            s_ticker = None
+
+            if len(buy_tickers) > 0:
+                s_action, s_ticker = buy_tickers[0]
+            elif len(sell_tickers):
+                s_action, s_ticker = sell_tickers[0]
+
+            if s_action is not None and s_ticker is not None:
+                await send_ws_message(
+                    {
+                        "name": "Navallier Old",
+                        "type": s_action,
+                        "ticker": s_ticker,
+                        "sender": "navallier",
+                    },
+                )
+
+        ticker_text = "\n".join([f"- {action}: {ticker}" for action, ticker in tickers])
+
+        message = (
+            f"<b>New InvestorPlace Weekly Alert!</b>\n"
+            f"<b>Title:</b> {title}\n"
+            f"<b>URL:</b> {article_url}\n"
+            f"<b>Published Time:</b> {published_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"<b>Time difference:</b> {(current_time - published_time).total_seconds():.2f} seconds\n"
+        )
+
+        if tickers:
+            message += f"\n<b>Detected Tickers:</b>\n{ticker_text}"
+
+        await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+        log_message(f"Sent weekly alert to Telegram, title: {title}")
+
+
 async def process_alert(proxy) -> None:
     """Check for new alerts and send to Telegram if found"""
     global previous_alerts
@@ -192,12 +288,24 @@ async def process_alert(proxy) -> None:
 
         for alert in new_alerts:
             title = alert["title"]["rendered"]
+            article_url = alert["link"]
 
             published_date = alert["modified_gmt"]
             published_time = datetime.fromisoformat(published_date).astimezone(
                 pytz.timezone("America/Chicago")
             )
             current_time = get_current_time()
+
+            if article_url.endswith("-weekly/"):
+                log_message(f"Processing weekly article: {article_url}")
+                titles = fetch_weekly_article_content(article_url, proxy)
+
+                if titles:
+                    await process_weekly_titles(titles, article_url, published_time)
+
+                previous_alerts.add(article_url)
+                save_alerts(previous_alerts)
+                continue
 
             tickers = extract_tickers(title)
             if tickers:
@@ -236,7 +344,7 @@ async def process_alert(proxy) -> None:
             message = (
                 f"<b>New InvestorPlace Alert!</b>\n"
                 f"<b>Title:</b> {title}\n"
-                f"<b>URL:</b> {alert['link']}\n"
+                f"<b>URL:</b> {article_url}\n"
                 f"<b>Published Time:</b> {published_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
                 f"<b>Current Time:</b> {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
                 f"<b>Time difference:</b> {(current_time - published_time).total_seconds():.2f} seconds\n"
@@ -248,9 +356,9 @@ async def process_alert(proxy) -> None:
             await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
             log_message(f"Sent new alert to Telegram, title: {title}")
 
-            new_links = [alert["link"] for alert in new_alerts]
-            previous_alerts.update(new_links)
-            save_alerts(previous_alerts)
+        new_links = [alert["link"] for alert in new_alerts]
+        previous_alerts.update(new_links)
+        save_alerts(previous_alerts)
 
     except Exception as e:
         log_message(f"Error checking alerts: {e}", "ERROR")
