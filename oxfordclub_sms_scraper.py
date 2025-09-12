@@ -56,10 +56,168 @@ def parse_message(message: str) -> Optional[Tuple[Optional[str], Optional[str], 
     return None
 
 
-async def process_page(url: str) -> Optional[Tuple[str, str]]:
-    try:
-        response = await fetch_url_request(url, timeout=15)
+def add_cache_buster(url: str, try_number: int) -> str:
+    """Add cache busting parameter to URL"""
+    # NOTE: This is to ignore the caching machanism of our own oxford fetch implementation
+    # Nothing to do anything with oxford
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}try={try_number}"
 
+
+async def retry_fetch_404(
+    original_url: str, service_name: str, sentiment: str, message_timestamp: str
+):
+    """Background task to retry fetching a 404 URL"""
+    current_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+    telegram_message = f"<b>Oxford Club SMS - 404 Detected</b>\n\n"
+    telegram_message += f"<b>Service:</b> {service_name}\n"
+    telegram_message += f"<b>URL:</b> {original_url}\n"
+    telegram_message += f"<b>Status:</b> Article not found (404)\n"
+    telegram_message += (
+        f"<b>Action:</b> Starting background retry for next 10 minutes\n"
+    )
+    telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
+    telegram_message += f"<b>Current Time:</b> {current_time}"
+
+    await send_telegram_message(telegram_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+    max_retries = 120  # 10 minutes with 5-second intervals
+    retry_count = 0
+
+    log_message(f"Starting 404 retry background task for URL: {original_url}", "INFO")
+
+    while retry_count < max_retries:
+        await asyncio.sleep(5)
+        retry_count += 1
+
+        try:
+            retry_url = add_cache_buster(original_url, retry_count)
+
+            log_message(
+                f"404 Retry attempt {retry_count}/{max_retries}: {retry_url}", "INFO"
+            )
+
+            response = await fetch_url_request(retry_url, timeout=15)
+
+            if response["status_code"] == 200:
+                log_message(
+                    f"404 Retry successful after {retry_count} attempts: {retry_url}",
+                    "INFO",
+                )
+
+                content = response["html"]
+                soup = BeautifulSoup(content, "html.parser")
+                all_text = soup.get_text(separator=" ", strip=True)
+
+                action_sections = re.split(
+                    r"Action to Take", all_text, flags=re.IGNORECASE
+                )
+
+                if len(action_sections) >= 2:
+                    for section in action_sections[1:]:
+                        buy_match = re.search(r"Buy", section, re.IGNORECASE)
+                        ticker_match = re.search(
+                            r"(?:NYSE|NASDAQ)\s*:\s*\(?\*?([A-Z]{1,5})\*?\)?",
+                            section,
+                            re.IGNORECASE,
+                        )
+
+                        if not ticker_match:
+                            ticker_match = re.search(
+                                r"\(\s*([A-Z]{1,5})\s*\)",
+                                section,
+                                re.IGNORECASE,
+                            )
+
+                        if (
+                            ticker_match
+                            and buy_match
+                            and buy_match.start() < ticker_match.start()
+                        ):
+                            ticker = ticker_match.group(1)
+                            action = "Buy"
+
+                            await send_ws_message(
+                                {
+                                    "name": "Oxford Club SMS (Retry Success)",
+                                    "type": (
+                                        action
+                                        if sentiment not in ["buy", "sell"]
+                                        else sentiment.title()
+                                    ),
+                                    "ticker": ticker,
+                                    "sender": "oxfordclub",
+                                }
+                            )
+
+                            success_time = get_current_time().strftime(
+                                "%Y-%m-%d %H:%M:%S.%f"
+                            )
+                            success_message = (
+                                f"<b>Oxford Club SMS - 404 Retry Success!</b>\n\n"
+                            )
+                            success_message += f"<b>Service:</b> {service_name}\n"
+                            success_message += f"<b>Action:</b> {action}\n"
+                            success_message += f"<b>Ticker:</b> {ticker}\n"
+                            success_message += f"<b>URL:</b> {original_url}\n"
+                            success_message += f"<b>Retry Attempts:</b> {retry_count}\n"
+                            success_message += f"<b>Success Time:</b> {success_time}\n"
+                            success_message += (
+                                f"<b>Original Message Time:</b> {message_timestamp}"
+                            )
+
+                            await send_telegram_message(
+                                success_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
+                            )
+                            return
+
+                success_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+                success_message = (
+                    f"<b>Oxford Club SMS - 404 Retry Found Page (No Ticker)</b>\n\n"
+                )
+                success_message += f"<b>Service:</b> {service_name}\n"
+                success_message += f"<b>URL:</b> {original_url}\n"
+                success_message += f"<b>Status:</b> Page found but no ticker detected\n"
+                success_message += f"<b>Retry Attempts:</b> {retry_count}\n"
+                success_message += f"<b>Success Time:</b> {success_time}\n"
+                success_message += f"<b>Original Message Time:</b> {message_timestamp}"
+
+                await send_telegram_message(
+                    success_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
+                )
+                return
+
+            elif response["status_code"] != 404:
+                log_message(
+                    f"404 Retry got different error code {response['status_code']}: {retry_url}",
+                    "WARNING",
+                )
+
+        except Exception as e:
+            log_message(f"404 Retry attempt {retry_count} error: {e}", "WARNING")
+
+    log_message(
+        f"404 Retry failed after {max_retries} attempts for URL: {original_url}",
+        "WARNING",
+    )
+
+    timeout_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
+    timeout_message = f"<b>Oxford Club SMS - 404 Retry Timeout</b>\n\n"
+    timeout_message += f"<b>Service:</b> {service_name}\n"
+    timeout_message += f"<b>URL:</b> {original_url}\n"
+    timeout_message += (
+        f"<b>Status:</b> Article not found after 10 minutes of retrying\n"
+    )
+    timeout_message += f"<b>Total Attempts:</b> {max_retries}\n"
+    timeout_message += f"<b>Timeout Time:</b> {timeout_time}\n"
+    timeout_message += f"<b>Original Message Time:</b> {message_timestamp}"
+
+    await send_telegram_message(timeout_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+
+async def process_page(response) -> Optional[Tuple[str, str]]:
+    try:
         if response["status_code"] == 200:
             content = response["html"]
             soup = BeautifulSoup(content, "html.parser")
@@ -137,7 +295,25 @@ async def process_sms_message(message: str, message_timestamp: str):
         return
 
     service_name, sentiment, url = parsed
-    result = await process_page(url)
+
+    try:
+        response = await fetch_url_request(url, timeout=15)
+
+        if response["status_code"] == 404:
+            asyncio.create_task(
+                retry_fetch_404(
+                    url, service_name or "Unknown", sentiment or "", message_timestamp
+                )
+            )
+            return
+        elif response["status_code"] == 200:
+            result = await process_page(response)
+        else:
+            result = None
+
+    except Exception as e:
+        log_message(f"Error fetching initial page {url}: {e}", "ERROR")
+        result = None
 
     telegram_message = f"<b>Oxford Club SMS - {service_name}</b>\n\n"
 
