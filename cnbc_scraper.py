@@ -384,7 +384,7 @@ async def check_login_status():
 
 
 async def get_article_data_via_browser(article_url):
-    """Get article data by navigating to the URL and intercepting the GraphQL response with timeout"""
+    """Get article data by navigating to the URL and intercepting the GraphQL response with timeout and refresh mechanism"""
     global browser_page
 
     try:
@@ -476,12 +476,18 @@ async def get_article_data_via_browser(article_url):
             finally:
                 processing_complete.set()
 
-        def check_timeout_and_error_page():
+        def handle_refresh_and_timeout():
             start_time = time.time()
             timeout_duration = 15  # 15 seconds
+            refresh_interval = 3
+            last_refresh_time = start_time
+            refresh_count = 0
+            max_refreshes = 4
 
             while not processing_complete.is_set():
-                elapsed_time = time.time() - start_time
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                time_since_last_refresh = current_time - last_refresh_time
 
                 if elapsed_time >= timeout_duration:
                     asyncio.run(
@@ -507,18 +513,47 @@ async def get_article_data_via_browser(article_url):
                         log_message(f"Error checking for error page: {e}", "WARNING")
                         return "Request timed out after 15 seconds - unable to verify page status"
 
+                if (
+                    time_since_last_refresh >= refresh_interval
+                    and refresh_count < max_refreshes
+                    and not processing_complete.is_set()
+                ):
+
+                    try:
+                        refresh_count += 1
+                        log_message(
+                            f"Refreshing page (attempt {refresh_count + 1}/5)",
+                            "WARNING",
+                        )
+
+                        try:
+                            browser_page.listen.stop()
+                        except:
+                            pass
+
+                        browser_page.refresh()
+                        browser_page.listen.start(
+                            "https://webql-redesign.cnbcfm.com/graphql?operationName=getArticleData"
+                        )
+
+                        last_refresh_time = current_time
+                    except Exception as refresh_error:
+                        log_message(
+                            f"Error during page refresh: {refresh_error}", "WARNING"
+                        )
+
                 time.sleep(0.5)
 
             return None
 
         packet_thread = threading.Thread(target=process_packets)
-        timeout_thread = threading.Thread(target=check_timeout_and_error_page)
+        refresh_timeout_thread = threading.Thread(target=handle_refresh_and_timeout)
 
         packet_thread.start()
-        timeout_thread.start()
+        refresh_timeout_thread.start()
 
         packet_thread.join(timeout=16)
-        timeout_thread.join(timeout=1)
+        refresh_timeout_thread.join(timeout=1)
 
         try:
             browser_page.listen.stop()
