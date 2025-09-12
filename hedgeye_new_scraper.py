@@ -479,15 +479,21 @@ async def fetch_research_archives(
         url = f"https://app.hedgeye.com/research_archives?with_category=22-real-time-alerts&month={today}&{cache_buster}"
 
         start_time = time.time()
-        async with session.get(
-            url,
-            cookies=cookies,
-            # proxy=f"http://{proxy}" if proxy else None,
-            timeout=aiohttp.ClientTimeout(total=3),
-        ) as response:
+        response = await asyncio.wait_for(
+            session.get(
+                url,
+                cookies=cookies,
+                # proxy=f"http://{proxy}" if proxy else None,
+                timeout=aiohttp.ClientTimeout(total=3),
+            ),
+            timeout=3,
+        )
+
+        async with response:
             if response.status == 429:
                 raise Exception("Rate limited")
-            html = await response.text()
+
+            html = await asyncio.wait_for(response.text(), timeout=3)
 
         soup = BeautifulSoup(html, "html.parser")
         articles = soup.find_all("div", class_="thumbnail-article__details")
