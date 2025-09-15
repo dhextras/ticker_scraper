@@ -71,6 +71,55 @@ async def fetch_json(session):
         return []
 
 
+import os
+import re
+import time
+from urllib.parse import urlparse
+
+
+def extract_ticker_from_pdf_url(url):
+    """
+    Extract ticker from PDF URL based on filename patterns.
+    """
+    parsed_url = urlparse(url)
+    filename = os.path.basename(parsed_url.path)
+
+    filename_no_ext = (
+        filename.replace(".pdf", "").replace("%E2%80%93", "–").replace("\\u2013", "–")
+    )
+
+    # Pattern 1: XXXX-Kerrisdale
+    pattern1 = r"^([A-Z]{2,6})-[Kk]errisdale"
+    match1 = re.search(pattern1, filename_no_ext)
+    if match1:
+        ticker = match1.group(1).upper()
+        return ticker
+
+    # Pattern 2: Kerrisdale-XXXX
+    pattern2 = r"-([A-Z]{2,6})(?:-\d+)?$"
+    match2 = re.search(pattern2, filename_no_ext)
+    if match2:
+        potential_ticker = match2.group(1).upper()
+        if potential_ticker != "KERRISDALE":
+            return potential_ticker
+
+    # Pattern 3: CompanyName-XXXX
+    parts = filename_no_ext.split("-")
+    if len(parts) >= 2:
+        last_part = parts[-1].strip()
+        last_part_clean = re.sub(r"-?\d+$", "", last_part)
+
+        if re.match(r"^[A-Z]{2,6}$", last_part_clean):
+            return last_part_clean.upper()
+
+        if len(parts) >= 2:
+            second_last = parts[-2].strip()
+            if re.match(r"^[A-Z]{2,6}$", second_last) and second_last != "KERRISDALE":
+                return second_last.upper()
+
+    return None
+
+
 async def extract_ticker_from_pdf(session, url):
     ticker = None
     action = "Sell"
@@ -130,10 +179,12 @@ async def send_posts_to_telegram(urls, timestamp):
     log_message(f"New Posts sent to Telegram: {urls}", "INFO")
 
 
-async def send_to_telegram(url, ticker_obj: TickerAnalysis | str, action="Sell"):
+async def send_to_telegram(
+    url, ticker_obj: TickerAnalysis | str, action="Sell", extraction_method=None
+):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
 
-    message = f"<b>New Kerrisdale Ticker found</b>\n\n"
+    message = f"<b>New Kerrisdale Ticker found{f' - {extraction_method}' if extraction_method else ''}</b>\n\n"
     message += f"<b>Time:</b> {timestamp}\n"
     message += f"<b>URL:</b> {url}\n"
 
@@ -197,14 +248,36 @@ async def run_scraper():
                     for url in new_urls:
                         if url.lower().endswith(".pdf"):
                             start_time = time.time()
-                            ticker, action = await extract_ticker_from_pdf(session, url)
-                            if ticker:
+                            ticker_from_url = extract_ticker_from_pdf_url(url)
+                            if ticker_from_url:
+                                ticker = ticker_from_url
+                                # FIXME: Assuming they mostly does sell so figure out how to do buy if they do long
+                                action = "Sell"
+                                extraction_source = "url_pattern"
                                 log_message(
-                                    f"Extracted ticker `{ticker}` in {time.time() - start_time}s from `url`"
+                                    f"Extracted ticker `{ticker}` from URL pattern in {time.time() - start_time}s from `{url}`",
+                                    "INFO",
                                 )
+                            else:
+                                ticker, action = await extract_ticker_from_pdf(
+                                    session, url
+                                )
+                                extraction_source = "pdf_content"
+                                if ticker:
+                                    log_message(
+                                        f"Extracted ticker `{ticker}` from PDF content in {time.time() - start_time}s from `{url}`",
+                                        "INFO",
+                                    )
+
+                            if ticker:
                                 await send_to_telegram(
-                                    url, ticker_obj=ticker, action=action
+                                    url,
+                                    ticker_obj=ticker,
+                                    action=action,
+                                    extraction_method=extraction_source,
                                 )
+                            else:
+                                log_message(f"No ticker found in PDF: {url}", "WARNING")
                         elif url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                             ticker_object = await analyze_image_for_ticker(url)
                             if ticker_object and ticker_object.found:
