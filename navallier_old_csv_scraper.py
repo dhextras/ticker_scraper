@@ -218,7 +218,7 @@ async def process_alert(proxy):
                         "name": "Navallier Old CSV",
                         "type": action,
                         "ticker": ticker,
-                        "sender": "navallier",
+                        "sender": "navallier_csv",
                     },
                 )
 
