@@ -174,6 +174,7 @@ async def run_scraper():
 
 
 def main():
+    global page, co
     if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
