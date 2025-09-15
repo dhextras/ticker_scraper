@@ -3,8 +3,8 @@ import json
 import os
 import re
 import sys
+from time import time
 
-import aiohttp
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
 
@@ -22,7 +22,7 @@ load_dotenv()
 
 # Constants
 JSON_URL = "https://ningiresearch.com/wp-json/wp/v2/posts"
-CHECK_INTERVAL = 1  # seconds
+CHECK_INTERVAL = 2  # seconds
 PROCESSED_URLS_FILE = "data/ningi_processed_urls.json"
 SESSION_FILE = "data/ningi_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("NINGI_TELEGRAM_BOT_TOKEN")
@@ -146,59 +146,58 @@ async def send_to_telegram(post_data, ticker, exchange):
 async def run_scraper():
     processed_urls = load_processed_urls()
 
-    async with aiohttp.ClientSession() as session:
+    while True:
+        await sleep_until_market_open()
+        await initialize_websocket()
+
+        log_message("Market is open. Starting to check for new posts...", "DEBUG")
+        _, _, market_close_time = get_next_market_times()
+
         while True:
-            await sleep_until_market_open()
-            await initialize_websocket()
+            current_time = get_current_time()
 
-            log_message("Market is open. Starting to check for new posts...", "DEBUG")
-            _, _, market_close_time = get_next_market_times()
+            if current_time > market_close_time:
+                log_message(
+                    "Market is closed. Waiting for next market open...", "DEBUG"
+                )
+                break
 
-            while True:
-                current_time = get_current_time()
+            log_message("Checking for new posts...")
+            posts = await fetch_json()
 
-                if current_time > market_close_time:
-                    log_message(
-                        "Market is closed. Waiting for next market open...", "DEBUG"
-                    )
-                    break
+            new_posts = []
+            ticker_posts = []
 
-                log_message("Checking for new posts...")
-                posts = await fetch_json(session)
+            for post in posts:
+                link = post.get("link")
+                if not link or link in processed_urls:
+                    continue
 
-                new_posts = []
-                ticker_posts = []
+                title = post.get("title", {}).get("rendered", "")
+                date_gmt = post.get("date_gmt", "")
 
-                for post in posts:
-                    link = post.get("link")
-                    if not link or link in processed_urls:
-                        continue
+                post_data = {"link": link, "title": title, "date_gmt": date_gmt}
 
-                    title = post.get("title", {}).get("rendered", "")
-                    date_gmt = post.get("date_gmt", "")
+                new_posts.append(post_data)
 
-                    post_data = {"link": link, "title": title, "date_gmt": date_gmt}
+                ticker, exchange = extract_ticker_from_title(title)
+                if ticker and exchange:
+                    ticker_posts.append((post_data, ticker, exchange))
 
-                    new_posts.append(post_data)
+                processed_urls.add(link)
 
-                    ticker, exchange = extract_ticker_from_title(title)
-                    if ticker and exchange:
-                        ticker_posts.append((post_data, ticker, exchange))
+            if new_posts:
+                log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
 
-                    processed_urls.add(link)
+                for post_data, ticker, exchange in ticker_posts:
+                    await send_to_telegram(post_data, ticker, exchange)
 
-                if new_posts:
-                    log_message(f"Found {len(new_posts)} new posts to process.", "INFO")
+                await send_posts_to_telegram(new_posts)
+                save_processed_urls(processed_urls)
+            else:
+                log_message("No new posts found.", "INFO")
 
-                    for post_data, ticker, exchange in ticker_posts:
-                        await send_to_telegram(post_data, ticker, exchange)
-
-                    await send_posts_to_telegram(new_posts)
-                    save_processed_urls(processed_urls)
-                else:
-                    log_message("No new posts found.", "INFO")
-
-                await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(CHECK_INTERVAL)
 
 
 def main():
