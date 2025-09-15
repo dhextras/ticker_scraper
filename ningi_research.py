@@ -3,10 +3,12 @@ import json
 import os
 import re
 import sys
+from typing import Any, Dict, Optional
 
 import aiohttp
 from dotenv import load_dotenv
 
+from utils.bypass_cloudflare import bypasser
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
@@ -22,10 +24,47 @@ load_dotenv()
 JSON_URL = "https://ningiresearch.com/wp-json/wp/v2/posts"
 CHECK_INTERVAL = 1  # seconds
 PROCESSED_URLS_FILE = "data/ningi_processed_urls.json"
+SESSION_FILE = "data/ningi_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("NINGI_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("NINGI_TELEGRAM_GRP")
 
 os.makedirs("data", exist_ok=True)
+
+
+def load_cookies(frash=False) -> Optional[Dict[str, Any]]:
+    try:
+        cookies = None
+        if frash == False:
+            if not os.path.exists(SESSION_FILE):
+                log_message(f"Session file not found: {SESSION_FILE}", "WARNING")
+            else:
+                with open(SESSION_FILE, "r") as f:
+                    cookies = json.load(f)
+
+        if not cookies or cookies.get("cf_clearance", "") == "":
+            log_message(
+                "Invalid or missing 'cf_clearance' in cookies. Attempting to regenerate.",
+                "WARNING",
+            )
+            bypass = bypasser(JSON_URL, SESSION_FILE)
+
+            if not bypass or bypass == False:
+                return None
+
+            with open(SESSION_FILE, "r") as f:
+                cookies = json.load(f)
+
+            if not cookies or cookies.get("cf_clearance", "") == "":
+                return None
+
+        return cookies
+
+    except json.JSONDecodeError:
+        log_message("Failed to decode JSON from session file.", "ERROR")
+    except Exception as e:
+        log_message(f"Error loading session: {e}", "ERROR")
+
+    return None
 
 
 def load_processed_urls():
@@ -50,9 +89,7 @@ def extract_ticker_from_title(title):
         if matches:
             exchange, ticker = matches[0]
             ticker = ticker.split(".")[0]
-            log_message(
-                f"Extracted ticker: {ticker} from exchange: {exchange}", "DEBUG"
-            )
+            log_message(f"Extracted ticker: {ticker} from exchange: {exchange}", "INFO")
             return ticker, exchange
 
         log_message(f"No ticker found in title: {title}", "WARNING")
@@ -62,29 +99,42 @@ def extract_ticker_from_title(title):
         return None, None
 
 
-async def fetch_json(session):
+async def fetch_json(session, cookies):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "User-Agent": f"{cookies['user_agent']}",
+            "Cache-Control": "max-age=0",
+            "Cookie": f"cf_clearance={cookies['cf_clearance']}",
         }
 
-        async with session.get(JSON_URL, headers=headers) as response:
+        async with session.get(JSON_URL, headers=headers, cookies=cookies) as response:
             if response.status == 200:
                 data = await response.json()
                 log_message(f"Fetched {len(data)} posts from JSON", "INFO")
-                return data
+                return data, None
+            elif response.status == 403:
+                log_message(
+                    f"CF_CLEARANCE expired, attempting to regenerate for: {JSON_URL}",
+                    "WARNING",
+                )
+                cookies = load_cookies(frash=True)
+                if not cookies:
+                    raise Exception("CF_CLEARANCE Failed: Posts")
+                return [], cookies
             elif 500 <= response.status < 600:
                 log_message(
                     f"Server error {response.status}: Temporary issue, safe to ignore if infrequent.",
                     "WARNING",
                 )
-                return []
+                return [], None
             else:
                 log_message(f"Failed to fetch JSON: HTTP {response.status}", "ERROR")
-                return []
+                return [], None
     except Exception as e:
+        if "CF_CLEARANCE Failed" in str(e):
+            raise
         log_message(f"Error fetching JSON: {e}", "ERROR")
-        return []
+        return [], None
 
 
 async def send_posts_to_telegram(posts_data):
@@ -127,11 +177,18 @@ async def send_to_telegram(post_data, ticker, exchange):
         },
     )
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
-    log_message(f"Report sent to Telegram: {ticker} ({exchange}) - {link}", "INFO")
+    log_message(
+        f"Report sent to Telegram and WebSocket: {ticker} ({exchange}) - {link}", "INFO"
+    )
 
 
 async def run_scraper():
     processed_urls = load_processed_urls()
+    cookies = load_cookies()
+
+    if not cookies:
+        log_message("Failed to get valid cf_clearance", "CRITICAL")
+        return
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -151,7 +208,14 @@ async def run_scraper():
                     break
 
                 log_message("Checking for new posts...")
-                posts = await fetch_json(session)
+                posts, pos_cookies = await fetch_json(session, cookies)
+
+                cookies = pos_cookies if pos_cookies is not None else cookies
+
+                if not posts:
+                    log_message("Failed to fetch posts or no posts returned", "WARNING")
+                    await asyncio.sleep(CHECK_INTERVAL)
+                    continue
 
                 new_posts = []
                 ticker_posts = []
