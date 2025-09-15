@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import time
+from urllib.parse import urlparse
 
 import aiohttp
 from dotenv import load_dotenv
@@ -71,12 +72,6 @@ async def fetch_json(session):
         return []
 
 
-import os
-import re
-import time
-from urllib.parse import urlparse
-
-
 def extract_ticker_from_pdf_url(url):
     """
     Extract ticker from PDF URL based on filename patterns.
@@ -85,7 +80,13 @@ def extract_ticker_from_pdf_url(url):
     filename = os.path.basename(parsed_url.path)
 
     filename_no_ext = (
-        filename.replace(".pdf", "").replace("%E2%80%93", "–").replace("\\u2013", "–")
+        filename.replace(".pdf", "")
+        .replace("%E2%80%93", "-")
+        .replace("\\u2013", "-")
+        # NOTE: The below line might look fucking stupid but those dashes of different sizes
+        # Due to python's parser just generate different kind of dash
+        # Run this so you'd see `print("–" == "-")`
+        .replace("–", "-")
     )
 
     # Pattern 1: XXXX-Kerrisdale
