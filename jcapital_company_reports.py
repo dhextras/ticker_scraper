@@ -23,8 +23,8 @@ from utils.time_utils import (
 load_dotenv()
 
 # Constants
-HTML_URL = "https://www.jcapitalresearch.com/company-reports.html"
-CHECK_INTERVAL = 360  # seconds
+HTML_URL = "https://www.jcapitalresearch.com/public-research.html"
+CHECK_INTERVAL = 30  # seconds
 PROCESSED_REPORTS_FILE = "data/jcapital_html_processed_reports.json"
 TELEGRAM_BOT_TOKEN = os.getenv("JCAPITAL_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("JCAPITAL_TELEGRAM_GRP")
