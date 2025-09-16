@@ -263,18 +263,68 @@ def generate_equalized_differentiators(list_len):
     return full_list[:list_len]
 
 
+import hashlib
+import random
+import time
+import uuid
+
+
 def get_random_cache_buster():
     """Generate random cache busting url variable for requests"""
     cache_busters = [
         ("timestamp", lambda: int(time.time() * 10000)),
-        ("request_uuid", lambda: str(uuid.uuid4())),
         ("cache_time", lambda: int(time.time())),
         ("ran_time", lambda: int(time.time() * 1000)),
-        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
-        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
-        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
         ("tist", lambda: str(int(time.time()))),
+        ("ts", lambda: int(time.time() * 1000)),
+        ("time", lambda: int(time.time())),
+        ("epoch", lambda: int(time.time())),
+        ("unixtime", lambda: int(time.time())),
+        ("millis", lambda: int(time.time() * 1000)),
+        ("now", lambda: int(time.time())),
+        ("request_uuid", lambda: str(uuid.uuid4())),
+        ("no_cache_uuid", lambda: str(uuid.uuid4().hex[:16])),
+        ("req_uuid", lambda: f"req-{uuid.uuid4().hex[:8]}"),
+        ("uuid", lambda: str(uuid.uuid4().hex[:12])),
+        ("session_id", lambda: str(uuid.uuid4().hex[:16])),
+        ("token", lambda: str(uuid.uuid4().hex[:24])),
+        ("guid", lambda: str(uuid.uuid4())),
+        ("id", lambda: str(uuid.uuid4().hex[:8])),
+        ("random", lambda: random.randint(100000, 999999)),
+        ("rand", lambda: random.randint(10000, 99999)),
+        ("rnd", lambda: random.randint(1000, 9999)),
+        ("r", lambda: random.randint(100, 999)),
+        ("seed", lambda: random.randint(1000000, 9999999)),
+        ("nonce", lambda: random.randint(100000000, 999999999)),
+        ("entropy", lambda: random.randint(10000, 99999)),
+        ("unique", lambda: f"{int(time.time())}-{random.randint(1000, 9999)}"),
+        ("cache_bypass", lambda: f"{int(time.time())}{random.randint(100, 999)}"),
+        ("no_cache", lambda: f"{random.randint(1000, 9999)}-{int(time.time())}"),
+        ("fresh", lambda: f"t{int(time.time())}r{random.randint(100, 999)}"),
+        ("bypass", lambda: f"{uuid.uuid4().hex[:8]}-{int(time.time())}"),
+        ("refresh", lambda: f"{int(time.time() * 100) % 1000000}"),
+        ("checksum", lambda: hashlib.sha1(f"{time.time()}".encode()).hexdigest()[:10]),
+        ("digest", lambda: hashlib.md5(str(random.random()).encode()).hexdigest()[:12]),
+        ("v", lambda: random.randint(1, 999)),
+        ("ver", lambda: f"{random.randint(1, 9)}.{random.randint(0, 99)}"),
+        ("version", lambda: f"v{random.randint(1, 99)}"),
+        ("rev", lambda: random.randint(1000, 9999)),
+        ("build", lambda: random.randint(100, 999)),
+        ("cb", lambda: int(time.time())),
+        ("nocache", lambda: int(time.time() * 1000)),
+        ("bust", lambda: random.randint(10000, 99999)),
+        ("anti_cache", lambda: str(uuid.uuid4().hex[:10])),
+        ("force_refresh", lambda: int(time.time())),
+        ("no_store", lambda: f"{int(time.time())}{random.randint(10, 99)}"),
+        ("invalidate", lambda: str(uuid.uuid4().hex[:14])),
+        ("expires", lambda: int(time.time() + random.randint(3600, 86400))),
+        ("session", lambda: f"s{int(time.time())}{random.randint(100, 999)}"),
+        ("request_id", lambda: f"rid{uuid.uuid4().hex[:12]}"),
+        ("client_time", lambda: int(time.time() * 1000)),
+        ("page_load", lambda: f"pl{int(time.time())}"),
+        ("fetch_time", lambda: int(time.time())),
     ]
+
     variable, value_generator = random.choice(cache_busters)
     return f"{variable}={value_generator()}"
 
