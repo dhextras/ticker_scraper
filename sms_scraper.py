@@ -203,12 +203,16 @@ async def retry_oxford_fetch_404(
                             )
 
                             await send_telegram_message(
-                                success_message, bot_token, telegram_group
+                                success_message,
+                                OFC_TELEGRAM_BOT_TOKEN,
+                                OFC_TELEGRAM_GRP,
                             )
                             return
 
                 success_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-                success_message = f"<b>{source.title()} SMS - 404 Retry Found Page (No Ticker)</b>\n\n"
+                success_message = (
+                    f"<b>Oxford Club SMS - 404 Retry Found Page (No Ticker)</b>\n\n"
+                )
                 success_message += f"<b>Service:</b> {service_name}\n"
                 success_message += f"<b>URL:</b> {original_url}\n"
                 success_message += f"<b>Status:</b> Page found but no ticker detected\n"
@@ -216,7 +220,9 @@ async def retry_oxford_fetch_404(
                 success_message += f"<b>Success Time:</b> {success_time}\n"
                 success_message += f"<b>Original Message Time:</b> {message_timestamp}"
 
-                await send_telegram_message(success_message, bot_token, telegram_group)
+                await send_telegram_message(
+                    success_message, OFC_TELEGRAM_BOT_TOKEN, OFC_TELEGRAM_GRP
+                )
                 return
 
             elif response["status_code"] != 404:
@@ -234,7 +240,7 @@ async def retry_oxford_fetch_404(
     )
 
     timeout_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-    timeout_message = f"<b>{source.title()} SMS - 404 Retry Timeout</b>\n\n"
+    timeout_message = f"<b>Oxford Club SMS - 404 Retry Timeout</b>\n\n"
     timeout_message += f"<b>Service:</b> {service_name}\n"
     timeout_message += f"<b>URL:</b> {original_url}\n"
     timeout_message += (
@@ -244,7 +250,9 @@ async def retry_oxford_fetch_404(
     timeout_message += f"<b>Timeout Time:</b> {timeout_time}\n"
     timeout_message += f"<b>Original Message Time:</b> {message_timestamp}"
 
-    await send_telegram_message(timeout_message, bot_token, telegram_group)
+    await send_telegram_message(
+        timeout_message, OFC_TELEGRAM_BOT_TOKEN, OFC_TELEGRAM_GRP
+    )
 
 
 async def process_page(response, url) -> Optional[Tuple[str, str]]:
@@ -374,12 +382,11 @@ async def process_sms_message(message: str, message_timestamp: str, phone_number
 
             if response["status_code"] == 404:
                 asyncio.create_task(
-                    retry_fetch_404(
+                    retry_oxford_fetch_404(
                         url,
                         service_name or "Unknown",
                         sentiment or "",
                         message_timestamp,
-                        source,
                     )
                 )
                 return
