@@ -17,12 +17,14 @@ from utils.websocket_sender import initialize_websocket, send_ws_message
 
 load_dotenv()
 
-LOGIN_URL = "https://oxfordclub.com/wp-login.php"
-USERNAME = os.getenv("OXFORDCLUB_USERNAME")
-PASSWORD = os.getenv("OXFORDCLUB_PASSWORD")
-TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
-TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
+OFC_TELEGRAM_BOT_TOKEN = os.getenv("OXFORDCLUB_TELEGRAM_BOT_TOKEN")
+OFC_TELEGRAM_GRP = os.getenv("OXFORDCLUB_TELEGRAM_GRP")
+WPR_TELEGRAM_BOT_TOKEN = os.getenv("WPR_TELEGRAM_BOT_TOKEN")
+WPR_TELEGRAM_GRP = os.getenv("WPR_TELEGRAM_GRP")
+
 WEBSOCKET_PORT = 8765
+OXFORD_PHONE_NUMBERS = ["23242", "95314"]
+WOLFPACK_PHONE_NUMBERS = ["833-740-5792", "833-740-5792"]
 
 connected_websockets = set()
 
@@ -34,7 +36,19 @@ def get_headers() -> Dict[str, str]:
     }
 
 
-def parse_message(message: str) -> Optional[Tuple[Optional[str], Optional[str], str]]:
+def identify_source(phone_number: str) -> Optional[str]:
+    """Identify the source based on phone number"""
+    if phone_number in OXFORD_PHONE_NUMBERS:
+        return "oxford"
+    elif phone_number in WOLFPACK_PHONE_NUMBERS:
+        return "wolfpack"
+    return None
+
+
+def parse_oxford_message(
+    message: str,
+) -> Optional[Tuple[Optional[str], Optional[str], str]]:
+    """Parse Oxford Club message format"""
     pattern = r"The Oxford Club:\s*(?:([^\[]+?)\s+)?\[(.+?)\]\s+(https?://\S+)"
     match = re.search(pattern, message, re.IGNORECASE)
 
@@ -56,6 +70,25 @@ def parse_message(message: str) -> Optional[Tuple[Optional[str], Optional[str], 
     return None
 
 
+def parse_wolfpack_message(message: str) -> Optional[Tuple[str, str]]:
+    """Parse Wolfpack message format to extract ticker and action"""
+    # Pattern: (NYSE: TICKER) or (NASDAQ: TICKER)
+    ticker_pattern = r"\((?:NYSE|NASDAQ)\s*:\s*([A-Z]{1,5})\)"
+    ticker_match = re.search(ticker_pattern, message, re.IGNORECASE)
+
+    if not ticker_match:
+        return None
+
+    ticker = ticker_match.group(1)
+
+    if "short" in message.lower():
+        action = "Sell"
+    else:
+        action = "Buy"
+
+    return ticker, action
+
+
 def add_cache_buster(url: str, try_number: int) -> str:
     """Add cache busting parameter to URL"""
     # NOTE: This is to ignore the caching machanism of our own oxford fetch implementation
@@ -64,10 +97,10 @@ def add_cache_buster(url: str, try_number: int) -> str:
     return f"{url}{separator}try={try_number}"
 
 
-async def retry_fetch_404(
+async def retry_oxford_fetch_404(
     original_url: str, service_name: str, sentiment: str, message_timestamp: str
 ):
-    """Background task to retry fetching a 404 URL"""
+    """Background task to retry fetching a 404 URL for Oxford Club"""
     current_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     telegram_message = f"<b>Oxford Club SMS - 404 Detected</b>\n\n"
@@ -80,7 +113,9 @@ async def retry_fetch_404(
     telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
     telegram_message += f"<b>Current Time:</b> {current_time}"
 
-    await send_telegram_message(telegram_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    await send_telegram_message(
+        telegram_message, OFC_TELEGRAM_BOT_TOKEN, OFC_TELEGRAM_GRP
+    )
 
     max_retries = 120  # 10 minutes with 5-second intervals
     retry_count = 0
@@ -168,14 +203,12 @@ async def retry_fetch_404(
                             )
 
                             await send_telegram_message(
-                                success_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
+                                success_message, bot_token, telegram_group
                             )
                             return
 
                 success_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-                success_message = (
-                    f"<b>Oxford Club SMS - 404 Retry Found Page (No Ticker)</b>\n\n"
-                )
+                success_message = f"<b>{source.title()} SMS - 404 Retry Found Page (No Ticker)</b>\n\n"
                 success_message += f"<b>Service:</b> {service_name}\n"
                 success_message += f"<b>URL:</b> {original_url}\n"
                 success_message += f"<b>Status:</b> Page found but no ticker detected\n"
@@ -183,9 +216,7 @@ async def retry_fetch_404(
                 success_message += f"<b>Success Time:</b> {success_time}\n"
                 success_message += f"<b>Original Message Time:</b> {message_timestamp}"
 
-                await send_telegram_message(
-                    success_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP
-                )
+                await send_telegram_message(success_message, bot_token, telegram_group)
                 return
 
             elif response["status_code"] != 404:
@@ -203,7 +234,7 @@ async def retry_fetch_404(
     )
 
     timeout_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
-    timeout_message = f"<b>Oxford Club SMS - 404 Retry Timeout</b>\n\n"
+    timeout_message = f"<b>{source.title()} SMS - 404 Retry Timeout</b>\n\n"
     timeout_message += f"<b>Service:</b> {service_name}\n"
     timeout_message += f"<b>URL:</b> {original_url}\n"
     timeout_message += (
@@ -213,10 +244,10 @@ async def retry_fetch_404(
     timeout_message += f"<b>Timeout Time:</b> {timeout_time}\n"
     timeout_message += f"<b>Original Message Time:</b> {message_timestamp}"
 
-    await send_telegram_message(timeout_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    await send_telegram_message(timeout_message, bot_token, telegram_group)
 
 
-async def process_page(response) -> Optional[Tuple[str, str]]:
+async def process_page(response, url) -> Optional[Tuple[str, str]]:
     try:
         if response["status_code"] == 200:
             content = response["html"]
@@ -281,64 +312,112 @@ async def process_page(response) -> Optional[Tuple[str, str]]:
     return None
 
 
-async def process_sms_message(message: str, message_timestamp: str):
+async def process_sms_message(message: str, message_timestamp: str, phone_number: str):
     current_time = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-    parsed = parse_message(message)
-    if not parsed:
-        telegram_message = f"<b>Oxford Club SMS - Invalid Format</b>\n\n"
-        telegram_message += f"<b>Message:</b> {message[:200]}...\n"
-        telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
-        telegram_message += f"<b>Current Time:</b> {current_time}"
-
-        await send_telegram_message(telegram_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    source = identify_source(phone_number)
+    if not source:
+        log_message(f"Unknown phone number: {phone_number}", "WARNING")
         return
 
-    service_name, sentiment, url = parsed
+    bot_token = (
+        WPR_TELEGRAM_BOT_TOKEN if source == "wolfpack" else OFC_TELEGRAM_BOT_TOKEN
+    )
+    telegram_group = WPR_TELEGRAM_GRP if source == "wolfpack" else OFC_TELEGRAM_GRP
 
-    try:
-        response = await fetch_url_request(url, timeout=15)
+    if source == "wolfpack":
+        wolfpack_result = parse_wolfpack_message(message)
 
-        if response["status_code"] == 404:
-            asyncio.create_task(
-                retry_fetch_404(
-                    url, service_name or "Unknown", sentiment or "", message_timestamp
-                )
-            )
+        if not wolfpack_result:
+            telegram_message = f"<b>Wolfpack SMS - Invalid Format</b>\n\n"
+            telegram_message += f"<b>Message:</b> {message[:200]}...\n"
+            telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
+            telegram_message += f"<b>Current Time:</b> {current_time}"
+
+            await send_telegram_message(telegram_message, bot_token, telegram_group)
             return
-        elif response["status_code"] == 200:
-            result = await process_page(response)
-        else:
-            result = None
 
-    except Exception as e:
-        log_message(f"Error fetching initial page {url}: {e}", "ERROR")
-        result = None
-
-    telegram_message = f"<b>Oxford Club SMS - {service_name}</b>\n\n"
-
-    if result:
-        ticker, action = result
+        ticker, action = wolfpack_result
 
         await send_ws_message(
             {
-                "name": "Oxford Club SMS",
-                "type": (
-                    action if sentiment not in ["buy", "sell"] else sentiment.title()
-                ),
+                "name": "Wolfpack SMS",
+                "type": action,
                 "ticker": ticker,
-                "sender": "oxfordclub",
+                "sender": "wolfpack",
             }
         )
 
+        telegram_message = f"<b>Wolfpack SMS</b>\n\n"
         telegram_message += f"<b>Action:</b> {action}\n"
         telegram_message += f"<b>Ticker:</b> {ticker}\n"
+        telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
+        telegram_message += f"<b>Current Time:</b> {current_time}"
 
-    telegram_message += f"<b>URL:</b> {url}\n"
-    telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
-    telegram_message += f"<b>Current Time:</b> {current_time}"
+        await send_telegram_message(telegram_message, bot_token, telegram_group)
 
-    await send_telegram_message(telegram_message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+    else:
+        parsed = parse_oxford_message(message)
+        if not parsed:
+            telegram_message = f"<b>Oxford Club SMS - Invalid Format</b>\n\n"
+            telegram_message += f"<b>Message:</b> {message[:200]}...\n"
+            telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
+            telegram_message += f"<b>Current Time:</b> {current_time}"
+
+            await send_telegram_message(telegram_message, bot_token, telegram_group)
+            return
+
+        service_name, sentiment, url = parsed
+
+        try:
+            response = await fetch_url_request(url, timeout=15)
+
+            if response["status_code"] == 404:
+                asyncio.create_task(
+                    retry_fetch_404(
+                        url,
+                        service_name or "Unknown",
+                        sentiment or "",
+                        message_timestamp,
+                        source,
+                    )
+                )
+                return
+            elif response["status_code"] == 200:
+                result = await process_page(response, url)
+            else:
+                result = None
+
+        except Exception as e:
+            log_message(f"Error fetching initial page {url}: {e}", "ERROR")
+            result = None
+
+        telegram_message = f"<b>Oxford Club SMS - {service_name}</b>\n\n"
+
+        if result:
+            ticker, action = result
+
+            await send_ws_message(
+                {
+                    "name": "Oxford Club SMS",
+                    "type": (
+                        action
+                        if sentiment not in ["buy", "sell"]
+                        else sentiment.title()
+                    ),
+                    "ticker": ticker,
+                    "sender": "oxfordclub",
+                }
+            )
+
+            telegram_message += f"<b>Action:</b> {action}\n"
+            telegram_message += f"<b>Ticker:</b> {ticker}\n"
+
+        telegram_message += f"<b>URL:</b> {url}\n"
+        telegram_message += f"<b>Message Time:</b> {message_timestamp}\n"
+        telegram_message += f"<b>Current Time:</b> {current_time}"
+
+        await send_telegram_message(telegram_message, bot_token, telegram_group)
 
 
 async def websocket_ping_loop():
@@ -385,12 +464,20 @@ async def handle_websocket_message(websocket):
                 if dtype == "s":
                     sms_message = data.get("m", "")
                     message_timestamp = data.get("t", "")
+                    phone_number = data.get(
+                        "s", ""
+                    )  # NOTE: Don't know why he choosed s lol
 
-                    if sms_message:
-                        log_message(f"Received SMS: {sms_message[:100]}...", "INFO")
-                        await process_sms_message(sms_message, message_timestamp)
+                    if sms_message and phone_number:
+                        log_message(
+                            f"Received SMS from {phone_number}: {sms_message[:100]}...",
+                            "INFO",
+                        )
+                        await process_sms_message(
+                            sms_message, message_timestamp, phone_number
+                        )
                     else:
-                        log_message("Received empty SMS message", "WARNING")
+                        log_message("Received SMS message with missing data", "WARNING")
 
             except json.JSONDecodeError:
                 log_message("Received invalid JSON", "WARNING")
@@ -415,7 +502,7 @@ async def run_server():
     await initialize_websocket()
     await initialize_fetch_websocket()
 
-    log_message("Market is open. Starting Oxford Club SMS server...", "DEBUG")
+    log_message("Market is open. Starting SMS server...", "DEBUG")
     websocket_server = await start_websocket_server()
     ping_task = asyncio.create_task(websocket_ping_loop())
 
@@ -436,7 +523,14 @@ async def main_async():
 
 
 def main():
-    if not all([USERNAME, PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP]):
+    if not all(
+        [
+            OFC_TELEGRAM_BOT_TOKEN,
+            OFC_TELEGRAM_GRP,
+            WPR_TELEGRAM_BOT_TOKEN,
+            WPR_TELEGRAM_GRP,
+        ]
+    ):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
