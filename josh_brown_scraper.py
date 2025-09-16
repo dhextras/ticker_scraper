@@ -303,21 +303,18 @@ async def get_article_data_via_browser(article_url):
         browser_page.listen.start(
             "https://webql-redesign.cnbcfm.com/graphql?operationName=getArticleData"
         )
-
         log_message(f"Navigating to article: {article_url}", "INFO")
-        browser_page.get(article_url)
-
         max_attempts = 3
         attempt = 0
 
         while attempt < max_attempts:
             attempt += 1
             log_message(f"Attempt {attempt}/{max_attempts} to get article data", "INFO")
-
+            browser_page.get(article_url)
             try:
-                # Wait for responses with timeout of 3 seconds, get up to 3 responses
+
                 responses = browser_page.listen.wait(
-                    timeout=3, count=3, fit_count=False
+                    timeout=3, count=2, fit_count=False
                 )
 
                 if not responses:
@@ -393,7 +390,7 @@ async def get_article_data_via_browser(article_url):
                                 log_message(
                                     "Successfully extracted article data", "INFO"
                                 )
-                                return extracte_blockquote_text(article_body)
+                                return article_body
 
                     except Exception as response_error:
                         log_message(
@@ -409,8 +406,8 @@ async def get_article_data_via_browser(article_url):
                 )
 
                 if attempt < max_attempts:
-                    log_message(f"Refreshing page for attempt {attempt + 1}", "INFO")
-                    browser_page.refresh()
+                    browser_page.listen.stop()
+
                     browser_page.listen.start(
                         "https://webql-redesign.cnbcfm.com/graphql?operationName=getArticleData"
                     )
@@ -612,10 +609,14 @@ async def perform_login():
 
         email_input = browser_page.ele("email", timeout=1)
         password_input = browser_page.ele('css:input[name="password"]', timeout=1)
+        stay_signed_input = browser_page.ele("#staySignedInCheckbox", timeout=1)
 
         if GMAIL_USERNAME is None or GMAIL_PASSWORD is None:
             log_message(f"GMAIL_USERNAME isn't available in the env", "CRITICAL")
             sys.exit(1)
+
+        stay_signed_input.click()
+        await asyncio.sleep(1)
 
         email_input.clear()
         email_input.input(GMAIL_USERNAME)
