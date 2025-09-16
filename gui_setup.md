@@ -108,4 +108,20 @@ Use the following command to check if the VNC server is running on port 5901:
 netstat -tulpn
 ```
 
+## 5. Debugging login greeter
+
+> As Time pass you'll most likely get hit with the login screen/ authentication error. and blocking you into to connect to the gui. Run the below command to get it fixed
+
+```bash
+# Kill the VNC server
+vncserver -kill :1
+
+# Re-install gdm3 ( this will nuke the config that caused this issue )
+sudo apt remove gdm3
+sudo apt install gdm3
+
+# Restart the VNC server again
+vncserver :1 -geometry 1920x1080 -depth 24
+```
+
 ---
