@@ -386,6 +386,7 @@ async def handle_websocket_message(websocket):
                         name=sender,
                         content=cleaned_content,
                     )
+                    continue
 
                 if search_content == last_received_content:
                     log_message(
