@@ -19,6 +19,7 @@ from DrissionPage.common import Keys
 
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
+from utils.ticker_deck_sender import initialize_ticker_deck, send_ticker_deck_message
 from utils.time_utils import (
     get_current_time,
     get_next_market_times,
@@ -51,6 +52,8 @@ last_received_content = ""
 posts_memory_cache = []  # In-memory cache for yesterday and today's posts
 
 connected_websockets = set()
+
+deck_senders = ["Citron Research", "6k_Investor", "TheUndefinedMystic", "GB"]
 
 
 class EncryptedTcpClient:
@@ -360,6 +363,7 @@ async def handle_websocket_message(websocket):
                 request_start_time = time.time()
                 data = json.loads(message)
                 search_content = data.get("te", "")
+                sender = data.get("t", "")
                 dtype = data.get("dt", "")
 
                 if dtype and dtype == "pong":
@@ -371,6 +375,13 @@ async def handle_websocket_message(websocket):
                     )
                     log_message(f"Search content was empty content: {data}")
                     continue
+
+                if sender in deck_senders:
+                    await send_ticker_deck_message(
+                        sender="twitter",
+                        name=sender,
+                        content=search_content,
+                    )
 
                 if search_content == last_received_content:
                     log_message(
@@ -789,6 +800,7 @@ async def run_scraper():
 
     while True:
         await sleep_until_market_open()
+        await initialize_ticker_deck("Twitter")
         await scroll_to_find_last_post()
 
         log_message("Market is open. Starting to monitor Twitter following...", "DEBUG")
