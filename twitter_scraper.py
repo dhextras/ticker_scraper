@@ -377,10 +377,14 @@ async def handle_websocket_message(websocket):
                     continue
 
                 if sender in deck_senders:
+                    cleaned_content = search_content.replace(
+                        "_FROM_PIXEL_", ""
+                    ).replace("_FROM_SAMSUNG_", "")
+
                     await send_ticker_deck_message(
                         sender="twitter",
                         name=sender,
-                        content=search_content,
+                        content=cleaned_content,
                     )
 
                 if search_content == last_received_content:
