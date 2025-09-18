@@ -160,7 +160,13 @@ def process_raw_data(html):
 def fetch_csv_alerts(proxy):
     try:
         cache_param, cache_value = get_random_cache_buster()
-        headers = {"Cookie": f"ipa_login={IPA_LOGIN_COOKIE}"}
+        headers = {
+            "Cookie": f"ipa_login={IPA_LOGIN_COOKIE}",
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+
         proxies = (
             {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
         )
@@ -168,7 +174,7 @@ def fetch_csv_alerts(proxy):
         response = requests.get(
             f"{JSON_URL}?{cache_param}={cache_value}",
             headers=headers,
-            proxies=proxies,
+            # proxies=proxies,
             timeout=3,
         )
 
