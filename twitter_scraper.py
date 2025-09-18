@@ -49,6 +49,7 @@ tcp_client = None
 co = ChromiumOptions()
 page = ChromiumPage(co)
 last_received_content = ""
+last_received_cleaned_content = ""
 posts_memory_cache = []  # In-memory cache for yesterday and today's posts
 
 connected_websockets = set()
@@ -349,6 +350,7 @@ async def websocket_ping_loop():
 async def handle_websocket_message(websocket):
     global posts_memory_cache
     global last_received_content
+    global last_received_cleaned_content
 
     connected_websockets.add(websocket)
     client_address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
@@ -381,11 +383,23 @@ async def handle_websocket_message(websocket):
                         "_FROM_PIXEL_", ""
                     ).replace("_FROM_SAMSUNG_", "")
 
-                    await send_ticker_deck_message(
-                        sender="twitter",
-                        name=sender,
-                        content=cleaned_content,
-                    )
+                    if cleaned_content == last_received_cleaned_content:
+                        log_message(
+                            "Received the same content to send to deck so ignoring...",
+                            "WARNING",
+                        )
+                    else:
+                        await send_ticker_deck_message(
+                            sender="twitter",
+                            name=sender,
+                            content=cleaned_content,
+                        )
+
+                        last_received_cleaned_content = cleaned_content
+                        log_message(
+                            f"Sent new tweet to deck. tweet: {cleaned_content[:300]}...",
+                            "INFO",
+                        )
                     continue
 
                 if search_content == last_received_content:
