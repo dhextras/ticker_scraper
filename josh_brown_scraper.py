@@ -41,6 +41,8 @@ ARTICLE_DATA_SHA = os.getenv("CNBC_SCRAPER_ARTICLE_DATA_SHA")
 DATA_DIR = Path("data")
 ALERTS_FILE = DATA_DIR / "josh_brown_alerts.json"
 
+ACCESS_TOKEN = None
+
 # Global variables
 browser_page = None
 previous_trade_alerts = set()
@@ -148,6 +150,21 @@ async def refresh_access_token_via_browser():
         if browser_page is None:
             return False
 
+        if ACCESS_TOKEN is None:
+            try:
+                access_token_cookie = (
+                    browser_page.cookies().as_dict().get("accessToken", None)
+                )
+                if access_token_cookie:
+                    ACCESS_TOKEN = access_token_cookie
+                    log_message("Retrieved access token from browser cookie", "INFO")
+                else:
+                    log_message("No accessToken cookie found", "WARNING")
+                    return False
+            except Exception as e:
+                log_message(f"Error getting accessToken cookie: {e}", "WARNING")
+                return False
+
         # NOTE: In case the users id change later change this url to handle it with the regex
         browser_page.listen.start(
             "https://registerng.cnbc.com/api/v4/client/201/users/11252173/auth/token"
@@ -156,6 +173,11 @@ async def refresh_access_token_via_browser():
 
         try:
             responses = browser_page.listen.wait(timeout=10, count=3, fit_count=False)
+
+            if not responses:
+                log_message("No token refresh requests detected", "WARNING")
+                browser_page.listen.stop()
+                return False
 
             for response in responses:
                 try:
@@ -198,7 +220,7 @@ async def refresh_access_token_via_browser():
                     continue
 
         except Exception as e:
-            log_message(f"No token responses received: {e}", "WARNING")
+            log_message(f"No token responses received within timeout: {e}", "WARNING")
 
         browser_page.listen.stop()
         return False
@@ -654,7 +676,9 @@ async def process_article(article, fetch_time):
         # NOTE: For Later use if needed lol
         # body_content = await get_article_data_via_browser(article_url)
 
-        body_content = await get_article_data_with_retry(article_url, GMAIL_USERNAME)
+        body_content = await get_article_data_with_retry(
+            article.get("id"), GMAIL_USERNAME
+        )
 
         fetch_data_time = time.time() - start_time
 
