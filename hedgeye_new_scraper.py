@@ -790,33 +790,33 @@ async def process_account(
 
         async with aiohttp.ClientSession() as session:
             # METHOD 1: logged_in last alerts
-            # alert_details = await fetch_alert_details(session, cookies, proxy)
-            #
-            # if alert_details is None:
-            #     return
-            # log_message(
-            #     f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {email}, {proxy}",
-            #     "INFO",
-            # )
-            #
-            # await process_fetched_alert(alert_details, last_alert_lock)
+            alert_details = await fetch_alert_details(session, cookies)
 
-            # METHOD 2: research archives
-            start_time = time.time()
-            today = get_current_time().now().strftime("%Y-%m-%d")
-            results = await fetch_research_archives(
-                session,
-                cookies,
-                # proxy,
-                today,
-            )
-
+            if alert_details is None:
+                return
             log_message(
-                f"fetch_alert_details took {time.time() - start_time:.2f} seconds. for {email}",
+                f"fetch_alert_details took {alert_details['fetch_time']:.2f} seconds. for {email}",
                 "INFO",
             )
 
-            await process_fetched_archives(results, last_alert_lock, start_time)
+            await process_fetched_alert(alert_details, last_alert_lock)
+
+            # METHOD 2: research archives
+            # start_time = time.time()
+            # today = get_current_time().now().strftime("%Y-%m-%d")
+            # results = await fetch_research_archives(
+            #     session,
+            #     cookies,
+            #     # proxy,
+            #     today,
+            # )
+            #
+            # log_message(
+            #     f"fetch_alert_details took {time.time() - start_time:.2f} seconds. for {email}",
+            #     "INFO",
+            # )
+            #
+            # await process_fetched_archives(results, last_alert_lock, start_time)
 
     except Exception as e:
         if "Rate limited" in str(e):
