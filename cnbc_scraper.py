@@ -46,6 +46,7 @@ ACCESS_TOKEN = None
 # Global variables
 last_request_time = 0
 browser_page = None
+token_refresh_thread = None
 
 
 class RateLimiter:
@@ -136,6 +137,204 @@ def extracte_blockquote_text(article_body):
 
                     return joined_text.strip()
 
+    return None
+
+
+async def refresh_access_token_via_browser():
+    """Refresh access token by listening to token endpoint"""
+    global browser_page, ACCESS_TOKEN
+
+    try:
+        if browser_page is None:
+            return False
+
+        # NOTE: In case the users id change later change this url to handle it with the regex
+        browser_page.listen.start(
+            "https://registerng.cnbc.com/api/v4/client/201/users/11818612/auth/token"
+        )
+        browser_page.get("https://www.cnbc.com/investingclub/trade-alerts/")
+
+        try:
+            responses = browser_page.listen.wait(timeout=10, count=3, fit_count=False)
+
+            for response in responses:
+                try:
+                    if (
+                        hasattr(response, "response")
+                        and response.response
+                        and hasattr(response.response, "body")
+                        and response.response.body
+                    ):
+
+                        status_code = None
+                        if (
+                            hasattr(response.response, "extra_info")
+                            and response.response.extra_info
+                            and hasattr(response.response.extra_info, "all_info")
+                        ):
+                            status_code = response.response.extra_info.all_info.get(
+                                "statusCode"
+                            )
+
+                        if status_code == 200:
+                            response_data = response.response.body
+                            if (
+                                isinstance(response_data, dict)
+                                and response_data.get("success")
+                                and "data" in response_data
+                                and "access_token" in response_data["data"]
+                            ):
+
+                                new_token = response_data["data"]["access_token"]
+                                ACCESS_TOKEN = new_token
+                                log_message(
+                                    "Access token refreshed successfully", "INFO"
+                                )
+                                browser_page.listen.stop()
+                                return True
+
+                except Exception as e:
+                    log_message(f"Error processing token response: {e}", "WARNING")
+                    continue
+
+        except Exception as e:
+            log_message(f"No token responses received: {e}", "WARNING")
+
+        browser_page.listen.stop()
+        return False
+
+    except Exception as e:
+        log_message(f"Error refreshing access token: {e}", "ERROR")
+        try:
+            browser_page.listen.stop()
+        except:
+            pass
+        return False
+
+
+def start_token_refresh_thread():
+    """Start the token refresh thread"""
+    global token_refresh_thread
+
+    def token_refresh_worker():
+        while True:
+            try:
+                asyncio.run(refresh_access_token_via_browser())
+            except Exception as e:
+                log_message(f"Error in token refresh thread: {e}", "ERROR")
+
+            # NOTE: 5 minutes 5 seconds, due to cnbc's JWT expiration being 5 min
+            time.sleep(305)
+
+    if token_refresh_thread is None or not token_refresh_thread.is_alive():
+        token_refresh_thread = threading.Thread(
+            target=token_refresh_worker, daemon=True
+        )
+        token_refresh_thread.start()
+        log_message("Token refresh thread started", "INFO")
+
+
+async def get_article_data_with_retry(article_id, uid):
+    """Get article data with token refresh retry mechanism"""
+    global ACCESS_TOKEN
+
+    max_attempts = 3
+
+    for attempt in range(max_attempts):
+        try:
+            await rate_limiter.acquire()
+            base_url = "https://webql-redesign.cnbcfm.com/graphql"
+            variables = {
+                "id": article_id,
+                "uid": uid,
+                "pid": 33,
+                "bedrockV3API": True,
+                "sponsoredProExperienceID": "",
+            }
+            extensions = {
+                "persistedQuery": {
+                    "version": 1,
+                    "sha256Hash": ARTICLE_DATA_SHA,
+                }
+            }
+            params = {
+                "operationName": "getArticleData",
+                "variables": json.dumps(variables),
+                "extensions": json.dumps(extensions),
+            }
+
+            headers = {
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "authorization": f"Bearer {ACCESS_TOKEN}",
+            }
+
+            encoded_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(encoded_url, headers=headers) as response:
+                    if response.status == 200:
+                        response_json = await response.json()
+
+                        if "errors" in response_json:
+                            log_message(
+                                f"API returned errors on attempt {attempt + 1}: {response_json['errors']}",
+                                "WARNING",
+                            )
+                            if attempt < max_attempts - 1:
+                                log_message(
+                                    "Attempting to refresh token and retry", "INFO"
+                                )
+                                await refresh_access_token_via_browser()
+                                continue
+                            else:
+                                await send_critical_alert_custom(
+                                    "Failed to get article data after token refresh attempts"
+                                )
+                                return None
+
+                        is_authenticated = (
+                            response_json.get("data", {})
+                            .get("article", {})
+                            .get("body", {})
+                            .get("isAuthenticated", False)
+                        )
+
+                        if not is_authenticated:
+                            log_message(
+                                f"Authentication required on attempt {attempt + 1}",
+                                "WARNING",
+                            )
+                            if attempt < max_attempts - 1:
+                                await refresh_access_token_via_browser()
+                                continue
+                            else:
+                                return None
+
+                        article_body = (
+                            response_json.get("data", {})
+                            .get("article", {})
+                            .get("body", {})
+                            .get("content", [])
+                        )
+
+                        return extracte_blockquote_text(article_body)
+
+                    else:
+                        log_message(
+                            f"HTTP {response.status} on attempt {attempt + 1}",
+                            "WARNING",
+                        )
+                        if attempt < max_attempts - 1:
+                            await refresh_access_token_via_browser()
+                            continue
+
+        except Exception as e:
+            log_message(f"Exception on attempt {attempt + 1}: {e}", "ERROR")
+            if attempt < max_attempts - 1:
+                await refresh_access_token_via_browser()
+                continue
+
+    await send_critical_alert_custom("All article data fetch attempts failed")
     return None
 
 
@@ -545,7 +744,10 @@ async def process_article(article, fetch_time):
             log_message(f"No URL found for article {article.get('id')}", "ERROR")
             return False
 
-        article_data = await get_article_data_via_browser(article_url)
+        # NOTE: For Later use if needed lol
+        # article_data = await get_article_data_via_browser(article_url)
+
+        article_data = await get_article_data_with_retry(article_url, GMAIL_USERNAME)
         fetch_data_time = time.time() - start_time
 
         if article_data:
@@ -769,6 +971,7 @@ async def run_alert_monitor():
                 await asyncio.sleep(300)
                 continue
 
+            start_token_refresh_thread()
             log_message(
                 "Market is open and logged in. Starting to check for new blog posts...",
                 "DEBUG",
