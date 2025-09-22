@@ -338,7 +338,7 @@ async def get_article_data_with_retry(article_id, uid):
                             .get("content", [])
                         )
 
-                        return extracte_blockquote_text(article_body)
+                        return article_body
 
                     else:
                         log_message(
