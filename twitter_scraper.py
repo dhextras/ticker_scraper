@@ -39,6 +39,7 @@ LAST_POST_FILE = "data/twitter_last_post.json"
 SESSION_FILE = "data/twitter_session.json"
 TELEGRAM_BOT_TOKEN = os.getenv("TWITTER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("TWITTER_TELEGRAM_GRP")
+DECK_TWEET_TELEGRAM_GRP = os.getenv("DECK_TWEET_TELEGRAM_GRP")
 TWITTER_USERNAME = os.getenv("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.getenv("TWITTER_PASSWORD")
 
@@ -304,6 +305,14 @@ def find_matching_post(search_content, posts_list):
     return None
 
 
+async def send_deck_tweet(sender, content):
+    message = f"<b>New Deck tweet found</b>\n\n"
+    message += f"<b>Sender:</b> {sender}\n"
+    message += f"<b>Content:</b> {content}{'\n\ncontent is trimmed.....' if len(content) > 600 else ''}"
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, DECK_TWEET_TELEGRAM_GRP)
+
+
 async def send_found_post(data, source):
     global tcp_client
 
@@ -394,6 +403,8 @@ async def handle_websocket_message(websocket):
                             name=sender,
                             content=cleaned_content,
                         )
+
+                        await send_deck_tweet(sender, search_content)
 
                         last_received_cleaned_content = cleaned_content
                         log_message(
@@ -902,7 +913,15 @@ async def main_async():
 
 
 def main():
-    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_GRP, TWITTER_USERNAME, TWITTER_PASSWORD]):
+    if not all(
+        [
+            TELEGRAM_BOT_TOKEN,
+            TELEGRAM_GRP,
+            TWITTER_USERNAME,
+            TWITTER_PASSWORD,
+            DECK_TWEET_TELEGRAM_GRP,
+        ]
+    ):
         log_message("Missing required environment variables", "CRITICAL")
         sys.exit(1)
 
