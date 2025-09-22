@@ -305,9 +305,10 @@ def find_matching_post(search_content, posts_list):
     return None
 
 
-async def send_deck_tweet(sender, content):
+async def send_deck_tweet(sender, content, timestamp):
     message = f"<b>New Deck tweet found</b>\n\n"
     message += f"<b>Sender:</b> {sender}\n"
+    message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Content:</b> {content}{'\n\ncontent is trimmed.....' if len(content) > 600 else ''}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, DECK_TWEET_TELEGRAM_GRP)
@@ -388,6 +389,7 @@ async def handle_websocket_message(websocket):
                     continue
 
                 if sender in deck_senders:
+                    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
                     cleaned_content = search_content.replace(
                         "_FROM_PIXEL_", ""
                     ).replace("_FROM_SAMSUNG_", "")
@@ -404,7 +406,7 @@ async def handle_websocket_message(websocket):
                             content=cleaned_content,
                         )
 
-                        await send_deck_tweet(sender, search_content)
+                        await send_deck_tweet(sender, search_content, timestamp)
 
                         last_received_cleaned_content = cleaned_content
                         log_message(
