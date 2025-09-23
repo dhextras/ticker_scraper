@@ -300,16 +300,13 @@ async def fetch_and_process_portfolio(
         return []
 
 
-async def send_alert_to_telegram_and_ws(
-    article_data: Dict[str, str], content_url: str, ticker: str
-):
+async def send_alert_to_telegram_and_ws(article_data: Dict[str, str], ticker: str):
     """Send alert notification to Telegram and WebSocket"""
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     message = f"<b>New Oxford Microcap Trader Alert Found</b>\n\n"
     message += f"<b>Current Time:</b> {timestamp}\n"
-    message += f"<b>Issue URL:</b> {article_data['url']}\n"
-    message += f"<b>Actual Content URL:</b> {content_url}\n"
+    message += f"<b>URL:</b> {article_data['url']}\n"
     message += f"<b>Title:</b> {article_data['title']}\n"
 
     if ticker:
@@ -372,7 +369,7 @@ async def process_alerts(
         if content_soup:
             ticker = extract_ticker_from_text(content_soup, article["url"])
             if ticker:
-                await send_alert_to_telegram_and_ws(article, article["url"], ticker)
+                await send_alert_to_telegram_and_ws(article, ticker)
                 data_manager.add_alert(article["url"])
 
     return len(new_articles)
