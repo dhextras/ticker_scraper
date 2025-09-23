@@ -124,26 +124,6 @@ async def send_429_alert():
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
-async def fetch_initial_content(session: requests.Session, url: str) -> Optional[str]:
-    """Fetch the initial content URL from an article"""
-    try:
-        response = session.get(url)
-        if response.status_code == 429:
-            await send_429_alert()
-            return None
-        if response.status_code != 200:
-            return None
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        link = soup.select_one(
-            "body > div.page-section.members-content > div > article > div > p:nth-child(2) > a"
-        )
-        return link["href"] if link else None
-    except Exception as e:
-        log_message(f"Error fetching initial content: {e}", "ERROR")
-        return None
-
-
 async def fetch_article_content(
     session: requests.Session, url: str
 ) -> Optional[BeautifulSoup]:
@@ -388,18 +368,12 @@ async def process_alerts(
     ]
 
     for article in new_articles:
-        initial_url = await fetch_initial_content(session, article["url"])
-        if initial_url:
-            content_soup = await fetch_article_content(session, initial_url)
-            if content_soup:
-                ticker = extract_ticker_from_text(content_soup, initial_url)
-                if ticker:
-                    await send_alert_to_telegram_and_ws(article, initial_url, ticker)
-                    data_manager.add_alert(article["url"])
-        else:
-            log_message(
-                f"Couldn't find the inside content URL for: {article['url']}", "ERROR"
-            )
+        content_soup = await fetch_article_content(session, article["url"])
+        if content_soup:
+            ticker = extract_ticker_from_text(content_soup, article["url"])
+            if ticker:
+                await send_alert_to_telegram_and_ws(article, article["url"], ticker)
+                data_manager.add_alert(article["url"])
 
     return len(new_articles)
 
