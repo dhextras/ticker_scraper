@@ -13,6 +13,7 @@ import pytz
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from utils.bearcave_draft_monitor import start_monitoring
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
@@ -135,15 +136,6 @@ async def fetch_xml_feed(session, raw_proxy=None):
                     link = item.find("link")
                     url = link.text.strip() if link else ""
 
-                    # FIXME: Remove this after confirming that this xml doesnt have the social title
-                    if is_draft_post(url):
-                        pub_date = datetime.strptime(
-                            pub_date_str, "%a, %d %b %Y %H:%M:%S %Z"
-                        )
-                        pub_time = pub_date.strftime("%H_%M_%S")
-                        with open(f"data/delete_xml_{pub_time}.txt", "w") as f:
-                            f.write(str(item))
-
                     posts.append(
                         {
                             "title": title_text,
@@ -211,6 +203,14 @@ async def send_to_telegram(post_data, ticker=None):
         )
         log_message(
             f"Ticker sent to WebSocket: {ticker} - {post_data['canonical_url']}", "INFO"
+        )
+
+    if is_draft:
+        await start_monitoring(
+            post_data["canonical_url"],
+            TELEGRAM_BOT_TOKEN,
+            TELEGRAM_GRP,
+            "Bearcave - XML",
         )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)

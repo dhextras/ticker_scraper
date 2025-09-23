@@ -12,6 +12,7 @@ import aiohttp
 import pytz
 from dotenv import load_dotenv
 
+from utils.bearcave_draft_monitor import start_monitoring
 from utils.logger import log_message
 from utils.telegram_sender import send_telegram_message
 from utils.time_utils import (
@@ -206,6 +207,14 @@ async def send_to_telegram(post_data, ticker=None):
         )
         log_message(
             f"Ticker sent to WebSocket: {ticker} - {post_data['canonical_url']}", "INFO"
+        )
+
+    if is_draft:
+        await start_monitoring(
+            post_data["canonical_url"],
+            TELEGRAM_BOT_TOKEN,
+            TELEGRAM_GRP,
+            "Bearcave",
         )
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
