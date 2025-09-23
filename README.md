@@ -45,178 +45,187 @@ pip install -r requirements.txt
 2. **Add the following details:**
 
    ```plaintext
-   WS_SERVER_URL=  # WebSocket server URL
-   GPT_API_KEY= # Api key for gpt
+   WS_SERVER_URL=
+   GPT_API_KEY=
 
    # GPT Analysis Configuration
    GPT_NOTIFY_BOT_TOKEN=
    GPT_NOTIFY_GRP=
 
    # TCP Client Configuration
-   TCP_HOST=your_tcp_server_host
-   TCP_PORT=9000
-   TCP_USERNAME=username
-   TCP_SECRET=your_secret_key
+   TCP_HOST=
+   TCP_PORT=
+   TCP_USERNAME=
+   TCP_SECRET=
 
    # Ticker Deck Configuration
-   TICKER_DECK_WS_URL=http://your-ticker-deck-socketio-url:port
-   TICKER_DECK_AUTH_URL=http://your-ticker-deck-auth-url:port
-   TICKER_DECK_USERNAME=your_username
-   TICKER_DECK_PASSWORD=your_password
+   TICKER_DECK_WS_URL=
+   TICKER_DECK_AUTH_URL=
+   TICKER_DECK_USERNAME=
+   TICKER_DECK_PASSWORD=
 
    # Error Notify bot settings
-   ERROR_NOTIFY_BOT_TOKEN=  # Telegram bot token for error notifications
-   ERROR_NOTIFY_GRP=  # Telegram group ID for error notifications
+   ERROR_NOTIFY_BOT_TOKEN=
+   ERROR_NOTIFY_GRP=
 
    # OxfordClub scraper settings
-   OXFORDCLUB_TELEGRAM_BOT_TOKEN=  # Telegram bot token for OxfordClub
-   OXFORDCLUB_TELEGRAM_GRP=  # Telegram group ID for OxfordClub
-   OXFORDCLUB_USERNAME=  # Username for OxfordClub login
-   OXFORDCLUB_PASSWORD=  # Password for OxfordClub login
+   OXF0RDCLUB_TELEGRAM_BOT_TOKEN=
+   OXF0RDCLUB_TELEGRAM_GRP=
+   OXF0RDCLUB_USERNAME=
+   OXF0RDCLUB_PASSWORD=
+   OXFORD_MICROCAP_USERNAME=
+   OXFORD_MICROCAP_PASSWORD=
+   OXFORD_WS_SERVER_URL=
 
    # StockNews scraper settings
-   STOCKNEWS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for StockNews
-   STOCKNEWS_TELEGRAM_GRP=  # Telegram group ID for StockNews
+   STOCKNEWS_TELEGRAM_BOT_TOKEN=
+   STOCKNEWS_TELEGRAM_GRP=
 
    # Gmail scraper settings
-   GMAIL_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Gmail scraper
-   GMAIL_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Gmail scraper
+   GMAIL_SCRAPER_TELEGRAM_BOT_TOKEN=
+   GMAIL_SCRAPER_TELEGRAM_GRP=
 
    # CNBC scraper settings
-   CNBC_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for CNBC scraper
-   CNBC_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for CNBC scraper
-   CNBC_SCRAPER_GMAIL_USERNAME=  # Gmail username for CNBC scraper
-   CNBC_SCRAPER_GMAIL_PASSWORD=  # Gmail password for CNBC scraper
-   CNBC_SCRAPER_ARTICLE_DATA_SHA=  # SHA for the article data in CNBC scraper
-   CNBC_SCRAPER_LATEST_ASSETS_SHA= # SHA for latest assets from jim camer
-   CNBC_SCRAPER_LATEST_ARTICLE_SHA= # SHA for latest aritcle
-   CNBC_SCRAPER_SESSION_TOKEN=  # Session token for CNBC scraper
+   CNBC_SCRAPER_TELEGRAM_BOT_TOKEN=
+   CNBC_SCRAPER_TELEGRAM_GRP=
+   CNBC_NEWS_TELEGRAM_GRP=
+   CNBC_SCRAPER_GMAIL_USERNAME=
+   CNBC_SCRAPER_GMAIL_PASSWORD=
+   CNBC_SCRAPER_ARTICLE_DATA_SHA=
+   CNBC_SCRAPER_LATEST_ASSETS_SHA=
+   CNBC_SCRAPER_LATEST_ARTICLE_SHA=
+   CNBC_SCRAPER_SESSION_TOKEN=
 
    # Hedgeye scraper settings
-   HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hedgeye scraper
-   HEDGEYE_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Hedgeye scraper
+   HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN=
+   HEDGEYE_SCRAPER_TELEGRAM_GRP=
 
    # Motley fool scraper settings
-   FOOL_SCRAPER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Motley fool scraper
-   FOOL_SCRAPER_TELEGRAM_GRP=  # Telegram group ID for Motley fool scraper
-   FOOL_USERNAME= # Username for Motley fool
-   FOOL_PASSWORD= # password for Motley fool
-   FOOL_API_KEY= # API key for the grphql request
-   FOOL_GRAPHQL_HASH= # Article latestt sha
+   FOOL_SCRAPER_TELEGRAM_BOT_TOKEN=
+   FOOL_SCRAPER_TELEGRAM_GRP=
+   FOOL_USERNAME=
+   FOOL_PASSWORD=
+   FOOL_API_KEY=
+   FOOL_GRAPHQL_HASH=
 
    # Citron Research scraper settings
-   CITRON_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Citron
-   CITRON_TELEGRAM_GRP=  # Telegram group ID for Citron
+   CITRON_TELEGRAM_BOT_TOKEN=
+   CITRON_TELEGRAM_GRP=
 
    # Kerrisdale Capital scraper settings
-   KERRISDALE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Kerrisdale
-   KERRISDALE_TELEGRAM_GRP=  # Telegram group ID for Kerrisdale
+   KERRISDALE_TELEGRAM_BOT_TOKEN=
+   KERRISDALE_TELEGRAM_GRP=
 
    # Hindenburg Research scraper settings
-   HINDENBURG_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hindenburg
-   HINDENBURG_TELEGRAM_GRP=  # Telegram group ID for Hindenburg
+   HINDENBURG_TELEGRAM_BOT_TOKEN=
+   HINDENBURG_TELEGRAM_GRP=
 
    # Bearcave ticker scraper settings
-   BEARCAVE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Hindenburg
-   BEARCAVE_TELEGRAM_GRP=  # Telegram group ID for Hindenburg
+   BEARCAVE_TELEGRAM_BOT_TOKEN=
+   BEARCAVE_TELEGRAM_GRP=
 
    # Grizzly Media scraper settings
-   GRIZZLY_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Grizzly
-   GRIZZLY_TELEGRAM_GRP=  # Telegram group ID for Grizzly
+   GRIZZLY_TELEGRAM_BOT_TOKEN=
+   GRIZZLY_TELEGRAM_GRP=
 
    # Muddy Waters Media scraper settings
-   MUDDY_WATERS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Muddy Waters
-   MUDDY_WATERS_TELEGRAM_GRP=  # Telegram group ID for Muddy Waters
+   MUDDY_WATERS_TELEGRAM_BOT_TOKEN=
+   MUDDY_WATERS_TELEGRAM_GRP=
 
    # Altucher ticker scraper settings
-   ALTUCHER_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Altucher
-   ALTUCHER_TELEGRAM_GRP=  # Telegram group ID for Altucher
-   ALTUCHER_USERNAME= # Username for Altucher
-   ALTUCHER_PASSWORD= # Username for Altucher
-   ALTUCHER_COOKIE_TID= # Cokies TID grabbed from requests for Altucher
-   ALTUCHER_COOKIE_ID= # Cokies ID grabbed from requests for Altucher
+   ALTUCHER_TELEGRAM_BOT_TOKEN=
+   ALTUCHER_TELEGRAM_GRP=
+   ALTUCHER_USERNAME=
+   ALTUCHER_PASSWORD=
+   ALTUCHER_COOKIE_TID=
+   ALTUCHER_COOKIE_ID=
 
    # Banyan image scraper settings
-   BANYAN_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Banayan image
-   BANYAN_TELEGRAM_GRP=  # Telegram group ID for Banayan image
+   BANYAN_TELEGRAM_BOT_TOKEN=
+   BANYAN_TELEGRAM_GRP=
+   BANYAN_TRADE_ALERT_TELEGRAM_GRP=
 
    # Navallier Old scraper settings
-   INVESTOR_PLACE_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Navallier Old
-   INVESTOR_PLACE_TELEGRAM_GRP= # Telegram group ID for Navallier Old
-   IPA_LOGIN_COOKIE= # Cookie for Navallier Old
+   INVESTOR_PLACE_TELEGRAM_BOT_TOKEN=
+   INVESTOR_PLACE_TELEGRAM_GRP=
+   IPA_LOGIN_COOKIE=
 
    # Zacks Trading Service settings
-   ZACKS_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Zacks alerts
-   ZACKS_TELEGRAM_GRP=  # Telegram group ID for Zacks alerts
-   ZACKS_USERNAME=  # Zacks login username ts html scraper
-   ZACKS_PASSWORD=  # Zacks login password ts html
-   ZACKS_WEBSOCKET_URL= # Websocket url fore the zacks commentary websocket server
+   ZACKS_TELEGRAM_BOT_TOKEN=
+   ZACKS_TELEGRAM_GRP=
+   ZACKS_USERNAME=
+   ZACKS_PASSWORD=
+   ZACKS_WEBSOCKET_URL=
 
    # Youtube Channel Monitor settings
-   YOUTUBE_TELEGRAM_BOT_TOKEN= # Telegram bot token for youtube channel monitor
-   YOUTUBE_TELEGRAM_GRP= # Telegram group ID for youtube channel monitor
-   YOUTUBE_PLAYLIST_ID= # Play list id of the channel you wants to monitor
+   YOUTUBE_TELEGRAM_BOT_TOKEN=
+   YOUTUBE_TELEGRAM_GRP=
+   YOUTUBE_PLAYLIST_ID=
 
    # Beta Ville Scraper settings
-   BETA_VILLE_TELEGRAM_BOT_TOKEN= # Telegram bot token for beta ville scraper
-   BETA_VILLE_TELEGRAM_GRP= # Telegram group ID for beta ville scraper
+   BETA_VILLE_TELEGRAM_BOT_TOKEN=
+   BETA_VILLE_TELEGRAM_GRP=
 
    # Blue Orca Scraper settings
-   BLUEORCA_TELEGRAM_BOT_TOKEN= # Telegram bot token for blue orca scraper
-   BLUEORCA_TELEGRAM_GRP= # Telegram group ID for blue orca scraper
+   BLUEORCA_TELEGRAM_BOT_TOKEN=
+   BLUEORCA_TELEGRAM_GRP=
 
    # Jehoshaphat Reaserch Scraper settings
-   JEHOSHAPHAT_TELEGRAM_BOT_TOKEN= # Telegram bot token for Jehoshaphat Reaserch scraper
-   JEHOSHAPHAT_TELEGRAM_GRP= # Telegram group ID for Jehoshaphat Reaserch scraper
+   JEHOSHAPHAT_TELEGRAM_BOT_TOKEN=
+   JEHOSHAPHAT_TELEGRAM_GRP=
 
    # Friendly Bear Research Scraper settings
-   FRIENDLY_BEAR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Friendly Bear Research scraper
-   FRIENDLY_BEAR_TELEGRAM_GRP=        # Telegram group ID for Friendly Bear Research scraper
+   FRIENDLY_BEAR_TELEGRAM_BOT_TOKEN=
+   FRIENDLY_BEAR_TELEGRAM_GRP=
 
    # Viceroy Research Scraper settings
-   VICEROY_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Viceroy Research scraper
-   VICEROY_TELEGRAM_GRP=              # Telegram group ID for Viceroy Research scraper
+   VICEROY_TELEGRAM_BOT_TOKEN=
+   VICEROY_TELEGRAM_GRP=
 
    # Iceberg Research Scraper settings
-   ICEBERG_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Iceberg Research scraper
-   ICEBERG_TELEGRAM_GRP=              # Telegram group ID for Iceberg Research scraper
+   ICEBERG_TELEGRAM_BOT_TOKEN=
+   ICEBERG_TELEGRAM_GRP=
 
    # Hunter Brook Research Scraper settings
-   HUNTER_BROOK_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Hunter Brook Research scraper
-   HUNTER_BROOK_TELEGRAM_GRP=              # Telegram group ID for Hunter Brook Research scraper
+   HUNTER_BROOK_TELEGRAM_BOT_TOKEN=
+   HUNTER_BROOK_TELEGRAM_GRP=
 
    # Mariner Research Scraper settings
-   MARINER_TELEGRAM_BOT_TOKEN=        # Telegram bot token for Mariner Research scraper
-   MARINER_TELEGRAM_GRP=              # Telegram group ID for Mariner Research scraper
+   MARINER_TELEGRAM_BOT_TOKEN=
+   MARINER_TELEGRAM_GRP=
 
    # White Diamond Research scraper settings
-   WDR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for White Diamond Research
-   WDR_TELEGRAM_GRP=  # Telegram group ID for White Diamond Research
+   WDR_TELEGRAM_BOT_TOKEN=
+   WDR_TELEGRAM_GRP=
 
    # Wolfpack Research scraper settings
-   WPR_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Wolfpack Research
-   WPR_TELEGRAM_GRP=  # Telegram group ID for Wolfpack Research
+   WPR_TELEGRAM_BOT_TOKEN=
+   WPR_TELEGRAM_GRP=
 
    # Miner vini scraper settings
-   MINERVINI_TELEGRAM_BOT_TOKEN=  # Telegram bot token for Miner Vini
-   MINERVINI_TELEGRAM_GRP=  # Telegram group ID for Miner Vini
+   MINERVINI_TELEGRAM_BOT_TOKEN=
+   MINERVINI_TELEGRAM_GRP=
 
    # IBD Swing Trader scraper settings
-   IBD_TELEGRAM_BOT_TOKEN= # Telegram token for IBD
-   IBD_TELEGRAM_GRP= # Telegram Group for IBD
+   IBD_TELEGRAM_BOT_TOKEN=
+   IBD_TELEGRAM_GRP=
+
+   # Substack Citrini ticker scraper settings
+   CITRINI_TELEGRAM_BOT_TOKEN=
+   CITRINI_TELEGRAM_GRP=
 
    # Morpheus Research scraper settings
-   MORPHEUS_API_KEY= # Morpheus api key
-   MORPHEUS_TELEGRAM_BOT_TOKEN= # Telegram token for morpheus
-   MORPHEUS_TELEGRAM_GRP= # Telegram group id for morpheus
+   MORPHEUS_API_KEY=
+   MORPHEUS_TELEGRAM_BOT_TOKEN=
+   MORPHEUS_TELEGRAM_GRP=
 
    # Spruce Point Capital scraper settings
-   SPRUCEPOINT_TELEGRAM_BOT_TOKEN= # Telegram bot token for Spruce Point alerts
-   SPRUCEPOINT_TELEGRAM_GRP= # Telegram group ID for Spruce Point alerts
+   SPRUCEPOINT_TELEGRAM_BOT_TOKEN=
+   SPRUCEPOINT_TELEGRAM_GRP=
 
    # Fuzzy Panda scraper settings
-   FUZZYPANDA_TELEGRAM_BOT_TOKEN= # Telegram bot token for Fuzzy panda
-   FUZZYPANDA_TELEGRAM_GRP= # Telegram group ID for Fuzzy panda
+   FUZZYPANDA_TELEGRAM_BOT_TOKEN=
+   FUZZYPANDA_TELEGRAM_GRP=
 
    # J Capital Research settings
    JCAPITAL_TELEGRAM_BOT_TOKEN=
@@ -227,7 +236,7 @@ pip install -r requirements.txt
    DISCORD_TELEGRAM_GRP=
    DISCORD_EMAIL=
    DISCORD_PASSWORD=
-   
+
    # Seeking Alpha settings
    SEEKING_ALPHA_TELEGRAM_BOT_TOKEN=
    SEEKING_ALPHA_TELEGRAM_GRP=
@@ -235,14 +244,52 @@ pip install -r requirements.txt
    SEEKING_ALPHA_PASSWORD=
 
    # Josh brown settings
+   JOSH_BROWN_GMAIL_USERNAME=
+   JOSH_BROWN_GMAIL_PASSWORD=
    JOSH_BROWN_TELEGRAM_BOT_TOKEN=
    JOSH_BROWN_TELEGRAM_GRP=
+   JOSH_BROWN_SESSION_TOKEN=
 
    # Twitter settings
    TWITTER_USERNAME=
    TWITTER_PASSWORD=
    TWITTER_TELEGRAM_BOT_TOKEN=
    TWITTER_TELEGRAM_GRP=
+   DECK_TWEET_TELEGRAM_GRP=
+
+   # Money and Markets settings
+   MONEYANDMARKETS_TELEGRAM_BOT_TOKEN=
+   MONEYANDMARKETS_TELEGRAM_GRP=
+   MONEYANDMARKETS_USERNAME=
+   MONEYANDMARKETS_PASSWORD=
+
+   # Prosperity Research settings
+   PROSPERITY_TELEGRAM_BOT_TOKEN=
+   PROSPERITY_TRADE_ALERT_TELEGRAM_GRP=
+
+   # Culper Research scraper settings
+   CULPER_TELEGRAM_BOT_TOKEN=
+   CULPER_TELEGRAM_GRP=
+
+   # Scorpion Capital scraper settings
+   SCORPION_TELEGRAM_BOT_TOKEN=
+   SCORPION_TELEGRAM_GRP=
+
+   # Godel settings
+   GODEL_TELEGRAM_BOT_TOKEN=
+   GODEL_TELEGRAM_GRP=
+
+   # Ningi research settings
+   NINGI_TELEGRAM_BOT_TOKEN=
+   NINGI_TELEGRAM_GRP=
+
+   # Snow Cap research settings
+   SNOWCAP_TELEGRAM_BOT_TOKEN=
+   SNOWCAP_TELEGRAM_GRP=
+
+   # Gothem City Research settings
+   GOTHAM_CITY_TELEGRAM_BOT_TOKEN=
+   GOTHAM_CITY_TELEGRAM_GRP=
    ```
 
 **Note:** Fill in the values for each variable as needed.
@@ -253,12 +300,14 @@ pip install -r requirements.txt
 2. **Place the following files in `cred/`:**
 
    - `gmail_credentials.json`  # Credentials for Gmail API (download this from Google Cloud API)
+   - `godel_token.json` # Jwt token for the godel website ( prolly need to replace every month )
    - `fool_session.json` # Contains Session data from where you manually logged in with out a headless mode ( Needs to be updated every Monday )
    - `hedgeye_credentials.json` # Contains login accounts for hedgeye
    - `ibd_creds.json` # Contains cookies and session creds for ibd leaderboard scripts ( Needs to be updated every Year )
    - `proxies.json` # Contains all the proxies for all scripts
    - `substack_cookies.json` # Contains cookies data for substack ( bearcave top domain & and needs to be updated every year )
    - `youtube_api_keys.json` # Contains youtube api keys
+   - `zacks_credentials.json` # Zacks account infos
 
 3. **Place the following files in `data/`:**
 
@@ -349,38 +398,50 @@ python <script_name>.py
 
 ### 1. **Ticker Scrapers**
 - **Altucher:** `altucher_scraper.py`
-- **OxfordClub:** `oxfordclub_scraper.py`, `oxfordclub_post_id.py`, `oxfordclub_search_id.py`
-- **Oxford Tradesmith:** `oxfordclub_tradesmith.py` (*requires [GUI](./gui_setup.md) setup*)
+- **OxfordClub:** `oxfordclub_scraper.py`, `oxfordclub_post_id.py`, `oxfordclub_search_id.py`, `oxford_favorites.py` 
 - **Oxford Communique:** `oxford_communique_scraper.py`
+- **Oxford Microcap Trader:** `oxford_microcap_trader.py`
 - **Oxford Income Letter:** `oxford_income_let_scraper.py`
 - **StockNews:** `stocknews_scraper.py`, `stocknews_html_scraper.py`, `stocknews_author_html_scraper.py`, `stocknews_secret_html_scraper.py`
-- **CNBC:** `cnbc_scraper.py`
+- **CNBC:** `cnbc_scraper.py`, `cnbc_news.py`, `josh_brown_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Motley Fool:** `motley_accessible_rec.py`, `motley_fool_scraper.py`, `motley_image_scraper.py`, `motley_instrument_scraper.py`, `motley_rec_scraper.py`, `motley_video_scraper.py`
 - **Navallier:** `navallier_old_scraper.py`, `navallier_old_csv_scraper.py`,  `navallier_new_scraper.py`
 - **Zacks:** `zack_html_ts_scraper.py`, `zack_widget_scraper.py`, `zack_commentary_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Zacks Multi server method:** `zack_comm_client.py`, `zack_comm_server.py` (*requires [GUI](./gui_setup.md) setup for the clients*)
 - **Hedgeye:** `hedgeye_scraper.py`, `hedgeye_html_scraper.py`, `hedgeye_new_scraper.py`
 - **White Diamond:** `wdr_ticker_scraper.py`, `wdr_article_scraper.py`
 - **Wolfpack:** `wolfpack_scraper.py`, `wolfpack_xml_scraper.py`
+- **Banyan Article Scraper:** `banyan_article_scraper.py`
 - **MinerVini:** `minervini_live_id.py`, `minervini_live_scraper.py`, `minervini_livestream_id.py`, `minervini_post_id.py`, `minervini_post_scraper.py`
 - **IBD Swing Trader:** `ibd_api_scraper.py`, `ibd_history_scraper.py`, `ibd_stock_id_scraper.py`
+- **Fuzzy Panda:** `fuzzy_panda_scraper.py`
+- **Ningi:** `ningi_research.py`
+- **Prosperity:** `prosperity_research.py`
+- **Scorpian:** `scorpian_research.py`
+- **Snowcap:** `snowcap_research.py`
 - **IBD Leaderboard:** `ibd_leaderboard.py`
+- **Spruce point:** `sprucepoint_api.py`, `sprucepoint_press_api.py`, `sprucepoint_research.py`, `sprucepoint_sitemap.py`
+- **Seeking Alpha:** `seeking_alpha_article.py`, `seeking_alpha_picks.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Jcapital:** `jcapital_api.py`, `jcapital_company_reports.py`
 - **Morpheus Ghost:** `morpheus_ghost_scraper.py`
 
 ### 2. **PDF & Image Scrapers**
 - **Blue Orca:** `blueorca_scraper.py`, `blue_orca_report.py`, `blue_orca_sitemap.py`
+- **Oxford S3 Image:** `oxford_s3_image_scraper.py`
 - **Hindenburg:** `hindenburg_scraper.py`
-- **Jehoshaphat Research:** `jehoshaphat_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Jehoshaphat Research:** `jehoshaphat_scraper.py`, `jehoshaphat_author_feed.py`, `jehoshaphat_media_id.py`, `jehoshaphat_post_id.py`, `jehoshaphat_post_sitemap.py`, `jehoshaphat_research_feed.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Friendly Bear:** `friendly_bear_scraper.py`
 - **HunterBrook Research:** `hunterbrook_scraper.py`, `hunterbrook_post_scraper.py`
 - **Iceberg Research:** `iceberg_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
-- **Kerrisdale Capital:** `kerrisdale_scraper.py`
+- **Kerrisdale Capital:** `kerrisdale_scraper.py`, `kerrisdale_investment_feed.py`, `kerrisdale_tag_scraper.py`
 - **Mariner Research:** `mariner_scraper.py`
 - **Viceroy Research:** `viceroy_scraper.py`
-- **Citron Research:** `citron_scraper.py`
-- **Muddy Waters Media:** `mudddy_waters_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Citron Research:** `citron_scraper.py`, `citron_attachment_sitemap.py`
+- **Muddy Waters Media:** `mudddy_waters_scraper.py`, `muddy_waters_pdf_scraper.py`, `muddy_waters_research.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Grizzly Media:** `grizzly_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
 - **Bearcave:** `bearcave_scraper.py`, `bearcave_xml_scraper.py`, `bearcave_html_scraper.py`
 - **Substack:** `substack_citrini_scraper.py`, `substack_post_scraper.py`
+- **Culper:** `culper_research.py`
 - **Beta Ville:** `beta_ville_scrper.py`
 
 ### 3. **Email Scrapers**
@@ -389,8 +450,15 @@ python <script_name>.py
 ### 4. **Image Scrapers**
 - **Banyan Image Scraper:** `banyan_image_scraper.py`
 
-### 5. **Specialized Scrapers**
+### 5. **Chat scrapers**
+- **Discord Channels:** `discord_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
+- **Godel Chat:** `godel.py` (*requires [GUI](./gui_setup.md) setup*)
+
+### 6. **Specialized Scrapers**
 - **YouTube Channel Monitor:** `youtube_channel_monitor.py`
+- **Gpt poll responder:** `telegram_gpt_poll_updater.py`
+- **Mobile Sms (Wolfpack & Oxford):** `sms_scraper.py`
+- **Twitter:** `twitter_scraper.py` (*requires [GUI](./gui_setup.md) setup*)
 
 > For GUI-dependent scripts (e.g., Muddy Waters or Grizzly Media, Jehoshaphat Research), ensure you have the GUI environment set up as described in [Here](./gui_setup.md)
 
@@ -419,8 +487,8 @@ Make sure your `.env` file and `cred/` folder are properly set up before running
 ```plaintext
 ticker_scraper/
 ├── cred/                         # Folder for credential files
-│   ├── gmail_credentials.json
 │   ├── fool_session.json         # will be created upon first login
+│   ├── gmail_credentials.json
 │   ├── gmail_token_a1.json
 │   ├── gmail_token_a2.json
 │   ├── hedgeye_credentials.json
@@ -433,10 +501,14 @@ ticker_scraper/
 ├── log/                          # Folder for log files
 ├── utils/                        # Utility functions
 │   ├── __init__.py
+│   ├── base_logger.py            # logger ghost
+│   ├── bearcave_draft_monitor.py # Monitor bearcave drafts separately
 │   ├── bypass_cloudflare.py      # Bypasser cloudflare captchas
 │   ├── error_notifier.py         # Notify critilca error to telegram
 │   ├── gpt_ticker_extractor.py   # Extract ticker from Image or Text
 │   ├── logger.py                 # Logger utility
+│   ├── oxford_fetch_client.py
+│   ├── oxford_fetch_server.py
 │   ├── telegram_sender.py        # Telegram sending utility
 │   └── ticker_deck_sender.py     # Ticker deck message sending utility
 │   ├── time_utils.py             # Time utility functions
@@ -446,6 +518,7 @@ ticker_scraper/
 ├── .gitignore                    # Git ignore file
 ├── README.md                     # Project documentation
 ├── altucher_scraper.py
+├── banyan_article_scraper.py
 ├── banyan_image_scraper.py
 ├── bearcave_html_scraper.py
 ├── bearcave_scraper.py
@@ -454,11 +527,17 @@ ticker_scraper/
 ├── blue_orca_report.py
 ├── blue_orca_sitemap.py
 ├── blueorca_scraper.py
+├── citron_attachment_sitemap.py
 ├── citron_scraper.py
+├── cnbc_news.py
 ├── cnbc_scraper.py
+├── culper_research.py
+├── discord_scraper.py
 ├── friendly_bear_scraper.py
+├── fuzzy_panda_scraper.py
 ├── gmail_scraper.py
 ├── gmail_scraper_a2.py
+├── godel.py
 ├── grizzly_scraper.py
 ├── gui_setup.md                        # Setting up gui for ubuntu server
 ├── hedgeye_html_scraper.py
@@ -472,8 +551,18 @@ ticker_scraper/
 ├── ibd_leaderboard.py
 ├── ibd_stock_id_scraper.py
 ├── iceberg_scraper.py
+├── jcapital_api.py
+├── jcapital_company_reports.py
+├── jehoshaphat_author_feed.py
+├── jehoshaphat_media_id.py
+├── jehoshaphat_post_id.py
+├── jehoshaphat_post_sitemap.py
+├── jehoshaphat_research_feed.py
 ├── jehoshaphat_scraper.py
+├── josh_brown_scraper.py
+├── kerrisdale_investment_feed.py
 ├── kerrisdale_scraper.py
+├── kerrisdale_tag_scraper.py
 ├── mariner_scraper.py
 ├── minervini_live_id.py
 ├── minervini_live_scraper.py
@@ -488,28 +577,48 @@ ticker_scraper/
 ├── motley_rec_scraper.py
 ├── motley_video_scraper.py
 ├── mudddy_waters_scraper.py
+├── muddy_waters_pdf_scraper.py
+├── muddy_waters_research.py
 ├── navallier_new_scraper.py
 ├── navallier_old_csv_scraper.py
 ├── navallier_old_scraper.py
+├── ningi_research.py
 ├── oxford_communique_scraper.py
+├── oxford_favorites.py
 ├── oxford_income_let_scraper.py
+├── oxford_microcap_trader.py
+├── oxford_s3_image_scraper.py
 ├── oxfordclub_post_id.py
 ├── oxfordclub_scraper.py
 ├── oxfordclub_search_id.py
 ├── oxfordclub_tradesmith.py
+├── prosperity_research.py
 ├── requirements.txt                    # Project dependencies
+├── scorpian_research.py
+├── seeking_alpha_article.py
+├── seeking_alpha_picks.py
+├── sms_scraper.py
+├── snowcap_research.py
+├── sprucepoint_api.py
+├── sprucepoint_press_api.py
+├── sprucepoint_research.py
+├── sprucepoint_sitemap.py
 ├── stocknews_author_html_scraper.py
 ├── stocknews_html_scraper.py
 ├── stocknews_scraper.py
 ├── stocknews_secret_html_scraper.py
 ├── substack_citrini_scraper.py
 ├── substack_post_scraper.py
+├── telegram_gpt_poll_updater.py
+├── twitter_scraper.py
 ├── viceroy_scraper.py
 ├── wdr_article_scraper.py
 ├── wdr_ticker_scraper.py
 ├── wolfpack_scraper.py
 ├── wolfpack_xml_scraper.py
 ├── youtube_channel_monitor.py
+├── zack_comm_client.py
+├── zack_comm_server.py
 ├── zack_commentary_scraper.py
 ├── zack_html_ts_scraper.py
 └── zack_widget_scraper.py
