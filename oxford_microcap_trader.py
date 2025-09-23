@@ -41,6 +41,7 @@ PROCESSED_ALERTS_FILE = "data/oxford_microcap_processed_alerts.json"
 PROCESSED_PORTFOLIO_FILE = "data/oxford_microcap_processed_portfolio.json"
 
 os.makedirs("data", exist_ok=True)
+session = None
 
 
 class ProcessedDataManager:
@@ -114,7 +115,9 @@ def login_sync(session: requests.Session) -> bool:
 async def send_429_alert():
     """Send alert when hitting rate limits"""
     message = f"🚨 <b>Oxford Microcap Trader - Rate Limit Alert</b>\n\n"
-    message += f"<b>Time:</b> {get_current_time().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    message += (
+        f"<b>Current Time:</b> {get_current_time().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
     message += f"<b>Issue:</b> Hit 429 rate limit while scraping\n"
     message += f"<b>Action:</b> Please check the scraper status"
 
@@ -325,7 +328,7 @@ async def send_alert_to_telegram_and_ws(
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     message = f"<b>New Oxford Microcap Trader Alert Found</b>\n\n"
-    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Issue URL:</b> {article_data['url']}\n"
     message += f"<b>Actual Content URL:</b> {content_url}\n"
     message += f"<b>Title:</b> {article_data['title']}\n"
@@ -350,7 +353,7 @@ async def send_portfolio_to_telegram_and_ws(portfolio_entry: Dict[str, str]):
     timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     message = f"<b>New Oxford Microcap Trader Portfolio Entry</b>\n\n"
-    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Current Time:</b> {timestamp}\n"
     message += f"<b>Company:</b> {portfolio_entry['company']}\n"
     message += f"<b>Symbol:</b> {portfolio_entry['symbol']}\n"
     message += f"<b>Entry Date:</b> {portfolio_entry['entry_date']}\n"
@@ -424,11 +427,7 @@ async def run_alerts_scraper(
     data_manager: ProcessedDataManager, stop_event: asyncio.Event
 ):
     """Run the alerts scraper"""
-    session = requests.Session()
-
-    if not login_sync(session):
-        log_message("Failed to login for alerts scraper", "ERROR")
-        return
+    global session
 
     log_message("Alerts scraper started", "INFO")
 
@@ -457,11 +456,7 @@ async def run_portfolio_scraper(
     data_manager: ProcessedDataManager, stop_event: asyncio.Event
 ):
     """Run the portfolio scraper"""
-    session = requests.Session()
-
-    if not login_sync(session):
-        log_message("Failed to login for portfolio scraper", "ERROR")
-        return
+    global session
 
     log_message("Portfolio scraper started", "INFO")
 
@@ -490,7 +485,14 @@ async def run_portfolio_scraper(
 
 async def run_scraper():
     """Main scraper function that handles market timing and coordinates scrapers"""
+    global session
+
+    session = requests.Session()
     data_manager = ProcessedDataManager(PROCESSED_ALERTS_FILE, PROCESSED_PORTFOLIO_FILE)
+
+    if not login_sync(session):
+        log_message("Failed to login for alerts scraper", "ERROR")
+        return
 
     while True:
         await sleep_until_market_open()
