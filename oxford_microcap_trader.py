@@ -239,7 +239,6 @@ async def fetch_and_process_alerts(session: requests.Session) -> List[Dict[str, 
         new_issue_articles = [
             {"url": article["href"], "title": article.get_text().strip()}
             for article in articles
-            if "New Issue:" in article.get_text()
         ]
 
         return new_issue_articles
