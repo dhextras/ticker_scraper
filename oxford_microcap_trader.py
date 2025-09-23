@@ -420,7 +420,9 @@ async def process_portfolio(
     return len(new_entries)
 
 
-async def run_alerts_scraper(data_manager: ProcessedDataManager):
+async def run_alerts_scraper(
+    data_manager: ProcessedDataManager, stop_event: asyncio.Event
+):
     """Run the alerts scraper"""
     session = requests.Session()
 
@@ -428,39 +430,32 @@ async def run_alerts_scraper(data_manager: ProcessedDataManager):
         log_message("Failed to login for alerts scraper", "ERROR")
         return
 
-    while True:
-        await sleep_until_market_open()
-        await initialize_websocket()
+    log_message("Alerts scraper started", "INFO")
 
-        log_message("Market is open. Starting to check for new alerts...", "DEBUG")
-        _, _, market_close_time = get_next_market_times()
+    while not stop_event.is_set():
+        try:
+            new_alerts_count = await process_alerts(session, data_manager)
 
-        while True:
-            current_time = get_current_time()
-            if current_time > market_close_time:
-                log_message(
-                    "Market is closed. Alerts scraper waiting for next market open...",
-                    "DEBUG",
-                )
-                break
+            if new_alerts_count > 0:
+                data_manager.save_processed_alerts()
+                log_message(f"Processed {new_alerts_count} new alert articles.", "INFO")
+            else:
+                log_message("No new alert articles found.", "INFO")
+        except Exception as e:
+            log_message(f"Error in alerts processing: {e}", "ERROR")
 
-            try:
-                new_alerts_count = await process_alerts(session, data_manager)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=CHECK_INTERVAL)
+            break
+        except asyncio.TimeoutError:
+            pass
 
-                if new_alerts_count > 0:
-                    data_manager.save_processed_alerts()
-                    log_message(
-                        f"Processed {new_alerts_count} new alert articles.", "INFO"
-                    )
-                else:
-                    log_message("No new alert articles found.", "INFO")
-            except Exception as e:
-                log_message(f"Error in alerts processing: {e}", "ERROR")
-
-            await asyncio.sleep(CHECK_INTERVAL)
+    log_message("Alerts scraper stopped", "INFO")
 
 
-async def run_portfolio_scraper(data_manager: ProcessedDataManager):
+async def run_portfolio_scraper(
+    data_manager: ProcessedDataManager, stop_event: asyncio.Event
+):
     """Run the portfolio scraper"""
     session = requests.Session()
 
@@ -468,46 +463,59 @@ async def run_portfolio_scraper(data_manager: ProcessedDataManager):
         log_message("Failed to login for portfolio scraper", "ERROR")
         return
 
+    log_message("Portfolio scraper started", "INFO")
+
+    while not stop_event.is_set():
+        try:
+            new_entries_count = await process_portfolio(session, data_manager)
+
+            if new_entries_count > 0:
+                data_manager.save_processed_portfolio()
+                log_message(
+                    f"Processed {new_entries_count} new portfolio entries.", "INFO"
+                )
+            else:
+                log_message("No new portfolio entries found.", "INFO")
+        except Exception as e:
+            log_message(f"Error in portfolio processing: {e}", "ERROR")
+
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=CHECK_INTERVAL)
+            break
+        except asyncio.TimeoutError:
+            pass
+
+    log_message("Portfolio scraper stopped", "INFO")
+
+
+async def run_scraper():
+    """Main scraper function that handles market timing and coordinates scrapers"""
+    data_manager = ProcessedDataManager(PROCESSED_ALERTS_FILE, PROCESSED_PORTFOLIO_FILE)
+
     while True:
         await sleep_until_market_open()
+        await initialize_websocket()
+        log_message("Market is open. Starting scrapers...", "DEBUG")
 
-        log_message(
-            "Market is open. Starting to check for new portfolio entries...", "DEBUG"
-        )
         _, _, market_close_time = get_next_market_times()
+        stop_event = asyncio.Event()
+
+        alerts_task = asyncio.create_task(run_alerts_scraper(data_manager, stop_event))
+        portfolio_task = asyncio.create_task(
+            run_portfolio_scraper(data_manager, stop_event)
+        )
 
         while True:
             current_time = get_current_time()
             if current_time > market_close_time:
-                log_message(
-                    "Market is closed. Portfolio scraper waiting for next market open...",
-                    "DEBUG",
-                )
+                log_message("Market is closed. Stopping scrapers...", "DEBUG")
+                stop_event.set()
                 break
 
-            try:
-                new_entries_count = await process_portfolio(session, data_manager)
+            await asyncio.sleep(10)
 
-                if new_entries_count > 0:
-                    data_manager.save_processed_portfolio()
-                    log_message(
-                        f"Processed {new_entries_count} new portfolio entries.", "INFO"
-                    )
-                else:
-                    log_message("No new portfolio entries found.", "INFO")
-            except Exception as e:
-                log_message(f"Error in portfolio processing: {e}", "ERROR")
-
-            await asyncio.sleep(CHECK_INTERVAL)
-
-
-async def run_scraper():
-    """Main scraper function that runs both alerts and portfolio scrapers"""
-    data_manager = ProcessedDataManager(PROCESSED_ALERTS_FILE, PROCESSED_PORTFOLIO_FILE)
-
-    await asyncio.gather(
-        run_alerts_scraper(data_manager), run_portfolio_scraper(data_manager)
-    )
+        await asyncio.gather(alerts_task, portfolio_task, return_exceptions=True)
+        log_message("Both scrapers stopped. Waiting for next market open...", "INFO")
 
 
 def main():
