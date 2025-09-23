@@ -370,7 +370,8 @@ async def process_alerts(
             ticker = extract_ticker_from_text(content_soup, article["url"])
             if ticker:
                 await send_alert_to_telegram_and_ws(article, ticker)
-                data_manager.add_alert(article["url"])
+
+        data_manager.add_alert(article["url"])
 
     return len(new_articles)
 
