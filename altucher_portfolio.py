@@ -25,14 +25,14 @@ load_dotenv()
 PORTFOLIO_API_URL = "https://my.paradigmpressgroup.com/api/portfolio"
 
 # NOTE: These are for mm2 and its one trading group, check for the group name in the json to find the id
-# PORTFOLIO_ID = "14531"
-# TARGET_TRADE_GROUP_ID = "rectTwpnhShFaZLu2"
+PORTFOLIO_ID = "14531"
+TARGET_TRADE_GROUP_ID = "rectTwpnhShFaZLu2"
 
 # NOTE : For mvk
-PORTFOLIO_ID = "14557"
-TARGET_TRADE_GROUP_ID = "recoVwjygN2ckIIeV"
+# PORTFOLIO_ID = "14557"
+# TARGET_TRADE_GROUP_ID = "recoVwjygN2ckIIeV"
 
-service_name = "mvk"
+service_name = "mm2"
 
 CHECK_INTERVAL = 1.0
 PROCESSED_POSITIONS_FILE = f"data/{service_name}_processed_positions.json"
