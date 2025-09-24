@@ -25,11 +25,17 @@ load_dotenv()
 PORTFOLIO_API_URL = "https://my.paradigmpressgroup.com/api/portfolio"
 
 # NOTE: These are for mm2 and its one trading group, check for the group name in the json to find the id
-PORTFOLIO_ID = "14531"
-TARGET_TRADE_GROUP_ID = "rectTwpnhShFaZLu2"
-TRADE_GROUP_NAME = "Microcap Millionaire Portfolio"
+# PORTFOLIO_ID = "14531"
+# TARGET_TRADE_GROUP_ID = "rectTwpnhShFaZLu2"
+
+# NOTE : For mvk
+PORTFOLIO_ID = "14557"
+TARGET_TRADE_GROUP_ID = "recoVwjygN2ckIIeV"
+
+service_name = "mvk"
+
 CHECK_INTERVAL = 1.0
-PROCESSED_POSITIONS_FILE = "data/mm2_processed_positions.json"
+PROCESSED_POSITIONS_FILE = f"data/{service_name}_processed_positions.json"
 TELEGRAM_BOT_TOKEN = os.getenv("ALTUCHER_TELEGRAM_BOT_TOKEN")
 TELEGRAM_GRP = os.getenv("ALTUCHER_TELEGRAM_GRP")
 
@@ -78,7 +84,7 @@ async def fetch_portfolio_data(session):
             "DNT": "1",
             "Host": "my.paradigmpressgroup.com",
             "Pragma": "no-cache",
-            "Referer": f"https://my.paradigmpressgroup.com/subscription/mm2/portfolio",
+            "Referer": f"https://my.paradigmpressgroup.com/subscription/{service_name}/portfolio",
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
@@ -93,21 +99,21 @@ async def fetch_portfolio_data(session):
             if response.status == 200:
                 data = await response.json()
                 log_message(
-                    f"Fetched MM2 portfolio data, took {(time.time() - start_time):.2f}s",
+                    f"Fetched portfolio data, took {(time.time() - start_time):.2f}s",
                     "INFO",
                 )
                 return data
             else:
                 log_message(
-                    f"Failed to fetch MM2 portfolio: HTTP {response.status}",
+                    f"Failed to fetch portfolio: HTTP {response.status}",
                     "ERROR",
                 )
                 return []
     except asyncio.TimeoutError:
-        log_message("Timeout fetching MM2 portfolio data", "WARNING")
+        log_message("Timeout fetching portfolio data", "WARNING")
         return []
     except Exception as e:
-        log_message(f"Error fetching MM2 portfolio: {e}", "ERROR")
+        log_message(f"Error fetching portfolio: {e}", "ERROR")
         return []
 
 
@@ -154,7 +160,7 @@ async def send_new_positions_to_telegram(new_positions):
         open_datetime = format_datetime(position["open_datetime"])
         open_date_link = position["open_date_link"]
 
-        message = f"<b>New MM2 Portfolio Position - {TRADE_GROUP_NAME}</b>\n\n"
+        message = f"<b>New {service_name.upper()} Portfolio Position</b>\n\n"
         message += f"<b>Symbol:</b> {symbol}\n"
         message += f"<b>Name:</b> {name}\n"
         message += f"<b>Open Time:</b> {open_datetime}\n"
@@ -164,22 +170,22 @@ async def send_new_positions_to_telegram(new_positions):
 
         await send_ws_message(
             {
-                "name": f"MM2 Portfolio - {TRADE_GROUP_NAME}",
-                "type": "Position",
+                "name": f"Altucher Portfolio - {service_name.upper()}",
+                "type": "Buy",
                 "ticker": symbol,
-                "sender": "mm2_portfolio",
+                "sender": "altucher",
             }
         )
 
         await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
         log_message(
-            f"New MM2 position sent: {symbol} - {name}",
+            f"New position sent: {symbol} - {name}",
             "INFO",
         )
 
 
-async def run_mm2_monitor():
+async def run_monitor():
     processed_positions = load_processed_positions()
 
     async with aiohttp.ClientSession() as session:
@@ -187,7 +193,7 @@ async def run_mm2_monitor():
             await sleep_until_market_open()
             await initialize_websocket()
 
-            log_message("Market is open. Starting MM2 portfolio monitoring...", "DEBUG")
+            log_message("Market is open. Starting portfolio monitoring...", "DEBUG")
             _, _, market_close_time = get_next_market_times()
 
             while True:
@@ -214,14 +220,12 @@ async def run_mm2_monitor():
                             new_positions.append(position)
 
                     if new_positions:
-                        log_message(
-                            f"Found {len(new_positions)} new MM2 positions", "INFO"
-                        )
+                        log_message(f"Found {len(new_positions)} new positions", "INFO")
                         await send_new_positions_to_telegram(new_positions)
                         processed_positions.update(current_position_ids)
                         save_processed_positions(processed_positions)
                     else:
-                        log_message("No new MM2 positions found", "INFO")
+                        log_message("No new positions found", "INFO")
 
                 await asyncio.sleep(CHECK_INTERVAL)
 
@@ -232,11 +236,11 @@ def main():
         return
 
     try:
-        asyncio.run(run_mm2_monitor())
+        asyncio.run(run_monitor())
     except KeyboardInterrupt:
-        log_message("MM2 monitor shutting down gracefully...", "INFO")
+        log_message("Monitor shutting down gracefully...", "INFO")
     except Exception as e:
-        log_message(f"Critical error in MM2 monitor: {e}", "CRITICAL")
+        log_message(f"Critical error in monitor: {e}", "CRITICAL")
 
 
 if __name__ == "__main__":
