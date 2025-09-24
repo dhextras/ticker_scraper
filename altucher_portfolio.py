@@ -73,7 +73,8 @@ def get_cache_buster():
 
 async def fetch_portfolio_data(session):
     try:
-        params = {"id": PORTFOLIO_ID, "_": get_cache_buster()}
+        key, value = get_cache_buster()
+        params = {"id": PORTFOLIO_ID, key: value}
 
         headers = {
             "Accept": "application/json, text/plain, */*",
