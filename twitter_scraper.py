@@ -6,13 +6,14 @@ import json
 import os
 import random
 import socket
+import struct
 import sys
 import threading
 import time
 
 import websockets
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
 from dotenv import load_dotenv
 from DrissionPage import ChromiumOptions, ChromiumPage
 from DrissionPage.common import Keys
@@ -32,7 +33,6 @@ WEBSOCKET_PORT = 8765
 TCP_HOST = os.getenv("TCP_HOST")
 TCP_PORT = int(os.getenv("TCP_PORT", 3005))
 TCP_SECRET = os.getenv("TCP_SECRET")
-TCP_USERNAME = os.getenv("TCP_USERNAME")
 TWITTER_HOME_URL = "https://x.com/home"
 TWITTER_DATA_DIR = "data/twitter_data"
 LAST_POST_FILE = "data/twitter_last_post.json"
@@ -59,148 +59,128 @@ deck_senders = ["Citron Research", "6k_Investor", "TheUndefinedMystic", "GB"]
 
 
 class EncryptedTcpClient:
-    def __init__(self, server_ip, server_port, shared_secret, username):
-        self.server_ip = server_ip
-        self.server_port = server_port
+    def __init__(self, tcp_host, tcp_port, shared_secret, client_name):
+        self.tcp_host = tcp_host
+        self.tcp_port = tcp_port
+        self.client_name = client_name
         self.shared_secret = shared_secret
-        self.username = username
         self.sock = None
-        self.key = None
         self.connected = False
-        self.lock = threading.Lock()
-        self.cond = threading.Condition(self.lock)
+        self.watch_thread = None
         self.stop_event = threading.Event()
 
+    # ---------- Helpers ----------
     def _get_utc_date(self):
         return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
-    def _derive_key(self):
-        combined = self.shared_secret + self._get_utc_date()
-        return hashlib.sha256(combined.encode("utf-8")).digest()
+    def _sha256_bytes(self, data: str) -> bytes:
+        return hashlib.sha256(data.encode()).digest()
 
-    def _encrypt(self, plaintext: str) -> bytes:
-        iv = b"\x00" * 16
-        cipher = AES.new(self.key, AES.MODE_CBC, iv)
-        return cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
+    def _pad_pkcs7(self, data: bytes) -> bytes:
+        pad_len = AES.block_size - (len(data) % AES.block_size)
+        return data + bytes([pad_len]) * pad_len
 
-    def _decrypt(self, ciphertext: bytes) -> str:
-        iv = b"\x00" * 16
-        cipher = AES.new(self.key, AES.MODE_CBC, iv)
-        decrypted_padded = cipher.decrypt(ciphertext)
-        return unpad(decrypted_padded, AES.block_size).decode("utf-8")
+    def _send_length_prefixed(self, data: bytes):
+        if not self.sock:
+            raise ConnectionError("Not connected to server")
+        self.sock.sendall(struct.pack("!I", len(data)))
+        if data:
+            self.sock.sendall(data)
 
+    # ---------- Core ----------
     def connect(self):
-        threading.Thread(target=self._connection_loop, daemon=True).start()
-
-    def _connection_loop(self):
         while not self.stop_event.is_set():
-            with self.lock:
-                while self.connected and not self.stop_event.is_set():
-                    self.cond.wait()
-
-            if self.stop_event.is_set():
-                break
-
-            log_message("Attempting to connect...", "INFO")
             try:
-                self.sock = socket.create_connection(
-                    (self.server_ip, self.server_port), timeout=60
-                )
-                self.sock.settimeout(140)
-                self.key = self._derive_key()
-
-                # Authenticate
-                iv = b"\x00" * 16
-                encrypted_username = self._encrypt(self.username)
-                self.sock.sendall(iv + encrypted_username)
                 log_message(
-                    f"[TCP] Sent encrypted auth for username '{self.username}'", "INFO"
+                    f"Attempting to connect to {self.tcp_host}:{self.tcp_port}...",
+                    "INFO",
+                )
+                self.sock = socket.create_connection((self.tcp_host, self.tcp_port))
+                log_message(
+                    f"[TCP] Connected to {self.tcp_host}:{self.tcp_port}", "INFO"
                 )
 
-                with self.lock:
+                if self._authenticate():
+                    log_message("[TCP] Authentication successful", "INFO")
                     self.connected = True
-
-                log_message(
-                    f"[TCP] Connected to {self.server_ip}:{self.server_port}", "INFO"
-                )
-
-                threading.Thread(target=self._receive_loop, daemon=True).start()
-                threading.Thread(target=self._heartbeat_loop, daemon=True).start()
-
-                time.sleep(0.5)
-                self.send_message("Hello, server!")
+                    if not self.watch_thread:
+                        self.watch_thread = threading.Thread(
+                            target=self._watch_connection, daemon=True
+                        )
+                        self.watch_thread.start()
+                    return
+                else:
+                    log_message(
+                        "Authentication failed, retrying in 1 sec...", "WARNING"
+                    )
+                    self.sock.close()
+                    time.sleep(1)
 
             except Exception as e:
                 log_message(f"[TCP] Connection error: {e}", "ERROR")
-                if self.sock:
-                    try:
-                        self.sock.close()
-                    except Exception:
-                        pass
-                    self.sock = None
-                time.sleep(2)
+                time.sleep(1)
+
+    def _authenticate(self) -> bool:
+        key = self._sha256_bytes(SHARED_SECRET + self._get_utc_date())
+        iv = get_random_bytes(16)
+
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        plaintext = self._pad_pkcs7(self.client_name.encode())
+        ciphertext = cipher.encrypt(plaintext)
+
+        payload = iv + ciphertext
+        self._send_length_prefixed(payload)
+
+        reply = self.sock.recv(64)
+        server_reply = reply.decode(errors="ignore").strip()
+        log_message(f"Server reply: {server_reply}", "INFO")
+        return b"AUTH_OK" in reply
+
+    def send_message(self, message: str):
+        try:
+            if not message.endswith("<END>"):
+                message += "<END>"
+            data = message.encode()
+            self._send_length_prefixed(data)
+            log_message(f"Sent: {message}", "INFO")
+        except (BrokenPipeError, ConnectionError, OSError) as e:
+            log_message(f"Lost connection while sending: {e}", "ERROR")
+            self.connected = False
+            self.connect()
+            self.send_message(message)  # resend after reconnect
+
+    def _watch_connection(self):
+        """Watch the socket, reconnect if closed by server"""
+        while not self.stop_event.is_set():
+            if not self.sock:
+                time.sleep(1)
+                continue
+            try:
+                # check with 1-byte peek (non-blocking)
+                data = self.sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
+                if data == b"":  # empty → closed
+                    log_message("Server closed connection. Reconnecting...", "WARNING")
+                    self.connected = False
+                    self.connect()
+            except BlockingIOError:
+                # no data, fine
+                pass
+            except Exception as e:
+                log_message(f"Error in connection watcher: {e}", "ERROR")
+                self.connected = False
+                self.connect()
+            time.sleep(1)
 
     def disconnect(self):
         self.stop_event.set()
-        with self.lock:
-            self.connected = False
-            self.cond.notify()
-            if self.sock:
-                try:
-                    self.sock.close()
-                except Exception:
-                    pass
-                self.sock = None
-        log_message("[TCP] Server disconnected", "WARNING")
-
-    def send_message(self, message: str):
-        with self.lock:
-            if not self.connected:
-                log_message("Cannot send message: not connected", "WARNING")
-                return
-
-        try:
-            framed = (message + "<END>").encode("utf-8")
-            self.sock.sendall(framed)
-            if message != "HEARTBEAT":
-                log_message(f"Sent: {message}", "INFO")
-        except Exception as e:
-            log_message(f"Send error: {e}", "ERROR")
-            with self.lock:
-                self.connected = False
-                self.cond.notify()
-
-    def _receive_loop(self):
-        buffer = b""
-        while not self.stop_event.is_set():
+        self.connected = False
+        if self.sock:
             try:
-                data = self.sock.recv(4096)
-                if not data:
-                    log_message("Server closed connection", "WARNING")
-                    break
-
-                buffer += data
-                while b"<END>" in buffer:
-                    msg, buffer = buffer.split(b"<END>", 1)
-                    try:
-                        decrypted = self._decrypt(msg)
-                        log_message(f"Received (decrypted): {decrypted}", "INFO")
-                    except Exception:
-                        text = msg.decode("utf-8", errors="ignore")
-                        log_message(f"Received (plaintext): {text}", "INFO")
-
-            except Exception as e:
-                log_message(f"Receive error: {e}", "ERROR")
-                break
-
-        with self.lock:
-            self.connected = False
-            self.cond.notify()
-
-    def _heartbeat_loop(self):
-        while not self.stop_event.is_set():
-            time.sleep(30)
-            self.send_message("HEARTBEAT")
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
+        log_message("[TCP] Client disconnected", "INFO")
 
 
 def get_date_file_path(date_obj):
@@ -895,10 +875,10 @@ async def main_async():
 
     # Initialize and start TCP client in a separate thread
     tcp_client = EncryptedTcpClient(
-        server_ip=TCP_HOST,
-        server_port=TCP_PORT,
+        tcp_host=TCP_HOST,
+        tcp_port=TCP_PORT,
         shared_secret=TCP_SECRET,
-        username=TCP_USERNAME,
+        client_name="twitter_client",
     )
     tcp_client.connect()
     websocket_server = await start_websocket_server()
