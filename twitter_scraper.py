@@ -121,7 +121,7 @@ class EncryptedTcpClient:
                 time.sleep(1)
 
     def _authenticate(self) -> bool:
-        key = self._sha256_bytes(SHARED_SECRET + self._get_utc_date())
+        key = self._sha256_bytes(self.shared_secret + self._get_utc_date())
         iv = get_random_bytes(16)
 
         cipher = AES.new(key, AES.MODE_CBC, iv)
