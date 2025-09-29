@@ -140,6 +140,40 @@ def extracte_blockquote_text(article_body):
     return None
 
 
+def extracte_from_company_link(article_body):
+    if not article_body:
+        return None
+
+    for content_block in article_body:
+        if content_block.get("tagName") == "div":
+            for child in content_block.get("children", []):
+                if child.get("tagName") == "blockquote":
+                    elements = child.get("children", [])
+
+                    def get_quotes_href(element):
+                        if isinstance(element, str):
+                            return None
+                        elif isinstance(element, dict):
+                            tag = element.get("tagName")
+                            if tag == "a":
+                                return element.get("attributes", {}).get("href")
+                            else:
+                                for child in element.get("children", []):
+                                    href = get_quotes_href(child)
+                                    if href:
+                                        return href
+
+                    for element in elements:
+                        href = get_quotes_href(element)
+
+                        if href:
+                            try:
+                                ticker = href.split("/")[-1]
+                                return ticker
+                            except:
+                                pass
+
+
 async def refresh_access_token_via_browser():
     """Refresh access token by listening to token endpoint"""
     global browser_page, ACCESS_TOKEN
@@ -310,7 +344,7 @@ async def get_article_data_with_retry(article_id, uid):
                                 await send_critical_alert_custom(
                                     "Failed to get article data after token refresh attempts"
                                 )
-                                return None
+                                return [], None
 
                         is_authenticated = (
                             response_json.get("data", {})
@@ -328,7 +362,7 @@ async def get_article_data_with_retry(article_id, uid):
                                 await refresh_access_token_via_browser()
                                 continue
                             else:
-                                return None
+                                return [], None
 
                         article_body = (
                             response_json.get("data", {})
@@ -337,7 +371,7 @@ async def get_article_data_with_retry(article_id, uid):
                             .get("content", [])
                         )
 
-                        return extracte_blockquote_text(article_body)
+                        return article_body, extracte_blockquote_text(article_body)
 
                     else:
                         log_message(
@@ -355,7 +389,7 @@ async def get_article_data_with_retry(article_id, uid):
                 continue
 
     await send_critical_alert_custom("All article data fetch attempts failed")
-    return None
+    return [], None
 
 
 """
@@ -767,17 +801,17 @@ async def process_article(article, fetch_time):
         # NOTE: For Later use if needed lol
         # article_data = await get_article_data_via_browser(article_url)
 
-        article_data = await get_article_data_with_retry(
+        block_text, article_body = await get_article_data_with_retry(
             article.get("id"), GMAIL_USERNAME
         )
         fetch_data_time = time.time() - start_time
 
-        if article_data:
+        if block_text:
             published_date = datetime.strptime(
                 article["datePublished"], "%Y-%m-%dT%H:%M:%S%z"
             )
             article_timezone = published_date.tzinfo
-            ticker, action = get_ticker(article_data)
+            ticker, action = get_ticker(block_text)
 
             if ticker:
                 await send_ws_message(
@@ -788,6 +822,23 @@ async def process_article(article, fetch_time):
                         "sender": "cnbc",
                     },
                 )
+            else:
+                ticker = extracte_from_company_link(article_body)
+                action = "Buy"  # FIXME: We're making it buy for now since we dont know and this is just the first case
+
+                if ticker:
+                    await send_ws_message(
+                        {
+                            "name": "CNBC",
+                            "type": action,
+                            "ticker": ticker,
+                            "sender": "cnbc",
+                        },
+                    )
+                else:
+                    # NOTE: In case that also failed, save the fucking content to a file
+                    with open("data/remove_cnbc_body.json", "w") as f:
+                        json.dump(article_body, f)
 
             current_time = get_current_time().astimezone(article_timezone)
             log_message(
@@ -803,7 +854,7 @@ async def process_article(article, fetch_time):
                 f"<b>ID:</b> {article['id']}\n"
                 f"<b>Title:</b> {article['title']}\n"
                 f"<b>URL:</b> {article['url']}\n"
-                f"<b>Content:</b> {article_data}\n"
+                f"<b>Content:</b> {block_text}\n"
             )
 
             if ticker:
