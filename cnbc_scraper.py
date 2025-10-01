@@ -801,7 +801,7 @@ async def process_article(article, fetch_time):
         # NOTE: For Later use if needed lol
         # article_data = await get_article_data_via_browser(article_url)
 
-        block_text, article_body = await get_article_data_with_retry(
+        article_body, block_text = await get_article_data_with_retry(
             article.get("id"), GMAIL_USERNAME
         )
         fetch_data_time = time.time() - start_time
