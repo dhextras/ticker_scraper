@@ -310,10 +310,9 @@ async def send_found_post(data, source):
 
 
 async def send_new_post_notification(post):
-    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
     message = f"<b>New Post Found</b>\n\n"
     message += f"<b>Username:</b> {post['username']}\n"
-    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Time:</b> {post['timestamp']}\n"
     message += f"<b>Content:</b> {post['content'][:500]}{'\n\ncontent is trimmed.....' if len(post['content']) > 500 else ''}"
 
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
