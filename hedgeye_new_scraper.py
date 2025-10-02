@@ -974,7 +974,7 @@ async def process_account(
             )
 
             log_message(
-                f"fetch_alert_details took {time.time() - start_time:.2f} seconds. for {email}",
+                f"fetch_homepage_alerts took {time.time() - start_time:.2f} seconds. for {email}",
                 "INFO",
             )
 
