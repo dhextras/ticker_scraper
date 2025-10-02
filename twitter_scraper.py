@@ -309,6 +309,16 @@ async def send_found_post(data, source):
     await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
 
 
+async def send_new_post_notification(post):
+    timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+    message = f"<b>New Post Found</b>\n\n"
+    message += f"<b>Username:</b> {post['username']}\n"
+    message += f"<b>Time:</b> {timestamp}\n"
+    message += f"<b>Content:</b> {post['content'][:500]}{'\n\ncontent is trimmed.....' if len(post['content']) > 500 else ''}"
+
+    await send_telegram_message(message, TELEGRAM_BOT_TOKEN, TELEGRAM_GRP)
+
+
 async def websocket_ping_loop():
     """Send ping frames to all connected WebSocket clients every 10 seconds"""
     while True:
@@ -499,6 +509,82 @@ def not_none_element(element):
     return False if "NoneElement" in str(element) else True
 
 
+def is_on_following_page():
+    try:
+        color = page.run_js(
+            "return document.querySelector('div[data-testid=\"ScrollSnap-List\"] > div:nth-child(2) > a > div > div > div').style.backgroundColor"
+        )
+        return color == "rgb(29, 155, 240)"
+    except Exception:
+        return False
+
+
+def is_on_for_you_page():
+    try:
+        color = page.run_js(
+            "return document.querySelector('div[data-testid=\"ScrollSnap-List\"] > div:nth-child(1) > a > div > div > div').style.backgroundColor"
+        )
+        return color == "rgb(29, 155, 240)"
+    except Exception:
+        return False
+
+
+async def navigate_to_for_you():
+    try:
+        start_time = time.time()
+        timeout = 5
+
+        while time.time() - start_time < timeout:
+            if is_on_for_you_page():
+                log_message("Already on For You page", "INFO")
+                return True
+
+            try:
+                page.ele(
+                    'css:div[data-testid="ScrollSnap-List"] > div:nth-child(1) > a'
+                ).click()
+            except Exception:
+                pass
+
+            await asyncio.sleep(0.1)
+
+        log_message("Timeout waiting for For You page", "WARNING")
+        return False
+    except Exception as e:
+        log_message(f"Error navigating to For You page: {e}", "ERROR")
+        return False
+
+
+async def navigate_to_following(refresh=True):
+    try:
+        if refresh:
+            page.get(TWITTER_HOME_URL)
+            await asyncio.sleep(3)
+
+        start_time = time.time()
+        timeout = 5
+
+        while time.time() - start_time < timeout:
+            if is_on_following_page():
+                log_message("Successfully navigated to Following page", "INFO")
+                return True
+
+            try:
+                page.ele(
+                    'css:div[data-testid="ScrollSnap-List"] > div:nth-child(2) > a'
+                ).click()
+            except Exception:
+                pass
+
+            await asyncio.sleep(0.1)
+
+        log_message("Timeout waiting for Following page", "WARNING")
+        return False
+    except Exception as e:
+        log_message(f"Error navigating to following: {e}", "ERROR")
+        return False
+
+
 async def login_twitter():
     global page
 
@@ -645,21 +731,6 @@ def extract_posts():
         return []
 
 
-async def navigate_to_following():
-    try:
-        page.get(TWITTER_HOME_URL)
-        await asyncio.sleep(3)
-
-        # FIXME: fix this shit too it should propery log things
-        page.ele("Following").click()
-        log_message("Navigated to following page", "INFO")
-        return True
-
-    except Exception as e:
-        log_message(f"Error navigating to following: {e}", "ERROR")
-        return False
-
-
 async def scroll_to_find_last_post(max_scrolls=100):
     last_post_data = load_last_post()
     if not last_post_data:
@@ -703,19 +774,23 @@ async def refresh_and_get_posts():
         page.scroll.to_top()
         scroll_time = time.time()
 
-        page.refresh()
-        refresh_time = time.time()
+        await navigate_to_for_you()
+        for_you_time = time.time()
+
+        await navigate_to_following(refresh=False)
+        following_time = time.time()
 
         posts = extract_posts()
         extraction_time = time.time()
 
         total_time = (extraction_time - refresh_start) * 1000
         scroll_duration = (scroll_time - refresh_start) * 1000
-        refresh_duration = (refresh_time - scroll_time) * 1000
-        extraction_duration = (extraction_time - refresh_time) * 1000
+        for_you_duration = (for_you_time - scroll_time) * 1000
+        following_duration = (following_time - for_you_time) * 1000
+        extraction_duration = (extraction_time - following_time) * 1000
 
         log_message(
-            f"Post refresh completed: {len(posts)} posts. Scroll: {scroll_duration:.2f}ms, Refresh: {refresh_duration:.2f}ms, Extraction: {extraction_duration:.2f}ms, Total: {total_time:.2f}ms",
+            f"Post refresh completed: {len(posts)} posts. Scroll: {scroll_duration:.2f}ms, For You: {for_you_duration:.2f}ms, Following: {following_duration:.2f}ms, Extraction: {extraction_duration:.2f}ms, Total: {total_time:.2f}ms",
             "INFO",
         )
         return posts
@@ -753,6 +828,8 @@ async def store_new_posts(new_posts):
             )
             continue
 
+    new_posts_to_notify = []
+
     for date_obj, date_posts in posts_by_date.items():
         existing_posts = load_posts_for_date(date_obj)
         existing_post_ids = {post["post_id"] for post in existing_posts}
@@ -761,6 +838,7 @@ async def store_new_posts(new_posts):
         for post in date_posts:
             if post["post_id"] not in existing_post_ids:
                 new_posts_for_date.append(post)
+                new_posts_to_notify.append(post)
                 stored_count += 1
 
         if new_posts_for_date:
@@ -774,6 +852,9 @@ async def store_new_posts(new_posts):
         log_message(
             f"Stored {stored_count} new posts across {len(posts_by_date)} dates", "INFO"
         )
+
+        for post in new_posts_to_notify:
+            await send_new_post_notification(post)
 
     return stored_count
 
@@ -861,7 +942,7 @@ async def run_scraper():
                         log_message("Re-login failed, continuing with errors", "ERROR")
 
                 refresh_count += 1
-                refresh_delay = random.uniform(30, 120)
+                refresh_delay = random.uniform(3, 7)
                 await asyncio.sleep(refresh_delay)
 
             except Exception as e:
