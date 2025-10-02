@@ -41,6 +41,7 @@ RATE_LIMIT_ACCOUNTS_FILE = os.path.join(
 )
 LAST_ALERT_FILE = os.path.join(DATA_DIR, "hedgeye_new_last_alert.json")
 LAST_ARCHIVES_FILE = os.path.join(DATA_DIR, "hedgeye_new_archives.json")
+LAST_HOME_ALERTS_FILE = os.path.join(DATA_DIR, "hedgeye_home_alerts.json")
 
 # NOTE: Use this to calculate how many accounts you'd need
 # Or the interval between requests To avoid beeing rate limited
@@ -405,6 +406,13 @@ def load_archives():
     return []
 
 
+def load_home_alerts():
+    if os.path.exists(LAST_HOME_ALERTS_FILE):
+        with open(LAST_HOME_ALERTS_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+
 def load_cookies(email: str) -> Optional[Dict[str, str]]:
     filename = f"data/hedgeye_cookies/{email.replace('@', '_').replace('.', '_')}.json"
     if os.path.exists(filename):
@@ -518,6 +526,34 @@ def archive_alert_parser(
     return result
 
 
+def homepage_alert_parser(
+    articles,
+    fetch_time,
+    current_time,
+):
+    result = []
+
+    for article in articles:
+        try:
+            title_elem = article.find("a", class_="trending-section__link")
+
+            title_href = title_elem.get("href", "").strip()
+            title_text = title_elem.get_text(strip=True)
+
+            result.append(
+                {
+                    "title": title_text,
+                    "url": f"https://app.hedgeye.com{title_href}",
+                    "current_time": current_time,
+                    "fetch_time": fetch_time,
+                }
+            )
+        except:
+            pass
+
+    return result
+
+
 async def fetch_research_archives(
     session: aiohttp.ClientSession,
     cookies: Dict[str, str],
@@ -558,6 +594,58 @@ async def fetch_research_archives(
             fetch_time,
             current_time_cst,
             # proxy
+        )
+        return results
+
+    except asyncio.TimeoutError:
+        log_message(
+            f"Fetch alert took more then 3 seconds, Gotta fix this ASAP",
+            "WARNING",
+        )
+        return []
+    except Exception as e:
+        if "Rate limited" in str(e):
+            raise
+        log_message(f"Error fetching archives: {str(e)}", "ERROR")
+        return []
+
+
+async def fetch_homepage_alerts(
+    session: aiohttp.ClientSession,
+    cookies: Dict[str, str],
+):
+    try:
+        cache_buster = get_random_cache_buster()
+        url = f"https://app.hedgeye.com?{cache_buster}"
+
+        start_time = time.time()
+        response = await asyncio.wait_for(
+            session.get(
+                url,
+                cookies=cookies,
+                timeout=aiohttp.ClientTimeout(total=3),
+            ),
+            timeout=3,
+        )
+
+        async with response:
+            if response.status == 429:
+                raise Exception("Rate limited")
+
+            html = await asyncio.wait_for(response.text(), timeout=3)
+
+        soup = BeautifulSoup(html, "html.parser")
+        articles = soup.find_all("div", class_="trending-section")
+
+        current_time_cst = get_current_time().astimezone(
+            pytz.timezone("America/Chicago")
+        )
+        fetch_time = time.time() - start_time
+
+        results = homepage_alert_parser(
+            articles,
+            fetch_time,
+            current_time_cst,
         )
         return results
 
@@ -766,6 +854,66 @@ async def process_fetched_archives(results, last_alert_lock: asyncio.Lock, start
             )
 
 
+async def process_homepage_alerts(results, last_alert_lock: asyncio.Lock, start_time):
+    for result in results:
+        async with last_alert_lock:
+            home_alerts = load_home_alerts()
+            is_new_alert = not home_alerts or not result["title"] in home_alerts
+
+            if is_new_alert:
+                signal_type = (
+                    "Buy"
+                    if "buy" in result["title"].lower()
+                    else "Sell" if "sell" in result["title"].lower() else "None"
+                )
+                ticker_match = re.search(r"\b([A-Z]{1,5})\b(?=\s*\$)", result["title"])
+                ticker = ticker_match.group(0) if ticker_match else "-"
+
+                log_message(
+                    f"Trying to send new alert, Title - {result['title']}",
+                    "INFO",
+                )
+                await send_ws_message(
+                    {
+                        "name": "Hedgeye",
+                        "type": signal_type,
+                        "ticker": ticker,
+                        "sender": "hedgeye",
+                        "target": "CSS",
+                    },
+                )
+
+                message = (
+                    f"Title: {result['title']}\n"
+                    f"Url: {result['url']}\n"
+                    f"Current Time: {result['current_time'].strftime('%Y-%m-%d %H:%M:%S %Z%z')}\n"
+                    f"Fetch Time: {result['fetch_time']:.2f}s"
+                )
+
+                await send_telegram_message(
+                    message,
+                    HEDGEYE_SCRAPER_TELEGRAM_BOT_TOKEN,
+                    HEDGEYE_SCRAPER_TELEGRAM_GRP,
+                )
+
+                home_alerts.append(result["title"])
+                with open(LAST_HOME_ALERTS_FILE, "w") as f:
+                    json.dump(home_alerts, f, indent=2)
+
+                total_time = time.time() - start_time
+                log_message(
+                    f"New alert processed in {total_time:.2f}s - {result['title']}",
+                    "INFO",
+                )
+
+        if result["fetch_time"] > 2:
+            # public_ip = await get_public_ip(result["proxy"])
+            log_message(
+                f"Slow fetch detected, took {result['fetch_time']} seconds",
+                "WARNING",
+            )
+
+
 async def process_account(
     email: str,
     password: str,
@@ -802,13 +950,27 @@ async def process_account(
             # await process_fetched_alert(alert_details, last_alert_lock)
 
             # METHOD 2: research archives
+            # start_time = time.time()
+            # today = get_current_time().now().strftime("%Y-%m-%d")
+            # results = await fetch_research_archives(
+            #     session,
+            #     cookies,
+            #     # proxy,
+            #     today,
+            # )
+            #
+            # log_message(
+            #     f"fetch_research_archives took {time.time() - start_time:.2f} seconds. for {email}",
+            #     "INFO",
+            # )
+            #
+            # await process_fetched_archives(results, last_alert_lock, start_time)
+
+            # Method 3: Home page trade alerts
             start_time = time.time()
-            today = get_current_time().now().strftime("%Y-%m-%d")
-            results = await fetch_research_archives(
+            results = await fetch_homepage_alerts(
                 session,
                 cookies,
-                # proxy,
-                today,
             )
 
             log_message(
@@ -816,7 +978,7 @@ async def process_account(
                 "INFO",
             )
 
-            await process_fetched_archives(results, last_alert_lock, start_time)
+            await process_homepage_alerts(results, last_alert_lock, start_time)
 
     except Exception as e:
         if "Rate limited" in str(e):
